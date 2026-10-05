@@ -339,10 +339,11 @@ interchangeable:
   `TypeScriptSourceContext`, `createProjectContext`, `createSourceContext`).
 - `@sqlbraid/vite`: a Vite pre-transform. Vite stays responsible for TS and JSX.
 - `@sqlbraid/metadata`: snapshots, validation, hashing, drift and the model for inspectors.
-- `@sqlbraid/migrate`: optional `createMigrator`, `defineMigration`, manifest and
-  report types, `MigrationError` and `MigrationStartupError`. Its `/node` subpath
-  loads sources and generates plain ESM manifests without a bundler; `/vite`
-  supplies server-only manifests;
+- `@sqlbraid/migrate`: optional `createMigrator`, manifest and report types,
+  `MigrationError` and `MigrationStartupError`. Migrations are SQL files only.
+  Its `/node` subpath exports `loadMigrations` and `generateManifestModule`,
+  which writes an ESM module without imports; `/vite` inlines the SQL into
+  server chunks and rejects client access;
   `/drift` adapts a metadata inspector. Runtime packages do not depend on it.
 - `@sqlbraid/codegen`: the pure `generateModels` and deterministic model source.
 - `@sqlbraid/tooling`: Node-first services for config, workspace and evidence.
@@ -357,7 +358,8 @@ dependencies. Metadata is open-world positive evidence. An absent object does
 not become an invalid-SQL diagnostic.
 
 Migration startup is explicit: `startup` or the promise-caching `once` method.
-The migrator also exposes `up`, `baseline`, `repair`, `acceptSchema` and `snapshot`.
+`startup` with `mode: "apply"` is the only apply entry point. The migrator also
+exposes `baseline`, `repair` and `acceptSchema`.
 The shared project config has an optional `migrations` section. Its database
 factory owns connection creation and returns a cleanup function.
 There is no migration hook in database construction and no new required driver SPI.

@@ -543,15 +543,14 @@ async function migrations(sqlite3) {
                 description: "browser migration",
                 source: "V1__browser.sql",
                 checksum: "b".repeat(64),
-                load: async () =>
-                  "CREATE TABLE migrated (value TEXT); INSERT INTO migrated (value) VALUES ('browser;wasm');",
+                sql: "CREATE TABLE migrated (value TEXT); INSERT INTO migrated (value) VALUES ('browser;wasm');",
               },
             ],
           },
         },
       },
     });
-    const applied = (await migrator.up(db)).status;
+    const applied = (await migrator.startup(db, { mode: "apply" })).status;
     queries = 0;
     const verified = (await migrator.startup(db, { mode: "verify" })).status;
     const verifyQueries = queries;

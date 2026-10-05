@@ -1,24 +1,12 @@
 import type { Database, Dialect } from "@sqlbraid/core";
 
-/** A TypeScript migration from defineMigration(). `transaction: false` runs it outside a transaction. */
-export interface MigrationDefinition {
-  readonly run: (db: Database) => Promise<void>;
-  readonly transaction: boolean;
-}
-
-export interface DefineMigrationOptions {
-  /** Defaults to true. Set false for DDL that cannot run in a transaction. */
-  readonly transaction?: boolean;
-}
-
-export type MigrationBody = string | ((db: Database) => Promise<void>) | MigrationDefinition;
-
+/** One SQL migration. `checksum` is the SHA-256 hex of the normalized `sql` text. */
 export interface ManifestEntry {
   readonly version: string | null;
   readonly description: string;
   readonly source: string;
   readonly checksum: string;
-  readonly load: () => Promise<MigrationBody>;
+  readonly sql: string;
 }
 
 export interface DialectManifest {
@@ -106,7 +94,6 @@ export interface MigratorOptions {
 export interface StartupOptions {
   readonly mode?: "off" | "report" | "verify" | "apply";
   readonly ahead?: "allow" | "error";
-  readonly onReport?: (report: MigrationReport) => void;
   readonly schema?: "hash";
 }
 
@@ -118,13 +105,10 @@ export interface OnceOptions extends StartupOptions {
 export interface Migrator {
   startup(db: Database, options?: StartupOptions): Promise<MigrationReport>;
   once(db: Database, options?: OnceOptions): Promise<MigrationReport>;
-  up(db: Database): Promise<MigrationReport>;
   baseline(db: Database, version: string): Promise<MigrationReport>;
   repair(db: Database): Promise<MigrationReport>;
   /** Record the inspected schema hash on the latest successful history row. Requires the drift option. */
   acceptSchema(db: Database): Promise<MigrationReport>;
-  /** Return the inspected snapshot. The drift inspector owns its connection, so `db` is not used. */
-  snapshot(db: Database): Promise<unknown>;
 }
 
 export type MigrationErrorCode =

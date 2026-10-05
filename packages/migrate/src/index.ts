@@ -9,14 +9,11 @@ import {
 } from "./dialect.js";
 import { MigrationError, MigrationStartupError } from "./errors.js";
 import { compareHistory, createHistoryStore } from "./history.js";
-import { compareVersions, isMigrationBody, normalizeVersion } from "./manifest.js";
+import { compareVersions, normalizeVersion } from "./manifest.js";
 import { splitMigrationSql } from "./split.js";
 import type {
-  DefineMigrationOptions,
   DialectManifest,
   ManifestEntry,
-  MigrationBody,
-  MigrationDefinition,
   MigrationEvent,
   MigrationHistoryRow,
   MigrationReport,
@@ -28,21 +25,6 @@ import type {
 
 export { MigrationError, MigrationStartupError } from "./errors.js";
 export type * from "./types.js";
-
-/** Declare a TypeScript migration. The runner passes it a scoped database handle. */
-export function defineMigration(
-  migration: (db: Database) => Promise<void>,
-  options: DefineMigrationOptions = {},
-): MigrationDefinition {
-  if (typeof migration !== "function") throw new TypeError("A migration must be an async function.");
-  if (!options || typeof options !== "object" || Array.isArray(options))
-    throw new TypeError("Migration options must be an object.");
-  const unknown = Object.keys(options).filter((key) => key !== "transaction");
-  if (unknown.length) throw new TypeError(`Unknown migration options: ${unknown.join(", ")}.`);
-  if (options.transaction !== undefined && typeof options.transaction !== "boolean")
-    throw new TypeError("Migration option transaction must be a boolean.");
-  return Object.freeze({ run: migration, transaction: options.transaction ?? true });
-}
 
 class MigrationClaimError extends Error {
   constructor(
@@ -95,8 +77,8 @@ function validateManifest(options: MigratorOptions): DialectManifest {
   const versions = new Set<string>();
   const sources = new Set<string>();
   const validate = (entry: ManifestEntry, repeatable: boolean): ManifestEntry => {
-    if (!entry || typeof entry !== "object" || typeof entry.load !== "function") {
-      throw new MigrationError("BRAID_MIGRATE_SOURCE", "Each manifest entry must have a loader.");
+    if (!entry || typeof entry !== "object" || typeof entry.sql !== "string") {
+      throw new MigrationError("BRAID_MIGRATE_SOURCE", "Each manifest entry must have SQL text.");
     }
     text(entry.description, "Migration description", 200);
     text(entry.source, "Migration source", 1000);
@@ -139,8 +121,6 @@ function validateStartup(options: StartupOptions): void {
   if (options.ahead !== undefined && options.ahead !== "allow" && options.ahead !== "error")
     throw new TypeError("Invalid ahead policy.");
   if (options.schema !== undefined && options.schema !== "hash") throw new TypeError("Invalid schema check mode.");
-  if (options.onReport !== undefined && typeof options.onReport !== "function")
-    throw new TypeError("onReport must be a function.");
 }
 
 async function commitHistory(db: Database, write: (target: Database) => Promise<void>): Promise<void> {
@@ -275,11 +255,7 @@ export function createMigrator(options: MigratorOptions): Migrator {
           pending.kind === "pending"
             ? manifest.versioned.find((candidate) => candidate.source === pending.source)!
             : manifest.repeatable.find((candidate) => candidate.source === pending.source)!;
-        const body: MigrationBody = await entry.load();
-        if (!isMigrationBody(body))
-          throw new MigrationError("BRAID_MIGRATE_SOURCE", `Invalid migration body in ${entry.source}.`);
-        const split = typeof body === "string" ? splitMigrationSql(body, dialect) : undefined;
-        const definition = typeof body === "object" ? body : undefined;
+        const split = splitMigrationSql(entry.sql, dialect);
         const rank = (current.history[current.history.length - 1]?.installed_rank ?? 0) + 1;
         const row: MigrationHistoryRow = {
           scope,
@@ -309,18 +285,15 @@ export function createMigrator(options: MigratorOptions): Migrator {
             throw error;
           }
         };
-        const transactional = canTransact && (split?.transaction ?? definition?.transaction ?? true);
+        const transactional = canTransact && split.transaction;
         const run = async (target: Database): Promise<void> => {
           // Nontransactional bodies must not run until the history claim is committed.
           if (transactional) await claim(target);
           else await commitHistory(target, claim);
           claimed = true;
           emit({ type: "migration.start", entry });
-          if (typeof body === "function") await body(target);
-          else if (definition) await definition.run(target);
-          else
-            for (const statement of split!.statements)
-              await target.execute(sql`${sql.raw(statement)}`, { reuse: "simple" });
+          for (const statement of split.statements)
+            await target.execute(sql`${sql.raw(statement)}`, { reuse: "simple" });
           durationMs = Math.max(0, Date.now() - started);
           if (transactional) await store.finish(target, rank, executionId, "success", durationMs);
           else
@@ -391,10 +364,7 @@ export function createMigrator(options: MigratorOptions): Migrator {
       });
     }
     if (startupOptions.schema === "hash" && !drift) throw new TypeError("schema: 'hash' requires the drift option.");
-    const publish = (result: MigrationReport): void => {
-      startupOptions.onReport?.(result);
-      emit({ type: "startup.check", report: result });
-    };
+    const publish = (result: MigrationReport): void => emit({ type: "startup.check", report: result });
     if (mode === "apply") {
       if (startupOptions.schema === "hash") {
         // Applying records a new hash, so existing drift must fail before any migration runs.
@@ -441,7 +411,6 @@ export function createMigrator(options: MigratorOptions): Migrator {
       checks.set(key, check);
       return check.promise;
     },
-    up: (db) => startup(db, { mode: "apply" }),
     async baseline(db, version) {
       text(version, "Baseline version", 50);
       const entry = manifest.versioned.find((candidate) => compareVersions(candidate.version!, version) === 0);
@@ -505,9 +474,6 @@ export function createMigrator(options: MigratorOptions): Migrator {
         );
       });
       return startup(db, { mode: "report", schema: "hash" });
-    },
-    async snapshot(_db) {
-      return (await inspectSchema()).snapshot;
     },
   };
 }

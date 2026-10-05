@@ -20,7 +20,7 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/vite`            | Vite 8 pre-transform for guarded-template lowering with source maps                                                                                          |
 | `@sqlbraid/opentelemetry`   | Optional OpenTelemetry DB client spans and duration metrics through observers                                                                                |
 | `@sqlbraid/metadata`        | DB-fact snapshots, validation, identity, and drift                                                                                                           |
-| `@sqlbraid/migrate`         | Optional SQL/TypeScript migrations and startup checks; `/node` loader, `/vite` manifest plugin and `/drift` adapter                                          |
+| `@sqlbraid/migrate`         | Optional SQL migrations and startup checks; `/node` loader, `/vite` manifest plugin and `/drift` adapter                                                     |
 | `@sqlbraid/codegen`         | Metadata + TypePolicy to Row/Insert/Update declarations                                                                                                      |
 | `@sqlbraid/tooling`         | Shared config/workspace evidence and semantic indexes                                                                                                        |
 | `@sqlbraid/operations`      | Fingerprints and declaration manifests                                                                                                                       |

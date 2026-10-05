@@ -4,12 +4,14 @@ import { Connection } from "tedious";
 import { inject } from "vitest";
 import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
 import { dialect, sql } from "@sqlbraid/mssql";
-import { createMigrator, type MigrationBody, type MigrationManifest } from "@sqlbraid/migrate";
+import { createMigrator, type MigrationEvent, type MigrationManifest } from "@sqlbraid/migrate";
 import { docsClaim, errorCode } from "../docs-claims.js";
 import { withMigrationLock } from "../../../packages/migrate/src/dialect.js";
 
+const apply = { mode: "apply" } as const;
+
 const page = "packages/migrate/README.md";
-function manifest(body: MigrationBody): MigrationManifest {
+function manifest(body: string): MigrationManifest {
   return {
     format: "sqlbraid-migrations",
     formatVersion: 1,
@@ -23,7 +25,7 @@ function manifest(body: MigrationBody): MigrationManifest {
             description: "mssql migration",
             source: "V1__mssql.sql",
             checksum: "b".repeat(64),
-            load: async () => body,
+            sql: body,
           },
         ],
       },
@@ -74,7 +76,7 @@ GO
 EXEC ${procedure};
 GO`),
     });
-    assert.equal((await migrator.up(db)).status, "current");
+    assert.equal((await migrator.startup(db, apply)).status, "current");
     assert.deepEqual(await db.all(sql.rows`SELECT value FROM ${sql.ident(data)}`), [{ value: "semi;colon" }]);
     queries = 0;
     assert.equal((await migrator.startup(db, { mode: "verify" })).status, "current");
@@ -108,7 +110,7 @@ SET IDENTITY_INSERT ${data} OFF;
 DROP TABLE #seed;
 GO`),
     });
-    assert.equal((await migrator.up(db)).status, "current");
+    assert.equal((await migrator.startup(db, apply)).status, "current");
     assert.deepEqual(await db.all(sql.rows`SELECT CAST(id AS NVARCHAR(10)) AS id, value FROM ${sql.ident(data)}`), [
       { id: "42", value: "kept" },
     ]);
@@ -132,7 +134,7 @@ GO
 THROW 51000, 'migration failure', 1;
 GO`),
     });
-    await assert.rejects(() => migrator.up(db));
+    await assert.rejects(() => migrator.startup(db, apply));
     assert.deepEqual(await db.all(sql.rows`SELECT status FROM ${sql.ident(table)}`), []);
     assert.deepEqual(await db.all(sql.rows`SELECT name FROM sys.tables WHERE name = ${data}`), []);
     assert.equal((await migrator.startup(db, { mode: "report" })).status, "pending");
@@ -151,20 +153,21 @@ docsClaim(
     const second = await connect();
     const { table } = names();
     const db = createTediousDatabase(first);
-    const { promise: gate, resolve: release } = Promise.withResolvers<void>();
     const { promise: started, resolve: entered } = Promise.withResolvers<void>();
     let runs = 0;
+    // The delay keeps the first claim running while the second session tries to apply.
     const options = {
       dialect,
       table,
       busyTimeoutMs: 50,
-      manifest: manifest(async () => {
+      manifest: manifest("WAITFOR DELAY '00:00:03';"),
+      onEvent: (event: MigrationEvent) => {
+        if (event.type !== "migration.start") return;
         runs += 1;
         entered();
-        await gate;
-      }),
+      },
     };
-    const applying = createMigrator(options).up(db);
+    const applying = createMigrator(options).startup(db, apply);
     try {
       await Promise.race([
         started,
@@ -173,15 +176,13 @@ docsClaim(
         }),
       ]);
       assert.equal(
-        await errorCode(() => createMigrator(options).up(createTediousDatabase(second))),
+        await errorCode(() => createMigrator(options).startup(createTediousDatabase(second), apply)),
         "BRAID_MIGRATE_BUSY",
       );
-      release();
       assert.equal((await applying).status, "current");
-      assert.equal((await createMigrator(options).up(createTediousDatabase(second))).status, "current");
+      assert.equal((await createMigrator(options).startup(createTediousDatabase(second), apply)).status, "current");
       assert.equal(runs, 1);
     } finally {
-      release();
       await applying.catch(() => undefined);
       await db.execute(sql.command`DROP TABLE IF EXISTS ${sql.ident(table)}`);
       first.close();

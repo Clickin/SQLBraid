@@ -1,7 +1,7 @@
 # @sqlbraid/migrate
 
 Versioned SQL migrations and explicit startup checks for SQLBraid.
-The application supplies its `Database` and dialect. Creating a database does not run migrations.
+Migrations are SQL files only. The application supplies its `Database` and dialect. Creating a database does not run migrations.
 
 ```sh
 npm install @sqlbraid/migrate
@@ -17,7 +17,7 @@ migrations/
   V001__create_users.sql
   V002__email_index.sql
   V002__email_index.postgres.sql
-  V003__backfill.ts
+  V003__backfill.sql
   R__active_users.sql
 ```
 
@@ -34,47 +34,14 @@ A missing variant without a generic file fails; it is not skipped.
 Use an empty dialect-specific file for an intentional no-op.
 
 Checksums use SHA-256 of UTF-8 source text. The loader removes a leading BOM and changes CRLF to LF.
-Other whitespace remains significant. A TypeScript checksum covers the migration file, not its imported helpers.
-Do not change an applied versioned migration or its helper behavior. Write a new migration instead.
+Other whitespace remains significant. Do not change an applied versioned migration. Write a new migration instead.
 
-**Load only trusted files.** SQL files execute as trusted SQL, and TypeScript files execute application code.
-Ordinary interpolations in TypeScript migrations remain bound parameters.
+Only `.sql` files are migrations. A file with a migration name prefix (`V<version>__` or `R__`) and a different extension,
+such as `V003__backfill.ts`, makes the loader fail with `BRAID_MIGRATE_SOURCE`. The loader does not skip it.
+The loader ignores other files, such as `README.md` or `schema.snapshot.json`.
+If a data change needs application logic, run it as application code or as a one-time script, not as a migration.
 
-```ts
-import { defineMigration } from "@sqlbraid/migrate";
-import { sql } from "@sqlbraid/sqlite";
-
-export default defineMigration(async (db) => {
-  await db.execute(sql.command`
-    UPDATE users SET status = ${"active"} WHERE status IS NULL
-  `);
-});
-```
-
-A TypeScript migration exports a function or a `defineMigration()` result as its default export.
-`defineMigration(fn)` returns a frozen `{ run, transaction }` object. `transaction` defaults to `true`.
-The only option is `transaction`. `defineMigration()` rejects other option keys.
-
-### TypeScript loading
-
-SQLBraid does not compile or bundle TypeScript migrations.
-`loadMigrations()` imports each `.ts` migration with `import()` when the runner applies it.
-The runtime or a loader must handle TypeScript. These hosts can do this:
-
-- Node 22.18.0 or later, which strips erasable TypeScript syntax;
-- Bun and Deno;
-- Node with a loader, such as `node --import tsx`.
-
-If the runtime cannot import a `.ts` file, the loader reports `BRAID_MIGRATE_SOURCE`.
-In that case, use a runtime or loader that handles TypeScript, or use a generated manifest.
-
-For Node type stripping, enable `erasableSyntaxOnly` in `tsconfig.json`.
-Node does not strip `enum`, `namespace` or parameter properties.
-Write relative imports with the `.ts` extension, for example `import { seed } from "./seed.ts"`.
-TypeScript accepts these imports with `allowImportingTsExtensions` or `rewriteRelativeImportExtensions`.
-
-The Node loader accepts ordinary SQLBraid tags. It rejects guarded `/*@braid ...*/` directives in TypeScript before it imports the file.
-A bundler lowers guarded directives with the `sqlbraid()` plugin from `@sqlbraid/vite`, as it does for application code.
+**Load only trusted files.** The runner executes SQL files as trusted SQL. It does not bind parameters in them.
 
 ## Startup
 
@@ -116,6 +83,7 @@ Allowing a newer version does not prove that the application remains compatible 
 Pending versions, changed repeatables, missing sources, checksum changes and out-of-order versions still prevent successful verification.
 The runner always rejects an out-of-order version. Give it a version after the newest applied version.
 
+`startup()` is the only method that checks and applies. `sqlbraid migrate up` calls it with `mode: "apply"`.
 Use `apply` in one deployment step when possible. Use `verify` in production application instances.
 For Workers, keep the migrator and database handle at module scope and call `migrator.once(db, options)` before handling requests.
 It shares a promise for that database and check policy. A rejected check can retry after `retryIntervalMs` (default: 1000).
@@ -198,20 +166,6 @@ DDL that cannot run in a transaction needs a leading directive:
 CREATE INDEX CONCURRENTLY users_email_idx ON users (email);
 ```
 
-For a TypeScript migration, pass `{ transaction: false }` to `defineMigration`:
-
-```ts
-import { defineMigration } from "@sqlbraid/migrate";
-import { sql } from "@sqlbraid/postgres";
-
-export default defineMigration(
-  async (db) => {
-    await db.execute(sql.command`CREATE INDEX CONCURRENTLY users_email_idx ON users (email)`);
-  },
-  { transaction: false },
-);
-```
-
 A nontransactional migration commits its history claim before it runs. If it fails, it leaves a `failed` row.
 
 Use `-- @braid-migrate split=none` at the start to send one file as one statement. On SQL Server, the file is one batch.
@@ -237,23 +191,29 @@ Event callbacks can throw. A callback failure cannot undo a completed nontransac
 No migration code is added to `createDatabase()` or to runtime observers.
 These paths do not assign new Official support labels to driver/runtime tuples.
 
-## Bundled hosts and Vite
+## Deploy the SQL with the server
 
-`sqlbraid migrate manifest` writes a plain ESM manifest. It does not bundle or compile code.
-The manifest contains each SQL migration as a string literal.
-It loads each TypeScript migration with a lazy `import()`. The top-level code of a migration runs only when the runner applies it.
-The import specifiers are relative to the manifest file and use forward slashes.
-The manifest and the migrations must be on the same drive.
+The migrator needs a manifest: the SQL text and the checksum of each migration.
+Choose one of these ways to get the manifest into a server. In all three, the SQL stays on the server.
 
-Give this manifest to `createMigrator` in Workers, Deno, Bun or another server.
-Your bundler, such as Wrangler or Vite, bundles the manifest and its TypeScript migrations like application code.
-If a TypeScript migration uses guarded SQL, add the `sqlbraid()` plugin from `@sqlbraid/vite` to the bundler.
-The runtime root performs no filesystem access.
+| Server build                           | Manifest source                                           | What you deploy                                      |
+| -------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------- |
+| Unbundled Node server                  | `loadMigrations("./migrations")` at startup               | The server and the `migrations/` directory           |
+| Any bundler, `tsc`, Workers, Bun, Deno | `sqlbraid migrate manifest --out-file src/migrations.mjs` | The server only; the SQL is in the module            |
+| Vite SSR                               | `import manifest from "virtual:sqlbraid-migrations"`      | The server bundle only; the SQL is in a server chunk |
 
-`generateManifestModule()` from `@sqlbraid/migrate/node` returns the same ESM source.
-Pass `outfile` with the location where you write the module. Without `outfile`, the specifiers are relative to `<directory>/manifest.mjs`.
+### Generated manifest
+
+`sqlbraid migrate manifest` writes a plain ESM module. The module has no imports.
+It contains each SQL migration as a string literal, so any bundler, `tsc` copy step or runtime can load it.
+`generateManifestModule()` from `@sqlbraid/migrate/node` returns the same source.
 Without a `dialects` list, it includes only dialects with a source for every migration.
 An explicit list rejects missing sources. `loadMigrations()` without a list checks sources when the selected dialect is accessed.
+The runtime root performs no filesystem access.
+
+The module does not update itself. Generate it again after you add or change a migration, for example in the build script.
+
+### Vite SSR
 
 ```ts
 import { defineConfig } from "vite";
@@ -264,7 +224,7 @@ export default defineConfig({
 });
 ```
 
-Import the default manifest from `virtual:sqlbraid-migrations` in server-only code.
+Import the default manifest from `virtual:sqlbraid-migrations` in server code.
 Add an ambient declaration for this virtual module to your application's environment declarations:
 
 <!-- doc-snippet: skip -->
@@ -276,9 +236,18 @@ declare module "virtual:sqlbraid-migrations" {
 }
 ```
 
-The plugin rejects browser imports. It does not own a database connection.
-The virtual module imports the TypeScript migrations, and Vite transforms them.
-If a TypeScript migration uses guarded SQL, also add `sqlbraid()` from `@sqlbraid/vite`. Otherwise the plugin reports an error.
+The plugin puts the SQL text into the server chunk as string literals. It does not emit `.sql` files as assets.
+Do not copy SQL files as static assets. Vite copies `publicDir` into the client output, and a static server can serve emitted files.
+
+The plugin keeps the SQL away from browsers:
+
+- A client module cannot import `virtual:sqlbraid-migrations`. The build or the request fails.
+- A client module cannot import a file in the migrations directory, for example with `?raw` or `?url`.
+- The development server returns `404` for HTTP requests to files in the migrations directory, including `/@fs/` paths.
+- The plugin rejects a migrations directory inside `publicDir`.
+
+The server output contains the SQL. Do not serve the server output directory as static files.
+The plugin does not own a database connection.
 To enable development reports, pass `dev: { db, migrator: { dialect } }` to the plugin.
 It runs read-only checks at startup and after migration file changes, and reports differences in the terminal and Vite overlay.
 
@@ -297,19 +266,18 @@ These paths compare the inspected schema with the committed snapshot, not with t
 Catalog inspection occurs after releasing the migration session; it is not an atomic snapshot against external DDL.
 If history has no stored schema hash, the check has no previous schema evidence to compare.
 
-A stored hash can become stale. For example, an inspection can fail after an apply, or an `up` can run without a drift adapter.
+A stored hash can become stale. For example, an inspection can fail after an apply, or an apply can run without a drift adapter.
 To accept the current schema as the expected schema, call `migrator.acceptSchema(db)` or run `sqlbraid migrate accept-schema`.
 This operation inspects the schema and stores its hash on the latest successful history row of the scope.
 It holds the migration lock where the dialect has one. It rejects uninitialized or incomplete history.
 **Inspect the schema before you accept it.** The runner never accepts drift automatically.
 
-`migrator.snapshot(db)` returns the inspected snapshot. The drift inspector owns its connection, so this method does not use `db`.
+To read the inspected snapshot, call `inspect()` on the drift adapter. The drift inspector owns its connection.
 
 For the CLI, return `inspector` from the database factory alongside `db` and `cleanup`.
 Set `options.schemaCheck: "hash"` for checks and optionally set `snapshot` to the committed snapshot path.
 `sqlbraid migrate snapshot` writes `migrations/schema.snapshot.json` by default.
 
 The runtime root, Node loader and optional drift helper require Node 16.20.2 or later.
-TypeScript migrations need a runtime or loader that handles TypeScript.
 Vite and CLI integration require Node 22.18.0 or later.
 Runtime-only SQLBraid installs do not pull in this migration package.

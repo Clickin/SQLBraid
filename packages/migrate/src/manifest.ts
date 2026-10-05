@@ -1,14 +1,4 @@
 import { MigrationError } from "./errors.js";
-import type { MigrationBody } from "./types.js";
-
-/** SQL text, a migration function, or a frozen defineMigration() result. */
-export function isMigrationBody(value: unknown): value is MigrationBody {
-  if (typeof value === "string" || typeof value === "function") return true;
-  if (!value || typeof value !== "object") return false;
-  const definition = value as { readonly run?: unknown; readonly transaction?: unknown };
-  return typeof definition.run === "function" && typeof definition.transaction === "boolean";
-}
-
 /** Canonical numeric identity, without conversion through floating-point numbers. */
 export function normalizeVersion(version: string): string {
   if (!/^\d+(?:[._]\d+)*$/u.test(version)) {

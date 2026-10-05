@@ -5,12 +5,14 @@ import { inject } from "vitest";
 import { createOracledbDatabase, createOracledbPoolDatabase } from "@sqlbraid/oracle/oracledb";
 import { createOracleInspector } from "@sqlbraid/oracle/inspector";
 import { dialect, sql } from "@sqlbraid/oracle";
-import { createMigrator, type MigrationBody, type MigrationManifest } from "@sqlbraid/migrate";
+import { createMigrator, type MigrationEvent, type MigrationManifest } from "@sqlbraid/migrate";
 import { createSchemaDrift } from "@sqlbraid/migrate/drift";
 import { docsClaim, errorCode } from "../docs-claims.js";
 
+const apply = { mode: "apply" } as const;
+
 const page = "packages/migrate/README.md";
-function manifest(body: MigrationBody): MigrationManifest {
+function manifest(body: string): MigrationManifest {
   return {
     format: "sqlbraid-migrations",
     formatVersion: 1,
@@ -24,7 +26,7 @@ function manifest(body: MigrationBody): MigrationManifest {
             description: "oracle migration",
             source: "V1__oracle.sql",
             checksum: "b".repeat(64),
-            load: async () => body,
+            sql: body,
           },
         ],
       },
@@ -74,7 +76,7 @@ BEGIN
 END;
 /`),
       });
-      assert.equal((await migrator.up(db)).status, "current");
+      assert.equal((await migrator.startup(db, apply)).status, "current");
       assert.deepEqual(await db.all(sql.rows`SELECT value AS "value" FROM ${sql.ident(data)}`), [
         { value: "semi;colon" },
       ]);
@@ -109,7 +111,7 @@ docsClaim(page, "Oracle nontransactional DDL failure persists a failed attempt a
       table,
       manifest: manifest(`CREATE TABLE ${data} (value NUMBER); INSERT INTO ${data} (missing_column) VALUES (1);`),
     });
-    await assert.rejects(() => migrator.up(db));
+    await assert.rejects(() => migrator.startup(db, apply));
     assert.deepEqual(await db.all(sql.rows`SELECT "status" FROM ${sql.ident(table)}`), [{ status: "failed" }]);
     assert.deepEqual(await db.all(sql.rows`SELECT value FROM ${sql.ident(data)}`), []);
     assert.equal(await errorCode(() => migrator.startup(db, { mode: "verify" })), "BRAID_MIGRATE_DIRTY");
@@ -143,20 +145,21 @@ docsClaim(page, "Oracle independent sessions cannot execute the same claimed mig
   const { table } = names();
   const db = createOracledbDatabase(first);
   const observer = createOracledbDatabase(second);
-  const { promise: gate, resolve: release } = Promise.withResolvers<void>();
   const { promise: started, resolve: entered } = Promise.withResolvers<void>();
   let runs = 0;
+  // The delay keeps the first claim running while the second session tries to apply.
   const options = {
     dialect,
     table,
     busyTimeoutMs: 50,
-    manifest: manifest(async () => {
+    manifest: manifest("BEGIN DBMS_SESSION.SLEEP(3); END;\n/\n"),
+    onEvent: (event: MigrationEvent) => {
+      if (event.type !== "migration.start") return;
       runs += 1;
       entered();
-      await gate;
-    }),
+    },
   };
-  const applying = createMigrator(options).up(db);
+  const applying = createMigrator(options).startup(db, apply);
   try {
     await Promise.race([
       started,
@@ -168,14 +171,12 @@ docsClaim(page, "Oracle independent sessions cannot execute the same claimed mig
       (await createMigrator(options).startup(observer, { mode: "report" })).history.map((row) => row.status),
       ["running"],
     );
-    assert.equal(await errorCode(() => createMigrator(options).up(observer)), "BRAID_MIGRATE_BUSY");
-    release();
+    assert.equal(await errorCode(() => createMigrator(options).startup(observer, apply)), "BRAID_MIGRATE_BUSY");
     assert.equal((await applying).status, "current");
     assert.equal(runs, 1);
-    assert.equal((await createMigrator(options).up(observer)).status, "current");
+    assert.equal((await createMigrator(options).startup(observer, apply)).status, "current");
     assert.equal(runs, 1);
   } finally {
-    release();
     await applying.catch(() => undefined);
     await first.execute(
       `BEGIN EXECUTE IMMEDIATE 'DROP TABLE "${table}" PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;`,
@@ -185,7 +186,7 @@ docsClaim(page, "Oracle independent sessions cannot execute the same claimed mig
   }
 });
 
-docsClaim(page, "Oracle pooled nontransactional SQL and TypeScript DML commit history and schema hashes", async () => {
+docsClaim(page, "Oracle pooled nontransactional SQL DML commits history and schema hashes", async () => {
   const connection = await connect();
   const pool = await oracledb.createPool({
     user: process.env.SQLBRAID_ORACLE_USER ?? "sqlbraid",
@@ -201,18 +202,14 @@ docsClaim(page, "Oracle pooled nontransactional SQL and TypeScript DML commit hi
   const drift = createSchemaDrift({ inspector: createOracleInspector(connection) });
   try {
     await connection.execute(`CREATE TABLE ${data} (value VARCHAR2(30))`);
-    const bodies: readonly MigrationBody[] = [
+    const bodies: readonly string[] = [
       `INSERT INTO ${data} (value) VALUES ('sql')`,
-      async (scoped) => {
-        await scoped.execute(sql.command`INSERT INTO ${sql.ident(data)} (value) VALUES (${"typescript"})`);
-        await scoped.execute(
-          sql.command`UPDATE ${sql.ident(data)} SET value = ${"updated"} WHERE value = ${"typescript"}`,
-        );
-      },
+      `INSERT INTO ${data} (value) VALUES ('second');
+UPDATE ${data} SET value = 'updated' WHERE value = 'second';`,
     ];
     for (const [index, body] of bodies.entries()) {
       const migrator = createMigrator({ dialect, table, scope: `body-${index}`, manifest: manifest(body), drift });
-      const applied = await migrator.up(db);
+      const applied = await migrator.startup(db, apply);
       assert.equal(applied.status, "current");
       assert.match(applied.history[0]!.schema_hash!, /^[a-f\d]{64}$/);
       const observed = await migrator.startup(observer);

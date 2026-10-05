@@ -22,7 +22,7 @@ const HELP = `Usage: sqlbraid migrate <command> [--config <path>]
   baseline <version>         Mark an existing database at a version
   repair                     Remove running/failed attempts after manual inspection
   accept-schema              Record the inspected schema hash as the expected schema
-  manifest [--out-file <path>] Generate a portable manifest module
+  manifest [--out-file <path>] Generate a manifest module with the SQL text
   snapshot [--out-file <path>] Write the inspected schema snapshot`;
 
 /** Executable factories stay in the CLI process, never in the inspection worker protocol. */
@@ -110,7 +110,7 @@ async function newMigration(directory: string, name: string, dialect: string | u
         await visit(resolve(path, entry.name));
         continue;
       }
-      if (!kind.isFile() || !/\.(?:sql|ts)$/u.test(entry.name)) continue;
+      if (!kind.isFile() || !entry.name.endsWith(".sql")) continue;
       const match = /^V(\d+)(?:[._]\d+)*__/u.exec(entry.name);
       if (!match?.[1]) continue;
       const major = BigInt(match[1]);
@@ -180,7 +180,7 @@ export async function runMigrate(argv: readonly string[]): Promise<void> {
   const { migrate, node, drift: driftModule } = modules!;
   if (command === "manifest") {
     const path = values.has("--out-file") ? resolve(values.get("--out-file")!) : resolve(directory, "manifest.mjs");
-    const source = await node.generateManifestModule(directory, { dialects: [config.dialect.id], outfile: path });
+    const source = await node.generateManifestModule(directory, { dialects: [config.dialect.id] });
     await atomicWrite(path, source);
     console.log(path);
     return;
@@ -221,8 +221,9 @@ export async function runMigrate(argv: readonly string[]): Promise<void> {
       ...(drift ? { drift } : {}),
     });
     if (command === "snapshot") {
+      if (!drift) throw new ConfigurationError("migrate snapshot requires an inspector or drift adapter.");
       const path = values.has("--out-file") ? resolve(values.get("--out-file")!) : snapshotPath;
-      await atomicWrite(path, `${JSON.stringify(await migrator.snapshot(resource.db), null, 2)}\n`);
+      await atomicWrite(path, `${JSON.stringify((await drift.inspect()).snapshot, null, 2)}\n`);
       console.log(path);
     } else {
       const report =

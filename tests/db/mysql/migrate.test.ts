@@ -4,21 +4,23 @@ import { createConnection, createPool, type Connection } from "mysql2/promise";
 import type { RowDataPacket } from "mysql2";
 import { inject, test } from "vitest";
 import type { Database, ExecutionObserver, QueryReadyEvent } from "@sqlbraid/core";
-import { createMigrator, type ManifestEntry, type MigrationBody, type MigrationManifest } from "@sqlbraid/migrate";
+import { createMigrator, type ManifestEntry, type MigrationManifest } from "@sqlbraid/migrate";
 import { dialect, MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
 import { assertCode, docsClaim } from "../docs-claims.js";
 
+const apply = { mode: "apply" } as const;
+
 const README = "packages/migrate/README.md";
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 
-function entry(version: string | null, body: MigrationBody, identity = String(body)): ManifestEntry {
+function entry(version: string | null, body: string, identity = body): ManifestEntry {
   return {
     version,
     description: version === null ? "refresh" : `step ${version}`,
     source: version === null ? "R__refresh.sql" : `V${version}__step.sql`,
     checksum: hash(identity),
-    load: async () => body,
+    sql: body,
   };
 }
 
@@ -86,7 +88,7 @@ docsClaim(README, "MySQL applies SQL once and current pooled verification uses o
       });
       assert.equal((await migrator.startup(db, { mode: "report" })).status, "uninitialized");
       await assertCode(() => migrator.startup(db, { mode: "verify" }), "BRAID_MIGRATE_UNINITIALIZED");
-      assert.equal((await migrator.up(db)).status, "current");
+      assert.equal((await migrator.startup(db, apply)).status, "current");
       assert.deepEqual((await client.query(`SELECT value FROM ${data}`))[0], [{ value: "a;b" }]);
       assert.ok(queries.some((query) => query.sql?.includes(`CREATE TABLE ${data}`)));
       assert.ok(queries.some((query) => query.sql?.includes(`INSERT INTO ${data}`)));
@@ -141,7 +143,7 @@ docsClaim(README, "MySQL applies SQL once and current pooled verification uses o
 for (const locking of ["session", "claim-only"] as const) {
   docsClaim(README, `MySQL concurrent ${locking} runners apply each version exactly once`, async () => {
     await withDb(async ({ db, client, table, data }) => {
-      await createMigrator({ dialect, table, manifest: manifest() }).up(db);
+      await createMigrator({ dialect, table, manifest: manifest() }).startup(db, apply);
       await client.query(`CREATE TABLE ${data} (value integer)`);
       let readers = 0;
       let releaseReaders!: () => void;
@@ -181,13 +183,7 @@ for (const locking of ["session", "claim-only"] as const) {
       const second = await connect([observer()]);
       const events: string[] = [];
       const migrations = manifest(
-        entry(
-          "001",
-          async (migrationDb) => {
-            await migrationDb.execute(sql.command`INSERT INTO ${sql.ident(data)} VALUES (${1})`);
-          },
-          "first",
-        ),
+        entry("001", `INSERT INTO ${data} VALUES (1)`, "first"),
         entry("002", `INSERT INTO ${data} VALUES (2)`),
       );
       const runner = () =>
@@ -201,8 +197,8 @@ for (const locking of ["session", "claim-only"] as const) {
         });
       try {
         const reports = await Promise.all([
-          runner().up(locking === "session" ? first.db : claimOnly(first.db)),
-          runner().up(locking === "session" ? second.db : claimOnly(second.db)),
+          runner().startup(locking === "session" ? first.db : claimOnly(first.db), apply),
+          runner().startup(locking === "session" ? second.db : claimOnly(second.db), apply),
         ]);
         assert.deepEqual(
           reports.map((report) => report.status),
@@ -252,14 +248,14 @@ docsClaim(README, "MySQL implicit DDL commits leave failed history until explici
         ),
       ),
     });
-    await assert.rejects(() => migrator.up(db));
+    await assert.rejects(() => migrator.startup(db, apply));
     assert.deepEqual((await client.query(`SELECT value FROM ${data}`))[0], [{ value: 1 }]);
     const report = await migrator.startup(db, { mode: "report" });
     assert.equal(report.status, "incomplete");
     assert.equal(report.history.length, 1);
     assert.equal(report.history[0]?.status, "failed");
     await assertCode(() => migrator.startup(db, { mode: "verify" }), "BRAID_MIGRATE_DIRTY");
-    await assertCode(() => migrator.up(db), "BRAID_MIGRATE_DIRTY");
+    await assertCode(() => migrator.startup(db, apply), "BRAID_MIGRATE_DIRTY");
     const repaired = await migrator.repair(db);
     assert.equal(repaired.status, "pending");
     assert.deepEqual(repaired.history, []);
@@ -269,7 +265,7 @@ docsClaim(README, "MySQL implicit DDL commits leave failed history until explici
       table,
       manifest: manifest(entry("001", `INSERT INTO ${data} VALUES (2)`)),
     });
-    assert.equal((await corrected.up(db)).status, "current");
+    assert.equal((await corrected.startup(db, apply)).status, "current");
     assert.deepEqual((await client.query(`SELECT value FROM ${data} ORDER BY value`))[0], [{ value: 1 }, { value: 2 }]);
   }),
 );
@@ -285,15 +281,15 @@ docsClaim(README, "MySQL running claims time out and repair preserves successful
         entry("002", `INSERT INTO ${data} VALUES (2)`),
       ),
     });
-    const applied = await migrator.up(db);
+    const applied = await migrator.startup(db, apply);
     await client.query(`UPDATE ${table} SET status = 'running', duration_ms = NULL WHERE installed_rank = 2`);
     assert.equal((await migrator.startup(db, { mode: "report" })).status, "incomplete");
-    await assertCode(() => migrator.up(db), "BRAID_MIGRATE_BUSY");
+    await assertCode(() => migrator.startup(db, apply), "BRAID_MIGRATE_BUSY");
     await client.query(`DELETE FROM ${data}`);
     const repaired = await migrator.repair(db);
     assert.equal(repaired.status, "pending");
     assert.deepEqual(repaired.history, [applied.history[0]]);
-    assert.equal((await migrator.up(db)).status, "current");
+    assert.equal((await migrator.startup(db, apply)).status, "current");
     assert.deepEqual((await client.query(`SELECT value FROM ${data}`))[0], [{ value: 2 }]);
   }),
 );
@@ -313,12 +309,12 @@ docsClaim(README, "MySQL baseline skips existing versions and changed repeatable
     const baseline = await migrator.baseline(db, "001");
     assert.equal(baseline.history[0]?.kind, "baseline");
     assert.equal(baseline.head, "001");
-    const applied = await migrator.up(db);
+    const applied = await migrator.startup(db, apply);
     assert.deepEqual(
       applied.history.map((row) => row.kind),
       ["baseline", "versioned", "repeatable"],
     );
-    assert.deepEqual((await migrator.up(db)).history, applied.history);
+    assert.deepEqual((await migrator.startup(db, apply)).history, applied.history);
     const changed = createMigrator({
       dialect,
       table,
@@ -330,7 +326,7 @@ docsClaim(README, "MySQL baseline skips existing versions and changed repeatable
       pending.differences.map((difference) => difference.kind),
       ["repeatable-changed"],
     );
-    const current = await changed.up(db);
+    const current = await changed.startup(db, apply);
     assert.equal(current.status, "current");
     assert.equal(current.history.length, 4);
     assert.deepEqual(current.history.slice(0, 3), applied.history);
@@ -349,7 +345,7 @@ test(`docs/${README}: MySQL verification works with only SELECT on history`, asy
   }
   await withDb(async ({ db, table }) => {
     const migrator = createMigrator({ dialect, table, manifest: manifest(entry("001", "")) });
-    await migrator.up(db);
+    await migrator.startup(db, apply);
     const uri = new URL(inject("mysql").connectionUri);
     const database = decodeURIComponent(uri.pathname.slice(1));
     uri.username = "root";
@@ -406,7 +402,7 @@ DELIMITER ;
       ),
     });
     try {
-      assert.equal((await migrator.up(db)).status, "current");
+      assert.equal((await migrator.startup(db, apply)).status, "current");
       await client.query(`CALL ${procedure}()`);
       assert.deepEqual((await client.query(`SELECT value, ${fn}() AS f FROM ${data}`))[0], [{ value: 10, f: 7 }]);
     } finally {

@@ -19,7 +19,7 @@ try {
   const db = createLibsqlDatabase(client, { intMode: "string" });
   const loaded = await loadMigrations(sources, { dialects: ["sqlite"] });
   const outfile = join(directory, "manifest.mjs");
-  await writeFile(outfile, await generateManifestModule(sources, { dialects: ["sqlite"], outfile }));
+  await writeFile(outfile, await generateManifestModule(sources, { dialects: ["sqlite"] }));
   const { default: manifest } = await import(pathToFileURL(outfile).href);
   assert.equal(manifest.dialects.sqlite.hash, loaded.dialects.sqlite.hash);
   const drift = createSchemaDrift({
@@ -48,7 +48,7 @@ try {
   assert.equal((await migrator.startup(db, { mode: "report" })).status, "uninitialized");
   assert.equal((await migrator.startup(db, { mode: "apply" })).status, "current");
   assert.equal((await migrator.startup(db, { mode: "verify" })).status, "current");
-  await migrator.up(db);
+  await migrator.startup(db, { mode: "apply" });
   assert.deepEqual(await db.all(sql.rows`SELECT name FROM users`), [{ name: "Alice" }]);
   assert.equal((await migrator.startup(db, { mode: "report" })).history.length, 2);
   assert.equal((await migrator.startup(db, { schema: "hash" })).status, "current");

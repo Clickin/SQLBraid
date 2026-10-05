@@ -1,19 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { pathToFileURL } from "node:url";
+import { join, resolve } from "node:path";
 import { MigrationError } from "./errors.js";
-import { compareVersions, isMigrationBody, normalizeVersion } from "./manifest.js";
-import type { DialectManifest, ManifestEntry, MigrationBody, MigrationManifest } from "./types.js";
+import { compareVersions, normalizeVersion } from "./manifest.js";
+import type { DialectManifest, ManifestEntry, MigrationManifest } from "./types.js";
 
 export interface LoadMigrationsOptions {
   /** With no target list, dialects resolve lazily when a migrator selects its target. */
   readonly dialects?: readonly string[];
-}
-
-export interface GenerateManifestOptions extends LoadMigrationsOptions {
-  /** Location of the written module. Import specifiers are relative to it; defaults to `<directory>/manifest.mjs`. */
-  readonly outfile?: string;
 }
 
 export interface Source {
@@ -23,12 +17,11 @@ export interface Source {
   readonly dialect: string | null;
   readonly text: string;
   readonly checksum: string;
-  readonly path: string;
-  readonly typescript: boolean;
 }
 
 const DIALECTS = ["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"];
-export const DIRECTIVE = /\/\*\s*@braid\b/u;
+/** A file with a migration name prefix. Only `.sql` files are migrations; other extensions fail, not skip. */
+const MIGRATION_NAME = /^(?:V\d[\d._]*__|R__)/u;
 
 /** Source identity deliberately preserves all whitespace other than BOM and CRLF. */
 export function normalizeSource(source: string): string {
@@ -59,8 +52,10 @@ export async function readSources(directory: string): Promise<readonly Source[]>
         await visit(source);
         continue;
       }
-      if (!kind.isFile() || !/\.(?:sql|ts)$/u.test(entry.name) || !/^(?:V.*__|R__)/u.test(entry.name)) continue;
-      const match = /^(?:V(\d+(?:[._]\d+)*)__|R__)(.+)\.(sql|ts)$/u.exec(entry.name);
+      if (!kind.isFile() || !MIGRATION_NAME.test(entry.name)) continue;
+      if (!entry.name.endsWith(".sql"))
+        throw sourceError(`Migration ${source} is not a .sql file. SQLBraid migrations are SQL files only.`);
+      const match = /^(?:V(\d+(?:[._]\d+)*)__|R__)(.+)\.sql$/u.exec(entry.name);
       if (!match) throw sourceError(`Invalid migration filename: ${source}`);
       const version = match[1] ?? null;
       const stem = match[2]!;
@@ -73,18 +68,8 @@ export async function readSources(directory: string): Promise<readonly Source[]>
           `Invalid migration filename ${source}: the part after the first dot must be one dialect id (${DIALECTS.join(", ")}). Descriptions must not contain dots.`,
         );
       }
-      const path = resolve(directory, source);
-      const text = normalizeSource(await readFile(path, "utf8"));
-      sources.push({
-        version,
-        description,
-        source,
-        dialect,
-        text,
-        checksum: checksum(text),
-        path,
-        typescript: match[3] === "ts",
-      });
+      const text = normalizeSource(await readFile(join(directory, source), "utf8"));
+      sources.push({ version, description, source, dialect, text, checksum: checksum(text) });
     }
   }
   try {
@@ -146,7 +131,7 @@ export function manifestFromSources(
           description: source.description,
           source: source.source,
           checksum: source.checksum,
-          load: source.typescript ? () => loadTypeScript(source) : async () => source.text,
+          sql: source.text,
         };
       });
       const versioned = entries
@@ -168,7 +153,7 @@ export function manifestFromSources(
   return { format: "sqlbraid-migrations", formatVersion: 1, dialects };
 }
 
-/** Read trusted migration files. No migration code runs until an entry is loaded. */
+/** Read trusted SQL migration files. No SQL runs until a migrator applies an entry. */
 export async function loadMigrations(
   directory: string,
   options: LoadMigrationsOptions = {},
@@ -176,86 +161,11 @@ export async function loadMigrations(
   return manifestFromSources(await readSources(resolve(directory)), options);
 }
 
-async function loadTypeScript(source: Source): Promise<MigrationBody> {
-  if (DIRECTIVE.test(source.text))
-    throw sourceError(
-      `Guarded SQL directives in ${source.source} need a bundler that lowers them with @sqlbraid/vite. Use a generated manifest or the Vite plugin; the Node loader supports ordinary tags only.`,
-    );
-  let module: { default?: unknown };
-  try {
-    module = await import(pathToFileURL(source.path).href);
-  } catch (error) {
-    const code = (error as { code?: unknown } | null)?.code;
-    if (code === "ERR_UNKNOWN_FILE_EXTENSION" || code === "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING")
-      throw sourceError(
-        `Cannot import TypeScript migration ${source.source}: run with a runtime or loader that handles TypeScript, or use a generated manifest.`,
-        error,
-      );
-    throw sourceError(
-      `Cannot load TypeScript migration ${source.source}: ${error instanceof Error ? error.message : String(error)}`,
-      error,
-    );
-  }
-  if (typeof module.default === "string" || !isMigrationBody(module.default))
-    throw sourceError(
-      `TypeScript migration ${source.source} must export a default migration function or defineMigration() result.`,
-    );
-  return module.default;
-}
-
-/** Relative ESM specifier with forward slashes; `paths` is injectable so Windows behavior is testable. */
-export function relativeSpecifier(
-  fromDirectory: string,
-  file: string,
-  paths: { relative(from: string, to: string): string; isAbsolute(path: string): boolean; sep: string } = {
-    relative,
-    isAbsolute,
-    sep,
-  },
-): string {
-  const path = paths.relative(fromDirectory, file);
-  if (paths.isAbsolute(path))
-    throw sourceError(`Migration ${file} must be on the same drive as the generated manifest.`);
-  const portable = path.split(paths.sep).join("/");
-  return portable.startsWith("../") ? portable : `./${portable}`;
-}
-
-/** Plain ESM: SQL as string literals, TypeScript as lazy imports that the host runtime or bundler resolves. */
-export async function manifestModuleSource(
-  directory: string,
-  options: LoadMigrationsOptions,
-  specifier: (file: string) => string,
-): Promise<{ readonly code: string; readonly sources: readonly Source[] }> {
-  const sources = await readSources(resolve(directory));
-  const manifest = manifestFromSources(sources, options, true);
-  const bySource = new Map(sources.map((source) => [source.source, source]));
-  const loaders = new Map<string, string>();
-  const entryCode = (entry: ManifestEntry): string => {
-    const source = bySource.get(entry.source)!;
-    let loader = loaders.get(source.source);
-    if (!loader) {
-      loader = source.typescript
-        ? `async () => (await import(${JSON.stringify(specifier(source.path))})).default`
-        : `async () => ${JSON.stringify(source.text)}`;
-      loaders.set(source.source, loader);
-    }
-    return `{ version: ${JSON.stringify(entry.version)}, description: ${JSON.stringify(entry.description)}, source: ${JSON.stringify(entry.source)}, checksum: ${JSON.stringify(entry.checksum)}, load: ${loader} }`;
-  };
-  const dialectCode = Object.entries(manifest.dialects).map(
-    ([dialect, entries]) =>
-      `    ${JSON.stringify(dialect)}: {\n      hash: ${JSON.stringify(entries.hash)},\n      versioned: [${entries.versioned.map((entry) => `\n        ${entryCode(entry)}`).join(",")}\n      ],\n      repeatable: [${entries.repeatable.map((entry) => `\n        ${entryCode(entry)}`).join(",")}\n      ],\n    }`,
-  );
-  return {
-    code: `// Generated by @sqlbraid/migrate. Do not edit.\nexport default {\n  format: "sqlbraid-migrations",\n  formatVersion: 1,\n  dialects: {\n${dialectCode.join(",\n")}\n  },\n};\n`,
-    sources,
-  };
-}
-
-/** Generate a plain ESM manifest. The caller writes it at `outfile`; a bundler or the host runtime loads TypeScript. */
+/** Plain ESM with SQL text as string literals. The module has no imports, so any host or bundler can load it. */
 export async function generateManifestModule(
   directory: string,
-  options: GenerateManifestOptions = {},
+  options: LoadMigrationsOptions = {},
 ): Promise<string> {
-  const from = dirname(resolve(options.outfile ?? join(directory, "manifest.mjs")));
-  return (await manifestModuleSource(directory, options, (file) => relativeSpecifier(from, file))).code;
+  const manifest = manifestFromSources(await readSources(resolve(directory)), options, true);
+  return `// Generated by @sqlbraid/migrate. Do not edit.\nexport default ${JSON.stringify(manifest, null, 2)};\n`;
 }

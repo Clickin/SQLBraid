@@ -74,14 +74,20 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["tests/*.test.ts", "tests/certification/**/*.test.ts"],
-          exclude: ["tests/consumer.test.ts", "tests/cli.test.ts", "tests/migrate-cli.test.ts", "tests/db/**"],
+          exclude: [
+            "tests/consumer.test.ts",
+            "tests/cli.test.ts",
+            "tests/migrate-cli.test.ts",
+            "tests/migrate-vite-ssr.test.ts",
+            "tests/db/**",
+          ],
         },
       },
       {
         extends: true,
         test: {
           name: "cli",
-          include: ["tests/cli.test.ts", "tests/migrate-cli.test.ts"],
+          include: ["tests/cli.test.ts", "tests/migrate-cli.test.ts", "tests/migrate-vite-ssr.test.ts"],
           fileParallelism: false,
         },
       },

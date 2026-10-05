@@ -1,27 +1,20 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { DatabaseSync } from "node:sqlite";
-import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { test, vi } from "vitest";
 import { createLogger, createServer } from "vite";
 import type { Plugin } from "vite";
 import { createStatementBindingDescription } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
 import { dialect } from "@sqlbraid/sqlite";
-import {
-  compareVersions,
-  generateManifestModule,
-  loadMigrations,
-  normalizeSource,
-  normalizeVersion,
-} from "../packages/migrate/src/node.js";
+import { compareVersions, normalizeVersion } from "../packages/migrate/src/manifest.js";
+import { generateManifestModule, loadMigrations } from "../packages/migrate/src/node.js";
+import { normalizeSource } from "../packages/migrate/src/sources.js";
 import type { MigrationManifest } from "../packages/migrate/src/types.js";
 import migrations from "../packages/migrate/src/vite.js";
-import sqlbraid from "@sqlbraid/vite";
 
 async function directory(files: Readonly<Record<string, string>>): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), "sqlbraid-migrations-"));
@@ -44,7 +37,7 @@ test("sources normalize only leading BOM and CRLF before hashing and loading", a
   try {
     const manifest = await loadMigrations(path, { dialects: ["sqlite"] });
     const entry = manifest.dialects.sqlite!.versioned[0]!;
-    assert.equal(await entry.load(), "SELECT 1;\n  \n");
+    assert.equal(entry.sql, "SELECT 1;\n  \n");
     assert.equal(entry.checksum, createHash("sha256").update("SELECT 1;\n  \n").digest("hex"));
     assert.equal(normalizeSource(" \uFEFFa\rb \n"), " \uFEFFa\rb \n");
     const unchanged = await loadMigrations(path, { dialects: ["sqlite"] });
@@ -71,10 +64,10 @@ test("each version and repeatable selects its exact dialect before generic fallb
       manifest.dialects.postgres!.versioned.map((entry) => entry.version),
       ["1.2", "1.10"],
     );
-    assert.equal(await manifest.dialects.postgres!.versioned[0]!.load(), "postgres earlier");
-    assert.equal(await manifest.dialects.sqlite!.versioned[0]!.load(), "generic earlier");
-    assert.equal(await manifest.dialects.postgres!.repeatable[0]!.load(), "postgres view");
-    assert.equal(await manifest.dialects.sqlite!.repeatable[0]!.load(), "generic view");
+    assert.equal(manifest.dialects.postgres!.versioned[0]!.sql, "postgres earlier");
+    assert.equal(manifest.dialects.sqlite!.versioned[0]!.sql, "generic earlier");
+    assert.equal(manifest.dialects.postgres!.repeatable[0]!.sql, "postgres view");
+    assert.equal(manifest.dialects.sqlite!.repeatable[0]!.sql, "generic view");
   } finally {
     await rm(path, { recursive: true, force: true });
   }
@@ -121,7 +114,7 @@ test("symbolic links to migration files and directories are followed, never skip
       manifest.dialects.sqlite!.versioned.map((entry) => entry.source),
       ["V1__linked.sql", "nested/V2__shared.sql"],
     );
-    assert.match(String(await manifest.dialects.sqlite!.versioned[0]!.load()), /linked/u);
+    assert.match(manifest.dialects.sqlite!.versioned[0]!.sql, /linked/u);
     await symlink(path, join(path, "loop"), "dir");
     await assert.rejects(loadMigrations(path), { code: "BRAID_MIGRATE_SOURCE" });
     await rm(join(path, "loop"));
@@ -139,127 +132,44 @@ test("version variants may describe an explicit dialect-specific no-op different
     const manifest = await loadMigrations(path, { dialects: ["postgres", "sqlite"] });
     assert.equal(manifest.dialects.postgres!.versioned[0]!.description, "create_index");
     assert.equal(manifest.dialects.sqlite!.versioned[0]!.description, "noop");
-    assert.equal(await manifest.dialects.sqlite!.versioned[0]!.load(), "");
+    assert.equal(manifest.dialects.sqlite!.versioned[0]!.sql, "");
     assert.equal(manifest.dialects.postgres!.versioned[0]!.version, manifest.dialects.sqlite!.versioned[0]!.version);
   } finally {
     await rm(path, { recursive: true, force: true });
   }
 });
 
-test("duplicate canonical versions and SQL/TS variants are rejected", async () => {
-  const cases: Readonly<Record<string, string>>[] = [
-    { "V001__first.sql": "", "V1.0__first.sql": "" },
-    { "V1__first.sql": "", "V1__first.ts": "export default async () => {}" },
-    { "R__view.sql": "", "R__view.ts": "export default async () => {}" },
-  ];
-  for (const files of cases) {
-    const path = await directory(files);
+test("duplicate canonical versions are rejected", async () => {
+  const path = await directory({ "V001__first.sql": "", "V1.0__first.sql": "" });
+  try {
+    await assert.rejects(loadMigrations(path), { code: "BRAID_MIGRATE_SOURCE" });
+  } finally {
+    await rm(path, { recursive: true, force: true });
+  }
+});
+
+test("migration-named files other than .sql fail instead of being skipped; other files are ignored", async () => {
+  for (const file of ["V1__seed.ts", "V2__seed.js", "R__view.mjs", "V3__notes.txt"]) {
+    const path = await directory({ "V0__init.sql": "", [file]: "export default async () => {}" });
     try {
-      await assert.rejects(loadMigrations(path), { code: "BRAID_MIGRATE_SOURCE" });
+      await assert.rejects(loadMigrations(path), (error: Error & { code?: string }) => {
+        assert.equal(error.code, "BRAID_MIGRATE_SOURCE");
+        assert.match(error.message, /SQL files only/u);
+        return true;
+      });
+      await assert.rejects(generateManifestModule(path), { code: "BRAID_MIGRATE_SOURCE" });
     } finally {
       await rm(path, { recursive: true, force: true });
     }
   }
-});
-
-test("Node TS loading imports through the host runtime, resolves .ts helpers and stays lazy", async () => {
-  const path = await directory({
-    "V1__typescript.ts":
-      'import { value } from "./helper.ts"; export default async (db: { values: number[] }): Promise<void> => { db.values.push(value); };',
-    "helper.ts": "export const value: number = 42;",
-  });
+  const path = await directory({ "V1__init.sql": "", "README.md": "", "Vendor__notes.ts": "", "seed.ts": "" });
   try {
     const manifest = await loadMigrations(path, { dialects: ["sqlite"] });
-    const body = await manifest.dialects.sqlite!.versioned[0]!.load();
-    assert.equal(typeof body, "function");
-    const values: number[] = [];
-    if (typeof body !== "function") throw new Error("Expected TypeScript migration");
-    await Reflect.apply(body, undefined, [{ values }]);
-    assert.deepEqual(values, [42]);
-  } finally {
-    await rm(path, { recursive: true, force: true });
-  }
-});
-
-test("Node TS loading resolves ESM-only dependencies from the migration file", async () => {
-  const path = await directory({
-    "V1__esm.ts":
-      'import value from "migration-esm"; export default async (db: { values: number[] }) => { db.values.push(value); };',
-  });
-  try {
-    const dependency = join(path, "node_modules", "migration-esm");
-    await mkdir(dependency, { recursive: true });
-    await writeFile(
-      join(dependency, "package.json"),
-      JSON.stringify({ type: "module", exports: { import: "./index.js" } }),
+    assert.deepEqual(
+      manifest.dialects.sqlite!.versioned.map((entry) => entry.source),
+      ["V1__init.sql"],
     );
-    await writeFile(join(dependency, "index.js"), "export default 7;");
-    const manifest = await loadMigrations(path, { dialects: ["sqlite"] });
-    const body = await manifest.dialects.sqlite!.versioned[0]!.load();
-    assert.equal(typeof body, "function");
-    const values: number[] = [];
-    if (typeof body !== "function") throw new Error("Expected TypeScript migration");
-    await Reflect.apply(body, undefined, [{ values }]);
-    assert.deepEqual(values, [7]);
   } finally {
-    await rm(path, { recursive: true, force: true });
-  }
-});
-
-test("Node rejects guarded TS before import; the Vite plugin needs @sqlbraid/vite to lower it", async () => {
-  const path = await mkdtemp(join(process.cwd(), ".migration-guard-"));
-  await writeFile(
-    join(path, "V1__guard.ts"),
-    'import { sql } from "@sqlbraid/sqlite"; globalThis.__guardImported = true; export default async (db: { execute(query: unknown): Promise<void> }) => { await db.execute(sql.command`UPDATE t SET a=1 /*@braid if ${false}*/ WHERE a=${(() => { throw new Error("inactive branch"); })()} /*@braid end*/`); };',
-  );
-  const native = new DatabaseSync(":memory:");
-  try {
-    const manifest = await loadMigrations(path, { dialects: ["sqlite"] });
-    await assert.rejects(
-      manifest.dialects.sqlite!.versioned[0]!.load(),
-      (error: unknown) => error instanceof Error && /Guarded SQL directives.*ordinary tags only/su.test(error.message),
-    );
-    assert.equal(Reflect.get(globalThis, "__guardImported"), undefined);
-    const plain = await createServer({
-      configFile: false,
-      root: path,
-      logLevel: "silent",
-      plugins: [migrations({ directory: path, dialects: ["sqlite"] })],
-      server: { middlewareMode: true },
-      optimizeDeps: { noDiscovery: true },
-    });
-    try {
-      await assert.rejects(plain.ssrLoadModule("virtual:sqlbraid-migrations"), /need the sqlbraid\(\) plugin/u);
-    } finally {
-      await plain.close();
-    }
-    const server = await createServer({
-      configFile: false,
-      root: path,
-      logLevel: "silent",
-      plugins: [sqlbraid(), migrations({ directory: path, dialects: ["sqlite"] })],
-      server: { middlewareMode: true },
-      optimizeDeps: { noDiscovery: true },
-    });
-    try {
-      const module = (await server.ssrLoadModule("virtual:sqlbraid-migrations")) as { default: MigrationManifest };
-      const body = await module.default.dialects.sqlite!.versioned[0]!.load();
-      if (typeof body !== "function") throw new Error("Expected a lowered migration function");
-      native.exec("CREATE TABLE t(a INTEGER); INSERT INTO t VALUES (2), (3);");
-      await body(createNodeSqliteDatabase(native));
-      assert.deepEqual(
-        native
-          .prepare("SELECT a FROM t ORDER BY rowid")
-          .all()
-          .map((row) => row.a),
-        [1, 1],
-      );
-    } finally {
-      await server.close();
-    }
-  } finally {
-    Reflect.deleteProperty(globalThis, "__guardImported");
-    native.close();
     await rm(path, { recursive: true, force: true });
   }
 });
@@ -274,38 +184,26 @@ test("generated manifest without a dialect list accepts dialect-only versions", 
     assert.deepEqual(Object.keys(module.default.dialects), ["postgres"]);
     const postgres = module.default.dialects.postgres!;
     assert.equal(postgres.versioned.length, 1);
-    assert.equal(await postgres.versioned[0]!.load(), "CREATE TABLE t (id integer);");
+    assert.equal(postgres.versioned[0]!.sql, "CREATE TABLE t (id integer);");
     await assert.rejects(generateManifestModule(path, { dialects: ["mysql"] }), /No mysql or generic source/u);
   } finally {
     await rm(path, { recursive: true, force: true });
   }
 });
 
-test("generated plain ESM embeds SQL, imports TS lazily and keeps original source identities", async () => {
-  const path = await directory({
-    "V1__sql.sql": "SELECT 1;\r\n",
-    "V2__ts.ts":
-      "globalThis.__manifestTsRan = (globalThis.__manifestTsRan ?? 0) + 1; export default async (db: { values: string[] }) => { db.values.push('ran'); };",
-  });
+test("generated ESM has no imports, embeds normalized SQL and keeps source identities", async () => {
+  const path = await directory({ "V1__sql.sql": "SELECT 1;\r\n", "R__view.sql": "CREATE VIEW v AS SELECT 1;" });
   try {
     const expected = await loadMigrations(path, { dialects: ["sqlite"] });
+    const generated = await generateManifestModule(path, { dialects: ["sqlite"] });
+    assert.ok(!/\bimport\b/u.test(generated));
     const outfile = join(path, "manifest.mjs");
-    await writeFile(outfile, await generateManifestModule(path, { dialects: ["sqlite"], outfile }));
+    await writeFile(outfile, generated);
     // The generated module path exists only for this test run.
     const module: { default: MigrationManifest } = await import(pathToFileURL(outfile).href);
-    const manifest = module.default;
-    assert.equal(manifest.dialects.sqlite!.hash, expected.dialects.sqlite!.hash);
-    assert.equal(await manifest.dialects.sqlite!.versioned[0]!.load(), "SELECT 1;\n");
-    assert.equal(Reflect.get(globalThis, "__manifestTsRan"), undefined);
-    const body = await manifest.dialects.sqlite!.versioned[1]!.load();
-    assert.equal(Reflect.get(globalThis, "__manifestTsRan"), 1);
-    assert.equal(typeof body, "function");
-    const values: string[] = [];
-    if (typeof body !== "function") throw new Error("Expected TypeScript migration");
-    await Reflect.apply(body, undefined, [{ values }]);
-    assert.deepEqual(values, ["ran"]);
+    assert.deepEqual(JSON.parse(JSON.stringify(module.default)), JSON.parse(JSON.stringify(expected)));
+    assert.equal(module.default.dialects.sqlite!.versioned[0]!.sql, "SELECT 1;\n");
   } finally {
-    Reflect.deleteProperty(globalThis, "__manifestTsRan");
     await rm(path, { recursive: true, force: true });
   }
 });
@@ -423,25 +321,6 @@ test("Vite dev checks report at startup and source changes to terminal and overl
   } finally {
     await server.close();
     vi.restoreAllMocks();
-    await rm(path, { recursive: true, force: true });
-  }
-});
-
-test("TypeScript loading accepts a defineMigration() result and rejects other default exports", async () => {
-  const path = await directory({
-    "V1__definition.ts":
-      "const run = async (): Promise<void> => {}; export default Object.freeze({ run, transaction: false });",
-  });
-  try {
-    const body = await (await loadMigrations(path, { dialects: ["sqlite"] })).dialects.sqlite!.versioned[0]!.load();
-    assert.equal(typeof body, "object");
-    assert.equal((body as { transaction: boolean }).transaction, false);
-    await rm(join(path, "V1__definition.ts"));
-    await writeFile(join(path, "V1__invalid.ts"), "export default { run: 1, transaction: false };");
-    await assert.rejects((await loadMigrations(path, { dialects: ["sqlite"] })).dialects.sqlite!.versioned[0]!.load(), {
-      code: "BRAID_MIGRATE_SOURCE",
-    });
-  } finally {
     await rm(path, { recursive: true, force: true });
   }
 });

@@ -20,7 +20,7 @@ description: 각 역할을 맡는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/vite`            | 소스 맵을 유지하며 조건부 템플릿을 변환하는 Vite 8 사전 변환                                                              |
 | `@sqlbraid/opentelemetry`   | 옵저버를 통한 선택 사항 OpenTelemetry DB 클라이언트 span과 실행 시간 지표                                                 |
 | `@sqlbraid/metadata`        | DB 정보 스냅샷, 검증, 식별, 변경 비교                                                                                     |
-| `@sqlbraid/migrate`         | 선택 사항인 SQL/TypeScript 마이그레이션과 시작 검사, `/node` 로더, `/vite` manifest 플러그인, `/drift` 어댑터             |
+| `@sqlbraid/migrate`         | 선택 사항인 SQL 마이그레이션과 시작 검사, `/node` 로더, `/vite` manifest 플러그인, `/drift` 어댑터                        |
 | `@sqlbraid/codegen`         | 메타데이터와 TypePolicy로 Row/Insert/Update 선언 생성                                                                     |
 | `@sqlbraid/tooling`         | 공유 설정·워크스페이스 근거와 의미 인덱스                                                                                 |
 | `@sqlbraid/operations`      | 지문(fingerprint)과 선언 매니페스트                                                                                       |

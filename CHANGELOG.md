@@ -10,21 +10,23 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 ### Migrations
 
-- Add optional `@sqlbraid/migrate` at its independent `0.1.0` version, with SQL and TypeScript manifests, dialect-specific
-  statement splitting, one history table, concurrent claims and explicit startup checks.
+- Add optional `@sqlbraid/migrate` at its independent `0.1.0` version, with SQL-only migration files, dialect-specific
+  statement splitting, one history table, concurrent claims and explicit startup checks. A script file with a migration
+  name fails the loader.
 - Add `sqlbraid migrate new|status|up|baseline|repair|manifest|snapshot` through the
   existing project configuration, plus server-only Vite manifests and optional schema drift.
+- Inline migration SQL into Vite server chunks. The plugin rejects client imports, migration files in `publicDir` and
+  development-server requests for migration files.
 - Keep migration execution outside database construction. Runtime-only installs
   exclude the migration package. Driver support labels are unchanged.
 - Extend metadata compatibility to Node 16.20.2 for optional startup schema drift.
-  A packed consumer checks SQL and TypeScript application, verification and drift on that exact Node version.
+  A packed consumer checks SQL application, verification and drift on that exact Node version.
 - Include nested migration files when `migrate new` selects the next version.
 - Generate manifests without a dialect list using only dialects with complete migration sources.
 - Validate `busyTimeoutMs` as an integer from `0` through `2147483647` in migration configuration.
 - Request simple execution for SQL migration statements. MySQL uses the text protocol only when there are no parameters.
 - Add per-operation `ExecutionOptions.reuse`; bound MySQL queries retain server-side prepared execution.
 - Keep PostgreSQL `BEGIN ATOMIC` routine bodies in one statement.
-- Keep Windows absolute TypeScript migration paths inside the Node loader bundle.
 - Record the inspected schema hash after `baseline` when a drift adapter is configured.
 
 ### Release tooling

@@ -3,27 +3,23 @@ import { createHash, randomUUID } from "node:crypto";
 import { Client, Pool } from "pg";
 import { inject, test } from "vitest";
 import type { Database, ExecutionObserver, QueryReadyEvent } from "@sqlbraid/core";
-import {
-  createMigrator,
-  defineMigration,
-  type ManifestEntry,
-  type MigrationBody,
-  type MigrationManifest,
-} from "@sqlbraid/migrate";
-import { dialect, sql } from "@sqlbraid/postgres";
+import { createMigrator, type ManifestEntry, type MigrationManifest } from "@sqlbraid/migrate";
+import { dialect } from "@sqlbraid/postgres";
 import { createPgDatabase, createPgPoolDatabase } from "@sqlbraid/postgres/pg";
 import { assertCode, docsClaim } from "../docs-claims.js";
+
+const apply = { mode: "apply" } as const;
 
 const README = "packages/migrate/README.md";
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 
-function entry(version: string | null, body: MigrationBody, identity = String(body)): ManifestEntry {
+function entry(version: string | null, body: string, identity = body): ManifestEntry {
   return {
     version,
     description: version === null ? "refresh" : `step ${version}`,
     source: version === null ? "R__refresh.sql" : `V${version}__step.sql`,
     checksum: hash(identity),
-    load: async () => body,
+    sql: body,
   };
 }
 
@@ -95,7 +91,7 @@ docsClaim(
         });
         assert.equal((await migrator.startup(db, { mode: "report" })).status, "uninitialized");
         await assertCode(() => migrator.startup(db, { mode: "verify" }), "BRAID_MIGRATE_UNINITIALIZED");
-        assert.equal((await migrator.up(db)).status, "current");
+        assert.equal((await migrator.startup(db, apply)).status, "current");
         assert.deepEqual((await client.query(`SELECT value FROM "${data}"`)).rows, [{ value: "a;b" }]);
         assert.ok(queries.some((query) => query.sql?.includes(`CREATE TABLE "${data}"`)));
         assert.ok(queries.some((query) => query.sql?.includes(`INSERT INTO "${data}"`)));
@@ -150,7 +146,7 @@ docsClaim(
 for (const locking of ["session", "claim-only"] as const) {
   docsClaim(README, `PostgreSQL concurrent ${locking} runners apply each version exactly once`, async () => {
     await withDb(async ({ db, client, table, data }) => {
-      await createMigrator({ dialect, table, manifest: manifest() }).up(db);
+      await createMigrator({ dialect, table, manifest: manifest() }).startup(db, apply);
       await client.query(`CREATE TABLE "${data}" (value integer)`);
       let readers = 0;
       let releaseReaders!: () => void;
@@ -190,13 +186,7 @@ for (const locking of ["session", "claim-only"] as const) {
       const second = await connect([observer()]);
       const events: string[] = [];
       const migrations = manifest(
-        entry(
-          "001",
-          async (migrationDb) => {
-            await migrationDb.execute(sql.command`INSERT INTO ${sql.ident(data)} VALUES (${1})`);
-          },
-          "first",
-        ),
+        entry("001", `INSERT INTO "${data}" VALUES (1)`, "first"),
         entry("002", `INSERT INTO "${data}" VALUES (2)`),
       );
       const runner = () =>
@@ -210,8 +200,8 @@ for (const locking of ["session", "claim-only"] as const) {
         });
       try {
         const reports = await Promise.all([
-          runner().up(locking === "session" ? first.db : claimOnly(first.db)),
-          runner().up(locking === "session" ? second.db : claimOnly(second.db)),
+          runner().startup(locking === "session" ? first.db : claimOnly(first.db), apply),
+          runner().startup(locking === "session" ? second.db : claimOnly(second.db), apply),
         ]);
         assert.deepEqual(
           reports.map((report) => report.status),
@@ -261,7 +251,7 @@ docsClaim(README, "PostgreSQL transactional failure rolls back both DDL and its 
         ),
       ),
     });
-    await assert.rejects(() => migrator.up(db));
+    await assert.rejects(() => migrator.startup(db, apply));
     assert.equal((await client.query("SELECT to_regclass($1) AS name", [data])).rows[0].name, null);
     const report = await migrator.startup(db, { mode: "report" });
     assert.equal(report.status, "pending");
@@ -271,7 +261,7 @@ docsClaim(README, "PostgreSQL transactional failure rolls back both DDL and its 
       table,
       manifest: manifest(entry("001", `CREATE TABLE "${data}" (value integer)`)),
     });
-    assert.equal((await corrected.up(db)).status, "current");
+    assert.equal((await corrected.startup(db, apply)).status, "current");
   }),
 );
 
@@ -286,15 +276,15 @@ docsClaim(README, "PostgreSQL running claims time out and repair preserves succe
         entry("002", `INSERT INTO "${data}" VALUES (2)`),
       ),
     });
-    const applied = await migrator.up(db);
+    const applied = await migrator.startup(db, apply);
     await client.query(`UPDATE "${table}" SET status = 'running', duration_ms = NULL WHERE installed_rank = 2`);
     assert.equal((await migrator.startup(db, { mode: "report" })).status, "incomplete");
-    await assertCode(() => migrator.up(db), "BRAID_MIGRATE_BUSY");
+    await assertCode(() => migrator.startup(db, apply), "BRAID_MIGRATE_BUSY");
     await client.query(`DELETE FROM "${data}"`);
     const repaired = await migrator.repair(db);
     assert.equal(repaired.status, "pending");
     assert.deepEqual(repaired.history, [applied.history[0]]);
-    assert.equal((await migrator.up(db)).status, "current");
+    assert.equal((await migrator.startup(db, apply)).status, "current");
     assert.deepEqual((await client.query(`SELECT value FROM "${data}"`)).rows, [{ value: 2 }]);
   }),
 );
@@ -314,12 +304,12 @@ docsClaim(README, "PostgreSQL baseline skips existing versions and changed repea
     const baseline = await migrator.baseline(db, "001");
     assert.equal(baseline.history[0]?.kind, "baseline");
     assert.equal(baseline.head, "001");
-    const applied = await migrator.up(db);
+    const applied = await migrator.startup(db, apply);
     assert.deepEqual(
       applied.history.map((row) => row.kind),
       ["baseline", "versioned", "repeatable"],
     );
-    assert.deepEqual((await migrator.up(db)).history, applied.history);
+    assert.deepEqual((await migrator.startup(db, apply)).history, applied.history);
     const changed = createMigrator({
       dialect,
       table,
@@ -331,7 +321,7 @@ docsClaim(README, "PostgreSQL baseline skips existing versions and changed repea
       pending.differences.map((difference) => difference.kind),
       ["repeatable-changed"],
     );
-    const current = await changed.up(db);
+    const current = await changed.startup(db, apply);
     assert.equal(current.status, "current");
     assert.equal(current.history.length, 4);
     assert.deepEqual(current.history.slice(0, 3), applied.history);
@@ -347,7 +337,7 @@ test(`docs/${README}: PostgreSQL verification works with only SELECT on history`
   await withDb(async ({ db, client, table }) => {
     const role = `migrate_reader_${randomUUID().replaceAll("-", "")}`;
     const migrator = createMigrator({ dialect, table, manifest: manifest(entry("001", "")) });
-    await migrator.up(db);
+    await migrator.startup(db, apply);
     try {
       await client.query(`CREATE ROLE "${role}" NOLOGIN`);
     } catch (error) {
@@ -387,7 +377,7 @@ docsClaim(
           ),
         ),
       });
-      await assertCode(() => rejected.up(db), "BRAID_MIGRATE_SOURCE");
+      await assertCode(() => rejected.startup(db, apply), "BRAID_MIGRATE_SOURCE");
       assert.deepEqual((await client.query(`SELECT to_regclass('"${data}"') AS name`)).rows, [{ name: null }]);
       const migrator = createMigrator({
         dialect,
@@ -402,7 +392,7 @@ CREATE RULE "${data}_rule" AS ON INSERT TO "${data}" DO ALSO (INSERT INTO "${dat
         ),
       });
       try {
-        assert.equal((await migrator.up(db)).status, "current");
+        assert.equal((await migrator.startup(db, apply)).status, "current");
         await client.query(`INSERT INTO "${data}" VALUES (1)`);
         assert.deepEqual((await client.query(`SELECT value FROM "${data}_log" ORDER BY value`)).rows, [
           { value: 1 },
@@ -416,29 +406,21 @@ CREATE RULE "${data}_rule" AS ON INSERT TO "${data}" DO ALSO (INSERT INTO "${dat
   },
 );
 
-docsClaim(
-  README,
-  "PostgreSQL TypeScript migrations opt out of transactions for CREATE INDEX CONCURRENTLY",
-  async () => {
-    await withDb(async ({ db, client, table, data }) => {
-      await client.query(`CREATE TABLE "${data}" (value int)`);
-      const body = (transaction: boolean) =>
-        defineMigration(
-          async (scoped) => {
-            await scoped.execute(
-              sql.command`CREATE INDEX CONCURRENTLY ${sql.ident(`${data}_idx`)} ON ${sql.ident(data)} (value)`,
-            );
-          },
-          { transaction },
-        );
-      const failing = createMigrator({ dialect, table, manifest: manifest(entry("001", body(true), "tx-on")) });
-      await assert.rejects(() => failing.up(db), { code: "25001" });
-      assert.equal((await failing.startup(db, { mode: "report" })).status, "pending");
-      const migrator = createMigrator({ dialect, table, manifest: manifest(entry("001", body(false), "tx-off")) });
-      assert.equal((await migrator.up(db)).status, "current");
-      assert.deepEqual((await client.query(`SELECT indexname FROM pg_indexes WHERE indexname = '${data}_idx'`)).rows, [
-        { indexname: `${data}_idx` },
-      ]);
+docsClaim(README, "PostgreSQL transaction=off runs CREATE INDEX CONCURRENTLY outside a transaction", async () => {
+  await withDb(async ({ db, client, table, data }) => {
+    await client.query(`CREATE TABLE "${data}" (value int)`);
+    const index = `CREATE INDEX CONCURRENTLY "${data}_idx" ON "${data}" (value);`;
+    const failing = createMigrator({ dialect, table, manifest: manifest(entry("001", index, "tx-on")) });
+    await assert.rejects(() => failing.startup(db, apply), { code: "25001" });
+    assert.equal((await failing.startup(db, { mode: "report" })).status, "pending");
+    const migrator = createMigrator({
+      dialect,
+      table,
+      manifest: manifest(entry("001", `-- @braid-migrate transaction=off\n${index}`, "tx-off")),
     });
-  },
-);
+    assert.equal((await migrator.startup(db, apply)).status, "current");
+    assert.deepEqual((await client.query(`SELECT indexname FROM pg_indexes WHERE indexname = '${data}_idx'`)).rows, [
+      { indexname: `${data}_idx` },
+    ]);
+  });
+});

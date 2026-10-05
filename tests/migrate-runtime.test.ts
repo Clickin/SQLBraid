@@ -11,27 +11,27 @@ import { dialect, sql } from "@sqlbraid/sqlite";
 import { createNodeSqliteDatabase, createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";
 import {
   createMigrator,
-  defineMigration,
   MigrationStartupError,
   type ManifestEntry,
-  type MigrationBody,
   type MigrationEvent,
   type MigrationManifest,
 } from "@sqlbraid/migrate";
 
 function entry(
   version: string | null,
-  body: MigrationBody,
+  text: string,
   source = version === null ? "R__view.sql" : `V${version}__change.sql`,
 ): ManifestEntry {
   return {
     version,
     description: "change",
     source,
-    checksum: createHash("sha256").update(String(body)).digest("hex"),
-    load: async () => body,
+    checksum: createHash("sha256").update(text).digest("hex"),
+    sql: text,
   };
 }
+
+const apply = { mode: "apply" } as const;
 
 function manifest(entries: readonly ManifestEntry[]): MigrationManifest {
   return {
@@ -92,18 +92,13 @@ test("native SQLite applies numeric versions before repeatables, reports events,
   });
   const entries = [
     entry("10", "INSERT INTO users VALUES (10)"),
-    entry(
-      "2",
-      defineMigration(async (scoped) => {
-        await scoped.execute(sql.command`INSERT INTO users VALUES (${2})`);
-      }),
-    ),
+    entry("2", "INSERT INTO users VALUES (2)"),
     entry("1", "CREATE TABLE users (id INTEGER)"),
     entry(null, "CREATE VIEW user_ids AS SELECT id FROM users"),
   ];
   const migrator = createMigrator({ manifest: manifest(entries), dialect, onEvent: (event) => events.push(event) });
   try {
-    const result = await migrator.up(db);
+    const result = await migrator.startup(db, apply);
     assert.equal(result.status, "current");
     assert.deepEqual(
       result.history.map((row) => row.version),
@@ -118,19 +113,10 @@ test("native SQLite applies numeric versions before repeatables, reports events,
     assert.equal(events.filter((event) => event.type === "lock.acquire").length, 0);
     native.exec("PRAGMA query_only = ON");
     statements.length = 0;
-    let callbackReport;
-    assert.equal(
-      (
-        await migrator.startup(db, {
-          onReport: (report) => {
-            callbackReport = report;
-          },
-        })
-      ).status,
-      "current",
-    );
+    const verified = await migrator.startup(db);
+    assert.equal(verified.status, "current");
     const lastEvent = events.at(-1);
-    assert.equal(callbackReport, lastEvent?.type === "startup.check" ? lastEvent.report : undefined);
+    assert.equal(lastEvent?.type === "startup.check" ? lastEvent.report : undefined, verified);
     assert.equal(statements.length, 1);
     assert.match(statements[0]!, /^SELECT /);
     assert.deepEqual(await db.all(sql.rows`SELECT id FROM user_ids ORDER BY id`), [{ id: "2" }, { id: "10" }]);
@@ -145,7 +131,7 @@ test("history comparison distinguishes ahead, checksum, missing source, out-of-o
   const first = entry("1", "CREATE TABLE users (id INTEGER)");
   const third = entry("3", "INSERT INTO users VALUES (3)");
   try {
-    await createMigrator({ manifest: manifest([first, third]), dialect }).up(db);
+    await createMigrator({ manifest: manifest([first, third]), dialect }).startup(db, apply);
     const old = createMigrator({ manifest: manifest([first]), dialect });
     assert.equal((await old.startup(db)).status, "ahead");
     await assert.rejects(old.startup(db, { ahead: "error" }), { code: "BRAID_MIGRATE_AHEAD" });
@@ -155,7 +141,7 @@ test("history comparison distinguishes ahead, checksum, missing source, out-of-o
       missingReport.differences.map((difference) => difference.kind),
       ["missing-source"],
     );
-    await assert.rejects(missing.up(db), { code: "BRAID_MIGRATE_ORDER" });
+    await assert.rejects(missing.startup(db, apply), { code: "BRAID_MIGRATE_ORDER" });
     const changed = createMigrator({
       manifest: manifest([
         entry("01", "CREATE TABLE users (id TEXT)"),
@@ -183,7 +169,7 @@ test("changed repeatables append history after pending versions and unchanged re
   const first = entry("1", "CREATE TABLE counts (value INTEGER)");
   const repeat = entry(null, "INSERT INTO counts VALUES (1)");
   try {
-    await createMigrator({ manifest: manifest([first, repeat]), dialect }).up(db);
+    await createMigrator({ manifest: manifest([first, repeat]), dialect }).startup(db, apply);
     const changed = createMigrator({
       manifest: manifest([
         first,
@@ -196,12 +182,12 @@ test("changed repeatables append history after pending versions and unchanged re
       (await changed.startup(db, { mode: "report" })).differences.map((difference) => difference.kind),
       ["pending", "repeatable-changed"],
     );
-    const applied = await changed.up(db);
+    const applied = await changed.startup(db, apply);
     assert.deepEqual(
       applied.history.map((row) => row.version),
       ["1", null, "2", null],
     );
-    await changed.up(db);
+    await changed.startup(db, apply);
     assert.equal((await db.one(sql.rows<{ count: string }>`SELECT COUNT(*) AS count FROM counts`)).count, "3");
   } finally {
     native.close();
@@ -218,7 +204,7 @@ test("transactional failure rolls back migration DDL and its claim", async () =>
     onEvent: (event) => events.push(event),
   });
   try {
-    await assert.rejects(migrator.up(db), /no such table/);
+    await assert.rejects(migrator.startup(db, apply), /no such table/);
     const report = await migrator.startup(db, { mode: "report" });
     assert.equal(report.status, "pending");
     assert.equal(report.history.length, 0);
@@ -240,7 +226,7 @@ test("transaction=off preserves failed attempts, repair removes only incomplete 
   );
   const migrator = createMigrator({ manifest: manifest([first, failed]), dialect, busyTimeoutMs: 0 });
   try {
-    await assert.rejects(migrator.up(db), /no such table/);
+    await assert.rejects(migrator.startup(db, apply), /no such table/);
     const dirty = await migrator.startup(db, { mode: "report" });
     assert.equal(dirty.status, "incomplete");
     assert.deepEqual(
@@ -248,7 +234,7 @@ test("transaction=off preserves failed attempts, repair removes only incomplete 
       ["success", "failed"],
     );
     assert.equal(native.prepare("SELECT name FROM sqlite_master WHERE name = 'partial'").all().length, 1);
-    await assert.rejects(migrator.up(db), { code: "BRAID_MIGRATE_DIRTY" });
+    await assert.rejects(migrator.startup(db, apply), { code: "BRAID_MIGRATE_DIRTY" });
     const repaired = await migrator.repair(db);
     assert.equal(repaired.status, "pending");
     assert.deepEqual(
@@ -256,7 +242,7 @@ test("transaction=off preserves failed attempts, repair removes only incomplete 
       ["1"],
     );
     native.exec("UPDATE \"_sqlbraid_migrations\" SET status = 'running'");
-    await assert.rejects(migrator.up(db), { code: "BRAID_MIGRATE_BUSY" });
+    await assert.rejects(migrator.startup(db, apply), { code: "BRAID_MIGRATE_BUSY" });
     assert.equal((await migrator.repair(db)).history.length, 0);
   } finally {
     native.close();
@@ -278,7 +264,7 @@ test("baseline skips existing versions without executing their bodies and preser
     const baseline = await migrator.baseline(db, "001");
     assert.equal(baseline.status, "pending");
     assert.equal(baseline.history[0]?.kind, "baseline");
-    assert.equal((await migrator.up(db)).status, "current");
+    assert.equal((await migrator.startup(db, apply)).status, "current");
     assert.deepEqual(await db.all(sql.rows`SELECT id FROM existing`), [{ id: "2" }]);
     await assert.rejects(migrator.baseline(db, "2"), { code: "BRAID_MIGRATE_ORDER" });
   } finally {
@@ -306,7 +292,7 @@ test("pooled verify acquires and releases exactly one lease and never opens a se
   });
   const migrator = createMigrator({ manifest: manifest([entry("1", "CREATE TABLE users (id INTEGER)")]), dialect });
   try {
-    await migrator.up(direct);
+    await migrator.startup(direct, apply);
     assert.equal((await migrator.startup(pooled)).status, "current");
     assert.equal(acquisitions, 1);
     assert.equal(releases, 1);
@@ -329,7 +315,7 @@ test("once shares in-flight checks, retries rejected checks, and retains success
     },
   };
   try {
-    await migrator.up(db);
+    await migrator.startup(db, apply);
     const first = migrator.once(intermittent, { retryIntervalMs: 0 });
     assert.equal(migrator.once(intermittent, { retryIntervalMs: 0 }), first);
     await assert.rejects(first, /temporary network/);
@@ -386,17 +372,19 @@ test("concurrent native SQLite claims execute each migration once, with transact
       };
     };
     let runs = 0;
-    const body = defineMigration(async (scoped) => {
-      runs += 1;
-      await scoped.execute(sql.command`CREATE TABLE once_only (id INTEGER)`);
-      await scoped.execute(sql.command`INSERT INTO once_only VALUES (1)`);
-    });
-    const options = { manifest: manifest([entry("1", body)]), dialect, busyTimeoutMs: 2000 };
+    const options = {
+      manifest: manifest([entry("1", "CREATE TABLE once_only (id INTEGER); INSERT INTO once_only VALUES (1)")]),
+      dialect,
+      busyTimeoutMs: 2000,
+      onEvent: (event: MigrationEvent) => {
+        if (event.type === "migration.start") runs += 1;
+      },
+    };
     try {
-      await createMigrator({ manifest: manifest([]), dialect }).up(first);
+      await createMigrator({ manifest: manifest([]), dialect }).startup(first, apply);
       const reports = await Promise.all([
-        createMigrator(options).up(synchronized(first)),
-        createMigrator(options).up(synchronized(second)),
+        createMigrator(options).startup(synchronized(first), apply),
+        createMigrator(options).startup(synchronized(second), apply),
       ]);
       assert.deepEqual(
         reports.map((report) => report.status),
@@ -404,6 +392,7 @@ test("concurrent native SQLite claims execute each migration once, with transact
       );
       assert.equal(runs, 1);
       assert.equal(reports[0]?.history.length, 1);
+      assert.equal(firstNative.prepare("SELECT COUNT(*) AS count FROM once_only").get()?.count, 1);
     } finally {
       firstNative.close();
       secondNative.close();
@@ -430,13 +419,12 @@ test("optional drift stores only own successful apply hash and ordinary checks n
     },
   });
   try {
-    const applied = await migrator.up(db);
+    const applied = await migrator.startup(db, apply);
     assert.equal(applied.history[0]?.schema_hash, hash);
     assert.equal(inspections, 1);
-    await migrator.up(db);
+    await migrator.startup(db, apply);
     await migrator.startup(db);
     assert.equal(inspections, 1);
-    assert.equal(await migrator.snapshot(db), snapshot);
     hash = "b".repeat(64);
     await assert.rejects(migrator.startup(db, { schema: "hash" }), (error) => {
       assert.ok(error instanceof MigrationStartupError);
@@ -493,10 +481,10 @@ test("acceptSchema explicitly refreshes a stale stored schema hash on the latest
   const migrator = createMigrator({ manifest: manifest(entries), dialect, drift });
   try {
     await assert.rejects(migrator.acceptSchema(db), { code: "BRAID_MIGRATE_UNINITIALIZED" });
-    await createMigrator({ manifest: manifest(entries.slice(0, 1)), dialect, drift }).up(db);
+    await createMigrator({ manifest: manifest(entries.slice(0, 1)), dialect, drift }).startup(db, apply);
     hash = "b".repeat(64);
     // An apply without a drift adapter leaves the old hash in place.
-    await createMigrator({ manifest: manifest(entries), dialect }).up(db);
+    await createMigrator({ manifest: manifest(entries), dialect }).startup(db, apply);
     await assert.rejects(migrator.startup(db, { schema: "hash" }), { code: "BRAID_MIGRATE_SCHEMA_DRIFT" });
     const accepted = await migrator.acceptSchema(db);
     assert.equal(accepted.status, "current");
@@ -520,7 +508,7 @@ test("acceptSchema rejects history without a successful migration", async () => 
     drift: { dialect: "sqlite", inspect: async () => ({ hash: "a".repeat(64), snapshot: {} }) },
   });
   try {
-    await assert.rejects(migrator.up(db));
+    await assert.rejects(migrator.startup(db, apply));
     await assert.rejects(migrator.acceptSchema(db), { code: "BRAID_MIGRATE_ORDER" });
   } finally {
     native.close();
@@ -534,18 +522,21 @@ test("apply with schema hash rejects existing drift before it runs pending migra
   const drift = { dialect: "sqlite", inspect: async () => ({ hash, snapshot: {} }) };
   const first = entry("1", "CREATE TABLE users (id INTEGER)");
   const reports: string[] = [];
+  const onEvent = (event: MigrationEvent): void => {
+    if (event.type === "startup.check") reports.push(event.report.status);
+  };
   try {
-    await createMigrator({ manifest: manifest([first]), dialect, drift }).up(db);
+    await createMigrator({ manifest: manifest([first]), dialect, drift }).startup(db, apply);
     hash = "b".repeat(64);
     const migrator = createMigrator({
       manifest: manifest([first, entry("2", "CREATE TABLE posts (id INTEGER)")]),
       dialect,
       drift,
+      onEvent,
     });
-    await assert.rejects(
-      migrator.startup(db, { mode: "apply", schema: "hash", onReport: (report) => reports.push(report.status) }),
-      { code: "BRAID_MIGRATE_SCHEMA_DRIFT" },
-    );
+    await assert.rejects(migrator.startup(db, { mode: "apply", schema: "hash" }), {
+      code: "BRAID_MIGRATE_SCHEMA_DRIFT",
+    });
     assert.deepEqual(reports, ["mismatch"]);
     assert.equal(native.prepare("SELECT name FROM sqlite_master WHERE name = 'posts'").get(), undefined);
     assert.equal((await migrator.startup(db, { mode: "report" })).status, "pending");
@@ -562,7 +553,7 @@ test("split=none rejects several SQLite statements instead of running only the f
     dialect,
   });
   try {
-    await assert.rejects(migrator.up(db), { code: "BRAID_MIGRATE_SOURCE" });
+    await assert.rejects(migrator.startup(db, apply), { code: "BRAID_MIGRATE_SOURCE" });
     assert.equal(native.prepare("SELECT name FROM sqlite_master WHERE name IN ('a', 'b')").get(), undefined);
     assert.equal((await migrator.startup(db, { mode: "report" })).history.length, 0);
   } finally {
@@ -570,49 +561,36 @@ test("split=none rejects several SQLite statements instead of running only the f
   }
 });
 
-const noop = async (): Promise<void> => {};
-
-test("defineMigration returns one frozen shape and validates its options", () => {
-  const run = noop;
-  const definition = defineMigration(run);
-  assert.deepEqual(definition, { run, transaction: true });
-  assert.ok(Object.isFrozen(definition));
-  assert.equal(defineMigration(run, { transaction: false }).transaction, false);
-  assert.throws(() => defineMigration(run, { transactions: false } as never), /Unknown migration options/u);
-  assert.throws(() => defineMigration(run, { transaction: "no" } as never), /boolean/u);
-  assert.throws(() => defineMigration(run, null as never), /object/u);
-});
-
-test("a nontransactional TypeScript migration commits its claim first and leaves a failed row", async () => {
+test("a transaction=off migration commits its claim before its SQL runs and leaves a failed row", async () => {
   const directory = await mkdtemp(join(tmpdir(), "sqlbraid-migrate-tx-off-"));
   const file = join(directory, "database.sqlite");
   const native = new DatabaseSync(file);
   const observer = new DatabaseSync(file);
   const db = createNodeSqliteDatabase(native);
   const seen: unknown[] = [];
-  const body = (transaction: boolean) =>
-    defineMigration(
-      async (scoped) => {
-        seen.push(
-          observer
-            .prepare("SELECT status FROM _sqlbraid_migrations")
-            .all()
-            .map((row) => ({ status: row.status })),
-        );
-        await scoped.execute(sql.command`CREATE TABLE kept (id INTEGER)`);
-        throw new Error("migration failure");
-      },
-      { transaction },
+  // The SQL calls probe(), so the second connection reads committed history while the migration runs.
+  native.function("probe", () => {
+    seen.push(
+      observer
+        .prepare("SELECT status FROM _sqlbraid_migrations")
+        .all()
+        .map((row) => ({ status: row.status })),
     );
+    return 0;
+  });
+  const body = "SELECT probe(); CREATE TABLE kept (id INTEGER); SELECT missing_function();";
   try {
     await assert.rejects(
-      createMigrator({ manifest: manifest([entry("1", body(true), "V1__on.ts")]), dialect }).up(db),
-      /migration failure/u,
+      createMigrator({ manifest: manifest([entry("1", body, "V1__on.sql")]), dialect }).startup(db, apply),
+      /missing_function/u,
     );
     assert.deepEqual(native.prepare("SELECT status FROM _sqlbraid_migrations").all(), []);
     assert.equal(native.prepare("SELECT name FROM sqlite_master WHERE name = 'kept'").get(), undefined);
-    const migrator = createMigrator({ manifest: manifest([entry("1", body(false), "V1__off.ts")]), dialect });
-    await assert.rejects(migrator.up(db), /migration failure/u);
+    const migrator = createMigrator({
+      manifest: manifest([entry("1", `-- @braid-migrate transaction=off\n${body}`, "V1__off.sql")]),
+      dialect,
+    });
+    await assert.rejects(migrator.startup(db, apply), /missing_function/u);
     assert.deepEqual(seen, [[], [{ status: "running" }]]);
     assert.deepEqual(
       native
@@ -622,7 +600,7 @@ test("a nontransactional TypeScript migration commits its claim first and leaves
       [{ status: "failed" }],
     );
     assert.ok(native.prepare("SELECT name FROM sqlite_master WHERE name = 'kept'").get());
-    await assert.rejects(migrator.up(db), { code: "BRAID_MIGRATE_DIRTY" });
+    await assert.rejects(migrator.startup(db, apply), { code: "BRAID_MIGRATE_DIRTY" });
   } finally {
     observer.close();
     native.close();
@@ -639,6 +617,10 @@ test("manifest and option validation rejects ambiguous identities and malformed 
       code: "BRAID_MIGRATE_SOURCE",
     });
     assert.throws(() => createMigrator({ manifest: manifest([{ ...entry("1", ""), checksum: "bad" }]), dialect }), {
+      code: "BRAID_MIGRATE_SOURCE",
+    });
+    const { sql: _sql, ...withoutSql } = entry("1", "");
+    assert.throws(() => createMigrator({ manifest: manifest([withoutSql as ManifestEntry]), dialect }), {
       code: "BRAID_MIGRATE_SOURCE",
     });
     assert.throws(() => createMigrator({ manifest: valid, dialect, busyTimeoutMs: -1 }), TypeError);
@@ -661,11 +643,11 @@ test("custom history identifiers are quoted and scopes remain bound, isolated va
   const options = { manifest: manifest([entry("1", "SELECT 1")]), dialect, table, schema: "main" };
   const migrator = createMigrator({ ...options, scope: "scope'; DELETE FROM keep;--" });
   try {
-    assert.equal((await migrator.up(db)).status, "current");
+    assert.equal((await migrator.startup(db, apply)).status, "current");
     assert.equal((await migrator.startup(db)).history.length, 1);
     const other = createMigrator({ ...options, scope: "other" });
     assert.equal((await other.startup(db, { mode: "report" })).status, "pending");
-    assert.equal((await other.up(db)).history.length, 1);
+    assert.equal((await other.startup(db, apply)).history.length, 1);
     assert.equal(native.prepare("SELECT name FROM sqlite_master WHERE name = 'keep'").all().length, 1);
   } finally {
     native.close();
@@ -675,22 +657,21 @@ test("custom history identifiers are quoted and scopes remain bound, isolated va
 test("migration observer failure preserves the original migration error", async () => {
   const native = new DatabaseSync(":memory:");
   const db = createNodeSqliteDatabase(native);
-  const migrationError = new Error("migration body failed");
   const observerError = new Error("migration error observer failed");
+  let migrationError: unknown;
   const migrator = createMigrator({
-    manifest: manifest([
-      entry("1", async () => {
-        throw migrationError;
-      }),
-    ]),
+    manifest: manifest([entry("1", "SELECT missing_function()")]),
     dialect,
     onEvent(event) {
-      if (event.type === "migration.error") throw observerError;
+      if (event.type !== "migration.error") return;
+      migrationError = event.error;
+      throw observerError;
     },
   });
   try {
-    await assert.rejects(migrator.up(db), (error) => {
+    await assert.rejects(migrator.startup(db, apply), (error) => {
       assert.ok(error instanceof AggregateError);
+      assert.match(String(migrationError), /missing_function/u);
       assert.deepEqual(error.errors, [migrationError, observerError]);
       assert.equal(error.cause, migrationError);
       return true;
@@ -713,7 +694,7 @@ test("a migration's own unique violation is not mistaken for a lost history clai
     busyTimeoutMs: 0,
   });
   try {
-    await assert.rejects(migrator.up(db), /UNIQUE constraint failed/);
+    await assert.rejects(migrator.startup(db, apply), /UNIQUE constraint failed/);
     const report = await migrator.startup(db, { mode: "report" });
     assert.deepEqual(
       report.history.map((row) => row.version),

@@ -72,7 +72,7 @@ test("migration CLI new, JSON status, up, manifest, and snapshot use one typed c
     // Generated output is selected at runtime and intentionally loaded as a consumer would load it.
     const { default: manifest } = await import(pathToFileURL(generated).href);
     assert.equal(manifest.format, "sqlbraid-migrations");
-    assert.match(await manifest.dialects.sqlite.versioned[0].load(), /CREATE TABLE items/u);
+    assert.match(manifest.dialects.sqlite.versioned[0].sql, /CREATE TABLE items/u);
     const snapshotFile = (await f.run("snapshot")).stdout.trim();
     const snapshot = JSON.parse(await readFile(snapshotFile, "utf8"));
     assert.equal(snapshot.format, "sqlbraid-metadata");
@@ -213,33 +213,22 @@ test("migration new rejects unknown dialects and follows symbolic links", async 
   }
 }, 30_000);
 
-test("packed migration loader imports TypeScript through the runtime and names a missing TypeScript runtime", async () => {
-  const directory = await mkdtemp(resolve("tests/.migrate-ts-runtime-"));
+test("packed migration loader reads SQL files and rejects a script file with a migration name", async () => {
+  const directory = await mkdtemp(resolve("tests/.migrate-sql-only-"));
   try {
     await mkdir(join(directory, "migrations"));
     await writeFile(join(directory, "migrations/V1__create.sql"), "CREATE TABLE t (id INTEGER);");
-    await writeFile(
-      join(directory, "migrations/V2__seed.ts"),
-      "export default async (db: { values: number[] }): Promise<void> => { db.values.push(1); };",
-    );
     const script = `const { loadMigrations } = await import(${JSON.stringify(pathToFileURL(resolve("packages/migrate/dist/node.js")).href)});
-const manifest = await loadMigrations(${JSON.stringify(join(directory, "migrations"))}, { dialects: ["sqlite"] });
-const [sql, typescript] = manifest.dialects.sqlite.versioned;
-const result = { sql: await sql.load() };
-try { const values = []; await (await typescript.load())({ values }); result.typescript = values; } catch (error) { result.typescript = error.message; }
-console.log(JSON.stringify(result));`;
+try {
+  const manifest = await loadMigrations(${JSON.stringify(join(directory, "migrations"))}, { dialects: ["sqlite"] });
+  console.log(JSON.stringify({ sql: manifest.dialects.sqlite.versioned[0].sql }));
+} catch (error) { console.log(JSON.stringify({ error: error.message })); }`;
     await writeFile(join(directory, "probe.mjs"), script);
-    const stripped = JSON.parse((await exec(process.execPath, [join(directory, "probe.mjs")])).stdout);
-    assert.match(stripped.sql, /CREATE TABLE t/u);
-    assert.deepEqual(stripped.typescript, [1]);
-    const plain = JSON.parse(
-      (await exec(process.execPath, ["--no-experimental-strip-types", join(directory, "probe.mjs")])).stdout,
-    );
-    assert.match(plain.sql, /CREATE TABLE t/u);
-    assert.match(
-      plain.typescript,
-      /BRAID_MIGRATE_SOURCE: Cannot import TypeScript migration V2__seed\.ts: run with a runtime or loader that handles TypeScript, or use a generated manifest/u,
-    );
+    const loaded = JSON.parse((await exec(process.execPath, [join(directory, "probe.mjs")])).stdout);
+    assert.match(loaded.sql, /CREATE TABLE t/u);
+    await writeFile(join(directory, "migrations/V2__seed.ts"), "export default async () => {};");
+    const rejected = JSON.parse((await exec(process.execPath, [join(directory, "probe.mjs")])).stdout);
+    assert.match(rejected.error, /BRAID_MIGRATE_SOURCE: Migration V2__seed\.ts is not a \.sql file/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

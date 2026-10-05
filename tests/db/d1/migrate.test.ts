@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { build as viteBuild } from "vite";
 import { Miniflare } from "miniflare";
-import sqlbraid from "@sqlbraid/vite";
 import { generateManifestModule } from "@sqlbraid/migrate/node";
 import { docsClaim } from "../docs-claims.js";
 
@@ -56,7 +55,7 @@ docsClaim(
       assert.deepEqual(evidence.failedRows, [{ status: "failed" }]);
       assert.deepEqual(evidence.partial, []);
       assert.equal(evidence.dirty, "BRAID_MIGRATE_DIRTY");
-      assert.ok(["BRAID_MIGRATE_BUSY", "BRAID_MIGRATE_DIRTY"].includes(evidence.contender), evidence.contender);
+      assert.equal(evidence.contender, "current");
       assert.equal(evidence.claimStatus, "current");
       assert.equal(evidence.runs, 1);
     } finally {
@@ -68,7 +67,7 @@ docsClaim(
 
 docsClaim(
   "packages/migrate/README.md",
-  "A generated manifest with SQL and guarded TypeScript migrations bundles and applies on D1",
+  "A generated SQL manifest bundles into a Worker and applies on D1",
   async () => {
     const project = await mkdtemp(resolve(import.meta.dirname, "../../.d1-manifest-"));
     const outputDirectory = join(project, "out");
@@ -76,23 +75,11 @@ docsClaim(
     try {
       await mkdir(join(project, "migrations"));
       await writeFile(join(project, "migrations/V1__create.sql"), "CREATE TABLE items (value TEXT);\n");
-      await writeFile(
-        join(project, "migrations/V2__seed.ts"),
-        `import { sql } from "@sqlbraid/sqlite";
-import { defineMigration } from "@sqlbraid/migrate";
-import type { Database } from "@sqlbraid/core";
-const label: string = "typed";
-export default defineMigration(async (db: Database) => {
-  const extra = false;
-  await db.execute(sql.command\`INSERT INTO items (value) VALUES (\${label}) /*@braid if \${extra}*/ , (\${"never"}) /*@braid end*/\`);
-});
-`,
-      );
-      const outfile = join(project, "src/manifest.mjs");
+      await writeFile(join(project, "migrations/V2__seed.sql"), "INSERT INTO items (value) VALUES ('seeded');\n");
       await mkdir(join(project, "src"));
       await writeFile(
-        outfile,
-        await generateManifestModule(join(project, "migrations"), { dialects: ["sqlite"], outfile }),
+        join(project, "src/manifest.mjs"),
+        await generateManifestModule(join(project, "migrations"), { dialects: ["sqlite"] }),
       );
       await writeFile(
         join(project, "src/worker.mjs"),
@@ -103,7 +90,7 @@ import manifest from "./manifest.mjs";
 export default {
   async fetch(_request, env) {
     const db = createD1Database(env.DB);
-    const status = (await createMigrator({ dialect, manifest }).up(db)).status;
+    const status = (await createMigrator({ dialect, manifest }).startup(db, { mode: "apply" })).status;
     return Response.json({ status, rows: await db.all(sql.rows\`SELECT value FROM items\`) });
   },
 };
@@ -112,7 +99,6 @@ export default {
       await viteBuild({
         configFile: false,
         root: project,
-        plugins: [sqlbraid()],
         resolve: { conditions: ["workerd", "browser", "import"] },
         build: {
           lib: { entry: join(project, "src/worker.mjs"), formats: ["es"], fileName: () => "worker.mjs" },
@@ -137,7 +123,7 @@ export default {
       const response = await worker.dispatchFetch("http://sqlbraid.test/migrate");
       const body = await response.text();
       assert.equal(response.status, 200, body);
-      assert.deepEqual(JSON.parse(body), { status: "current", rows: [{ value: "typed" }] });
+      assert.deepEqual(JSON.parse(body), { status: "current", rows: [{ value: "seeded" }] });
     } finally {
       if (worker !== undefined) await worker.dispose();
       await rm(project, { recursive: true, force: true });
