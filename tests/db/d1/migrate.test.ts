@@ -58,6 +58,7 @@ docsClaim(
       assert.equal(evidence.contender, "current");
       assert.equal(evidence.claimStatus, "current");
       assert.equal(evidence.runs, 1);
+      assert.deepEqual(evidence.claimRows, [{ installed_rank: "1", status: "success" }]);
     } finally {
       if (worker !== undefined) await worker.dispose();
       await rm(outputDirectory, { recursive: true, force: true });

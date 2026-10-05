@@ -39,18 +39,19 @@ INSERT INTO data (value) VALUES ('applied');`) });
     const failedRows = await db.all(sql.rows`SELECT status FROM failed_history`);
     const partial = await db.all(sql.rows`SELECT value FROM partial`);
     const dirty = await code(() => failure.startup(db, { mode: "verify" }));
-    // Both runners read empty history before either claims, so both compete for the same history rank.
-    const { promise: bothRead, resolve: release } = Promise.withResolvers();
-    let readers = 0;
-    const synchronized = (database) => {
+    // Both runners read empty history, then compete for the same history rank. The order is fixed:
+    // first reads, second reads, first applies, then second claims the taken rank and rereads.
+    // Physical D1 operations never overlap, because one Worker cannot run them concurrently.
+    const { promise: firstRead, resolve: firstHasRead } = Promise.withResolvers();
+    const { promise: secondRead, resolve: secondHasRead } = Promise.withResolvers();
+    const { promise: firstDone, resolve: firstFinished } = Promise.withResolvers();
+    const pauseAfterFirstRead = (database, pause) => {
       let first = true;
       return { ...database, async all(query, options) {
         const rows = await database.all(query, options);
         if (first) {
           first = false;
-          readers += 1;
-          if (readers === 2) release();
-          await bothRead;
+          await pause();
         }
         return rows;
       } };
@@ -59,12 +60,18 @@ INSERT INTO data (value) VALUES ('applied');`) });
     const options = { dialect, table: "claim_history",
       manifest: manifest("CREATE TABLE claimed (value TEXT); INSERT INTO claimed (value) VALUES ('once');"),
       onEvent(event) { if (event.type === "migration.start") runs += 1; } };
-    const [claimStatus, contender] = await Promise.all([
-      createMigrator(options).startup(synchronized(db), { mode: "apply" }).then((report) => report.status),
-      createMigrator(options).startup(synchronized(createD1Database(env.DB)), { mode: "apply" })
-        .then((report) => report.status, (error) => error.code ?? String(error)),
-    ]);
+    const applying = createMigrator(options)
+      .startup(pauseAfterFirstRead(db, () => { firstHasRead(); return secondRead; }), { mode: "apply" })
+      .finally(firstFinished);
+    await firstRead;
+    const contending = createMigrator(options)
+      .startup(pauseAfterFirstRead(createD1Database(env.DB), () => { secondHasRead(); return firstDone; }),
+        { mode: "apply" })
+      .then((report) => report.status, (error) => error.code ?? String(error));
+    const claimStatus = (await applying).status;
+    const contender = await contending;
+    const claimRows = await db.all(sql.rows`SELECT installed_rank, status FROM claim_history`);
     return Response.json({ initial, applied, verified, verifyQueries, cached, cachedQueries, rows,
-      failed, failedRows, partial, dirty, contender, claimStatus, runs });
+      failed, failedRows, partial, dirty, contender, claimStatus, runs, claimRows });
   },
 };
