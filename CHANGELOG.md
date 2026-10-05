@@ -6,6 +6,15 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 [release notes](docs/SQLBraid_1.0.0_release_notes.md), and
 [versioned support records](support/targets/).
 
+## Unreleased
+
+### Release tooling
+
+- Reserve new `vX.Y.Z` tags for the `sqlbraid` facade. Release scoped packages
+  separately with `<package>-vX.Y.Z` tags.
+- Run staging tools from `main` against the original certified artifacts.
+  Keep existing coordinated release records and their recovery path unchanged.
+
 ## 1.0.2
 
 The `v1.0.1` tag was not published to npm. 1.0.2 contains its internal

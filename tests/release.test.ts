@@ -10,7 +10,6 @@ import { promisify } from "node:util";
 import { afterEach, test, vi } from "vitest";
 import {
   assertManifestOrder,
-  assertMutationAuthorization,
   assertPublicationCredentials,
   assertTaggedSha,
   createReleaseEvidence,
@@ -18,6 +17,7 @@ import {
   verifyPublished,
   parseSemver,
   readReleaseManifest,
+  releaseCandidateTag,
   setReleaseCommand,
   setReleasePackage,
   setReleaseVersion,
@@ -30,7 +30,7 @@ const directories: string[] = [];
 const uuid = (index: number) => `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`;
 afterEach(async () => {
   vi.unstubAllEnvs();
-  setReleasePackage("*");
+  setReleasePackage("sqlbraid");
   setReleaseVersion("0.1.0-rc.0");
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
@@ -121,7 +121,49 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"], relea
     }
     throw new Error(`Unexpected command: ${args.join(" ")}`);
   });
-  const run = (dryRun = false) => stageCandidates(manifest, { directory, dryRun });
+  // Coordinated fixtures model archived evidence, never a fresh multi-package release.
+  const priorEvidence: StagedPublication | undefined =
+    releaseNames.length > 1
+      ? {
+          format: "sqlbraid-staged-publication",
+          mode: "fresh",
+          version,
+          commit: manifest.commit,
+          runId: manifest.runId,
+          runAttempt: manifest.runAttempt,
+          manifestSha256: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
+          candidateIdentitySha256: createHash("sha256")
+            .update(
+              JSON.stringify({
+                version,
+                releasePackages: releaseNames,
+                commit: manifest.commit,
+                packages: manifest.packages,
+              }),
+            )
+            .digest("hex"),
+          latestBefore: Object.fromEntries(tags),
+          complete: false,
+          packages: manifest.packages
+            .filter(({ name }) => releaseNames.includes(name))
+            .map((entry) => ({
+              name: entry.name,
+              version: entry.version,
+              candidateSha256: entry.sha256,
+              candidateIntegrity: entry.integrity,
+              tag: version.includes("-") ? "next" : "latest",
+              state: "absent",
+            })),
+          approvalCommands: [],
+        }
+      : undefined;
+  const run = (dryRun = false) =>
+    stageCandidates(manifest, {
+      directory,
+      dryRun,
+      priorEvidence,
+      priorRunId: priorEvidence ? "123" : undefined,
+    });
   const evidence = async (): Promise<StagedPublication> =>
     JSON.parse(await readFile(join(directory, "staged-publication.json"), "utf8"));
   const uploads = () =>
@@ -565,7 +607,7 @@ test("CLI rejects rejected-stage confirmation outside explicit recovery before a
   ]) {
     await assert.rejects(
       execFileAsync(process.execPath, ["scripts/release.mjs", ...args, "--rejected-stages-confirmed"]),
-      /Rejected-stage confirmation requires/u,
+      /Unknown release script mode|require the main-based recovery workflow/u,
     );
   }
 });
@@ -633,51 +675,53 @@ test("offline verification rejects mixed versions, duplicate identities and malf
   assert.equal(f.calls.length, queries);
 });
 
-test("stage authorization requires explicit dispatch and exact version tag, rejecting retired modes", () => {
-  const sha = "a".repeat(40);
-  const authorized = {
-    GITHUB_ACTIONS: "true",
-    GITHUB_EVENT_NAME: "workflow_dispatch",
-    SQLBRAID_RELEASE_MODE: "stage",
-    GITHUB_REF: "refs/tags/v0.1.0-rc.0",
-    GITHUB_SHA: sha,
-    GITHUB_RUN_ID: "123",
-    GITHUB_RUN_ATTEMPT: "1",
-  };
-  assertMutationAuthorization("stage", authorized);
-  for (const override of [
-    { GITHUB_EVENT_NAME: "push" },
-    { GITHUB_EVENT_NAME: "pull_request" },
-    { GITHUB_ACTIONS: "false" },
-    { SQLBRAID_RELEASE_MODE: "certify" },
-    { SQLBRAID_RELEASE_MODE: "pack-only" },
-    { GITHUB_REF: "refs/heads/main" },
-    { GITHUB_REF: sha },
-    { GITHUB_REF: `refs/heads/${sha}` },
-    { GITHUB_REF: "refs/tags/v0.1.0-rc.1" },
-    { GITHUB_REF: "refs/tags/v0.1.0" },
-    { GITHUB_RUN_ID: "" },
-    { GITHUB_RUN_ATTEMPT: "" },
-    { GITHUB_SHA: "unknown" },
-  ])
-    assert.throws(() => assertMutationAuthorization("stage", { ...authorized, ...override }));
-  for (const mode of ["publish", "bootstrap-rc0", "certify"])
-    assert.throws(() => assertMutationAuthorization(mode, authorized));
+test("canonical candidate tags select facade or a single scoped package and reject fresh-all", () => {
+  assert.equal(releaseCandidateTag("sqlbraid", "1.2.3"), "v1.2.3");
+  assert.equal(releaseCandidateTag("@sqlbraid/postgres", "2.0.0"), "postgres-v2.0.0");
+  assert.equal(releaseCandidateTag("core", "3.0.0-rc.1"), "core-v3.0.0-rc.1");
+  for (const selector of ["*", "all"]) {
+    assert.throws(() => releaseCandidateTag(selector, "1.2.3"), /exactly one package/);
+    assert.throws(() => setReleasePackage(selector), /exactly one package/);
+  }
 });
 
-test("package-specific tag authorization uses the package slug", () => {
-  const sha = "a".repeat(40);
-  setReleasePackage("postgres");
-  setReleaseVersion("1.2.3");
-  assertMutationAuthorization("stage", {
-    GITHUB_ACTIONS: "true",
-    GITHUB_EVENT_NAME: "workflow_dispatch",
-    SQLBRAID_RELEASE_MODE: "stage",
-    GITHUB_REF: "refs/tags/postgres-v1.2.3",
-    GITHUB_SHA: sha,
-    GITHUB_RUN_ID: "123",
-    GITHUB_RUN_ATTEMPT: "1",
-  });
+test("local release defaults use the facade manifest and canonical v tag", async () => {
+  const facade = JSON.parse(await readFile("packages/sqlbraid/package.json", "utf8"));
+  const env = { ...process.env };
+  delete env.SQLBRAID_RELEASE_PACKAGE;
+  delete env.SQLBRAID_RELEASE_VERSION;
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      "import { releaseCandidateTag } from './scripts/release.mjs'; console.log(releaseCandidateTag());",
+    ],
+    { env },
+  );
+  assert.equal(stdout.trim(), `v${facade.version}`);
+});
+
+test("fresh coordinated artifacts cannot reach npm even when every version matches", async () => {
+  const f = await fixture("1.0.2", ["@sqlbraid/core", "sqlbraid"]);
+  await assert.rejects(stageCandidates(f.manifest, { directory: f.directory }), /exactly one package/);
+  assert.deepEqual(f.calls, []);
+});
+
+test("facade staging at mixed workspace versions uploads only sqlbraid", async () => {
+  const f = await fixture("2.0.0", ["@sqlbraid/core", "sqlbraid"], ["sqlbraid"]);
+  const manifest = {
+    ...f.manifest,
+    packages: f.manifest.packages.map((entry) => (entry.name === "sqlbraid" ? entry : { ...entry, version: "1.7.0" })),
+  };
+  f.publicIntegrity.set("@sqlbraid/core", manifest.packages[0].integrity);
+  const result = await stageCandidates(manifest, { directory: f.directory });
+  assert.deepEqual(
+    result?.packages.map(({ name }) => name),
+    ["sqlbraid"],
+  );
+  assert.equal(f.uploads().length, 1);
+  assert.ok(f.calls.some((args) => args[1] === "@sqlbraid/core@1.7.0"));
 });
 
 test("normal staging cannot fall back to static credentials or a supplied OIDC token", () => {

@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { assertReleaseWorkflows } from "./assert-release-workflows.mjs";
+import { assertNoPriorStageAttempt, assertReleaseWorkflows } from "./assert-release-workflows.mjs";
 import { formatReleaseError } from "./release-diagnostics.mjs";
 import {
   assertPriorStagingEvidence,
@@ -12,7 +12,6 @@ import {
   readReleaseManifest,
   releaseCandidateTag,
   setReleaseCommand,
-  setReleasePackage,
   setReleaseVersion,
   stageCandidates,
 } from "./release.mjs";
@@ -34,14 +33,15 @@ export async function recoverRelease({
   command = defaultCommand,
 }) {
   if (!["preflight", "stage"].includes(mode)) throw new Error("Recovery requires preflight or stage mode.");
+  const recovering = env.SQLBRAID_RELEASE_MODE === "recover";
   if (
     env.GITHUB_ACTIONS !== "true" ||
     env.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
     env.GITHUB_REF !== "refs/heads/main" ||
-    env.SQLBRAID_RELEASE_MODE !== "recover"
+    !["stage", "recover"].includes(env.SQLBRAID_RELEASE_MODE)
   )
     throw new Error(
-      "Recovery is allowed only from GitHub Actions workflow_dispatch on refs/heads/main with release_mode=recover.",
+      "Staging is allowed only from GitHub Actions workflow_dispatch on refs/heads/main with release_mode=stage or recover.",
     );
   if (
     !shaPattern.test(env.GITHUB_SHA ?? "") ||
@@ -55,14 +55,17 @@ export async function recoverRelease({
     throw new Error(
       "Recovery requires exact tool SHA, run ID, attempt, repository, token, and a different numeric prior run ID.",
     );
-  if (env.SQLBRAID_REJECTED_STAGES_CONFIRMED !== "true")
+  if (recovering && env.SQLBRAID_REJECTED_STAGES_CONFIRMED !== "true")
     throw new Error("Recovery requires explicit rejected-stage confirmation.");
+  if (!recovering && (priorStagedPublication || env.SQLBRAID_REJECTED_STAGES_CONFIRMED === "true"))
+    throw new Error("Fresh staging must not include prior staged evidence or rejected-stage confirmation.");
   const tag = env.SQLBRAID_RECOVERY_TAG;
   const tagMatch = /^(?:([a-z0-9][a-z0-9._-]*)-)?v(.+)$/u.exec(tag ?? "");
-  if (!tagMatch) throw new Error("Recovery requires a versioned candidate tag.");
+  if (!tagMatch || tagMatch[1] === "sqlbraid")
+    throw new Error("Staging requires a canonical versioned candidate tag; use vX.Y.Z for sqlbraid.");
   parseSemver(tagMatch[2]);
-  if (!artifactDir || !priorStagedPublication)
-    throw new Error("Recovery requires --artifact-dir and --prior-staged-publication.");
+  if (!artifactDir || (recovering && !priorStagedPublication))
+    throw new Error("Staging requires --artifact-dir; recovery also requires --prior-staged-publication.");
   if (mode === "stage") {
     assertPublicationCredentials("stage", env);
     if (env.SQLBRAID_STAGE_PREFLIGHT_VERIFIED !== "true")
@@ -79,8 +82,7 @@ export async function recoverRelease({
   const restored = await json(join(directory, "release-manifest.json"));
   parseSemver(restored.version);
   setReleaseVersion(restored.version);
-  setReleasePackage(tagMatch[1] ?? "*");
-  if (releaseCandidateTag(tagMatch[1] ?? "*", restored.version) !== tag)
+  if (releaseCandidateTag(tagMatch[1] ?? "sqlbraid", restored.version) !== tag)
     throw new Error("Recovery candidate tag does not match the restored manifest version.");
   if (command !== defaultCommand) setReleaseCommand(command);
   const manifest = await readReleaseManifest(directory, { priorCandidateRunId: env.SQLBRAID_RECOVERY_RUN_ID });
@@ -89,15 +91,19 @@ export async function recoverRelease({
   if (!positiveId(manifest.runId) || !positiveId(manifest.runAttempt))
     throw new Error("Recovery manifest requires original candidate run provenance.");
   if (
-    tagMatch[1] &&
+    (!recovering || tagMatch[1]) &&
     (manifest.releasePackages.length !== 1 ||
       releaseCandidateTag(manifest.releasePackages[0], manifest.version) !== tag)
   )
     throw new Error("Recovery candidate tag does not match the selected release package.");
-  const priorEvidence = await json(resolve(priorStagedPublication));
-  assertPriorStagingEvidence(manifest, priorEvidence, env.SQLBRAID_RECOVERY_RUN_ID);
-  if (!positiveId(priorEvidence.runId) || !positiveId(priorEvidence.runAttempt))
-    throw new Error("Recovery report requires an exact prior run and attempt.");
+  if (!recovering && manifest.runId !== env.SQLBRAID_RECOVERY_RUN_ID)
+    throw new Error("Fresh staging requires the original certified candidate producer run.");
+  const priorEvidence = recovering ? await json(resolve(priorStagedPublication)) : undefined;
+  if (priorEvidence) {
+    assertPriorStagingEvidence(manifest, priorEvidence, env.SQLBRAID_RECOVERY_RUN_ID);
+    if (!positiveId(priorEvidence.runId) || !positiveId(priorEvidence.runAttempt))
+      throw new Error("Recovery report requires an exact prior run and attempt.");
+  }
 
   const get = async (path) => {
     const response = await request(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/${path}`, {
@@ -153,17 +159,36 @@ export async function recoverRelease({
     throw new Error(
       "Recovery requires successful Final release certification for the original candidate run and attempt.",
     );
+  const candidateEnv = { ...env, GITHUB_SHA: candidateSha, GITHUB_REF: candidateRef };
+  const workflows = await assertReleaseWorkflows(candidateEnv, request);
+  const tool = {
+    repository: env.GITHUB_REPOSITORY,
+    sha: env.GITHUB_SHA,
+    ref: env.GITHUB_REF,
+    runId: env.GITHUB_RUN_ID,
+    runAttempt: env.GITHUB_RUN_ATTEMPT,
+  };
+  if (!recovering) {
+    await assertNoPriorStageAttempt(candidateEnv, request);
+    if (mode === "preflight") return;
+    return stageCandidates(manifest, {
+      directory,
+      tool,
+      currentRunId: env.GITHUB_RUN_ID,
+      currentRunAttempt: env.GITHUB_RUN_ATTEMPT,
+    });
+  }
 
   let priorSha = candidateSha;
   let priorRef = candidateRef;
   if (priorEvidence.recovery) {
-    const { tool, candidate, rejectedStagesConfirmed } = priorEvidence.recovery;
+    const { tool: priorTool, candidate, rejectedStagesConfirmed } = priorEvidence.recovery;
     if (
-      tool?.repository !== env.GITHUB_REPOSITORY ||
-      tool.ref !== "refs/heads/main" ||
-      !shaPattern.test(tool.sha ?? "") ||
-      tool.runId !== priorEvidence.runId ||
-      tool.runAttempt !== priorEvidence.runAttempt ||
+      priorTool?.repository !== env.GITHUB_REPOSITORY ||
+      priorTool.ref !== "refs/heads/main" ||
+      !shaPattern.test(priorTool.sha ?? "") ||
+      priorTool.runId !== priorEvidence.runId ||
+      priorTool.runAttempt !== priorEvidence.runAttempt ||
       rejectedStagesConfirmed !== true ||
       candidate?.sha !== candidateSha ||
       candidate.ref !== candidateRef ||
@@ -171,8 +196,22 @@ export async function recoverRelease({
       candidate.runAttempt !== manifest.runAttempt
     )
       throw new Error("Recovery prior report has mismatched tool or candidate provenance.");
-    priorSha = tool.sha;
-    priorRef = tool.ref;
+    priorSha = priorTool.sha;
+    priorRef = priorTool.ref;
+  } else if (priorEvidence.tool) {
+    const priorTool = priorEvidence.tool;
+    if (
+      priorTool.repository !== env.GITHUB_REPOSITORY ||
+      priorTool.ref !== "refs/heads/main" ||
+      !shaPattern.test(priorTool.sha ?? "") ||
+      priorTool.runId !== priorEvidence.runId ||
+      priorTool.runAttempt !== priorEvidence.runAttempt ||
+      priorEvidence.candidateRunId !== manifest.runId ||
+      priorEvidence.candidateRunAttempt !== manifest.runAttempt
+    )
+      throw new Error("Recovery prior report has mismatched staging tool provenance.");
+    priorSha = priorTool.sha;
+    priorRef = priorTool.ref;
   }
   const priorRun = await verifyRun(priorEvidence.runId, priorEvidence.runAttempt, priorSha, priorRef);
   if (priorRun.event !== "workflow_dispatch") throw new Error("Recovery requires a prior dispatched mutation attempt.");
@@ -201,19 +240,8 @@ export async function recoverRelease({
   )
     throw new Error("Recovery requires evidence of a previous npm mutation attempt.");
 
-  // Candidate gates use their own identity; never replace the main tool process environment.
-  const workflows = await assertReleaseWorkflows(
-    { ...env, GITHUB_SHA: candidateSha, GITHUB_REF: candidateRef },
-    request,
-  );
   const recovery = {
-    tool: {
-      repository: env.GITHUB_REPOSITORY,
-      sha: env.GITHUB_SHA,
-      ref: env.GITHUB_REF,
-      runId: env.GITHUB_RUN_ID,
-      runAttempt: env.GITHUB_RUN_ATTEMPT,
-    },
+    tool,
     candidate: { sha: candidateSha, ref: candidateRef, runId: manifest.runId, runAttempt: manifest.runAttempt },
     priorRunId: priorEvidence.runId,
     priorRunAttempt: priorEvidence.runAttempt,

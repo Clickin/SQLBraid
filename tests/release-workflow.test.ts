@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "vitest";
 import { parse } from "yaml";
 import { allPlan, planChanges } from "../scripts/ci-plan.mjs";
@@ -93,12 +95,13 @@ function graph(
   const github = { event_name: event, ref, ref_type: ref.startsWith("refs/tags/") ? "tag" : "branch" };
   const inputs = {
     release_mode: event === "workflow_dispatch" ? mode : undefined,
-    release_package: event === "workflow_dispatch" ? "all" : undefined,
+    release_package:
+      event === "workflow_dispatch" ? release.on.workflow_dispatch?.inputs?.release_package?.default : undefined,
     deploy,
   };
   const env = {
     SQLBRAID_RELEASE_MODE: event === "workflow_dispatch" ? mode : "certify",
-    SQLBRAID_RELEASE_PACKAGE: "*",
+    SQLBRAID_RELEASE_PACKAGE: release.env?.SQLBRAID_RELEASE_PACKAGE,
   };
   const pending = new Set(Object.keys(workflow.jobs));
   while (pending.size) {
@@ -117,7 +120,7 @@ function graph(
   return { results, stepRuns: (step: Step) => evaluate(step.if, github, inputs, results, env, true) };
 }
 
-const mutationJobs = ["release-stage", "release-recover", "release-draft"];
+const mutationJobs = ["release-recover", "release-draft"];
 
 test("dispatch defaults to certification and version tags trigger all three validation workflows", () => {
   assert.deepEqual(release.on.workflow_dispatch?.inputs?.release_mode.options, [
@@ -127,7 +130,6 @@ test("dispatch defaults to certification and version tags trigger all three vali
     "recover",
   ]);
   assert.equal(release.on.workflow_dispatch?.inputs?.release_mode.default, "certify");
-  assert.equal(release.on.workflow_dispatch?.inputs?.release_package?.default, "all");
   assert.equal(release.on.workflow_dispatch?.inputs?.release_package?.type, "string");
   assert.equal(release.on.workflow_dispatch?.inputs?.prior_run_id?.default, "");
   assert.equal(release.on.workflow_dispatch?.inputs?.prior_run_id?.type, "string");
@@ -162,20 +164,17 @@ test("main, PR, manual certification, and every version tag cannot reach a relea
   assert.equal(graph(release, "push", "certify", "refs/tags/v0.1.0").stepRuns(dryRun), true);
 });
 
-test("explicit staging reaches only the staging job and a successful stage authorizes the draft", () => {
-  const mode = "stage";
-  const { results } = graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0");
-  assert.equal(results["release-stage"].result, "success");
+test("main staging reuses certified bytes without rebuilding and a successful stage authorizes the draft", () => {
+  const { results } = graph(release, "workflow_dispatch", "stage");
+  assert.equal(results["release-recover"].result, "success");
   assert.equal(results["release-draft"].result, "success");
+  for (const [name, result] of Object.entries(results)) {
+    if (!mutationJobs.includes(name)) assert.equal(result.result, "skipped", `staging reached ${name}`);
+  }
   assert.equal(
-    graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0", "release-stage").results["release-draft"].result,
+    graph(release, "workflow_dispatch", "stage", "refs/heads/main", "release-recover").results["release-draft"].result,
     "skipped",
   );
-  for (const lane of dependencies(release.jobs["release-final"])) {
-    const failed = graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0", lane).results;
-    assert.equal(failed["release-stage"].result, "skipped", `staging escaped failed ${lane}`);
-    assert.equal(failed["release-draft"].result, "skipped");
-  }
 });
 
 test("recovery bypasses the build and certification DAG without authorizing a draft", () => {
@@ -196,6 +195,7 @@ test("recovery rejects unauthorized inputs before checking out tools or download
   const valid = {
     ...process.env,
     GITHUB_REF: "refs/heads/main",
+    SQLBRAID_RELEASE_MODE: "recover",
     SQLBRAID_RECOVERY_RUN_ID: "37109603570",
     SQLBRAID_RECOVERY_TAG: "v1.0.2",
     SQLBRAID_REJECTED_STAGES_CONFIRMED: "true",
@@ -223,6 +223,36 @@ test("recovery rejects unauthorized inputs before checking out tools or download
       encoding: "utf8",
     });
     assert.equal(result.status, 0, result.stderr);
+  }
+});
+
+test("fresh main staging requires a certified producer and no recovery confirmation", () => {
+  const authorization = release.jobs["release-recover"].steps[0];
+  assert.ok(authorization.run);
+  const valid = {
+    ...process.env,
+    GITHUB_REF: "refs/heads/main",
+    SQLBRAID_RELEASE_MODE: "stage",
+    INPUT_RELEASE_PACKAGE: "sqlbraid",
+    SQLBRAID_RECOVERY_RUN_ID: "12345",
+    SQLBRAID_RECOVERY_TAG: "v1.2.3",
+    SQLBRAID_REJECTED_STAGES_CONFIRMED: "false",
+  };
+  for (const [patch, status] of [
+    [{}, 0],
+    [{ SQLBRAID_RECOVERY_TAG: "postgres-v1.2.3" }, 0],
+    [{ GITHUB_REF: "refs/tags/v1.2.3" }, 1],
+    [{ SQLBRAID_RECOVERY_RUN_ID: "" }, 1],
+    [{ SQLBRAID_RECOVERY_TAG: "sqlbraid-v1.2.3" }, 1],
+    [{ SQLBRAID_REJECTED_STAGES_CONFIRMED: "true" }, 1],
+    [{ INPUT_RELEASE_PACKAGE: "all" }, 1],
+    [{ INPUT_RELEASE_PACKAGE: "*" }, 1],
+  ] as const) {
+    const result: SpawnSyncReturns<string> = spawnSync("bash", ["-e", "-c", authorization.run], {
+      env: { ...valid, ...patch },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, status, result.stdout + result.stderr);
   }
 });
 
@@ -265,9 +295,7 @@ test("recovery uses main tools and restores only original artifacts without repa
     );
     assert.equal(step.env?.GITHUB_TOKEN, "${{ github.token }}");
   }
-  const existingActions = new Set(release.jobs["release-stage"].steps.map((step) => step.uses).filter(Boolean));
   for (const step of recovery.steps) {
-    if (step.uses) assert.ok(existingActions.has(step.uses), `unrecognized action pin: ${step.uses}`);
     assert.equal(step.with?.["registry-url"], undefined);
     assert.doesNotMatch(step.run ?? "", /\b(?:build|pack|publish|approve|promote)\b|tar\s+-[a-z]*c|gh\s+release/u);
     assert.doesNotMatch(step.run ?? "", /(?:export\s+)?GITHUB_(?:SHA|REF(?:_NAME|_TYPE)?)=/u);
@@ -294,13 +322,13 @@ test("recovery uses main tools and restores only original artifacts without repa
   );
 });
 
-test("missing semantic evidence blocks certification and staging even when database jobs pass", () => {
-  for (const mode of ["certify", "stage"]) {
+test("missing semantic evidence blocks certification even when database jobs pass", () => {
+  for (const mode of ["certify", "pack-only"]) {
     const { results } = graph(release, "workflow_dispatch", mode, "refs/tags/v1.0.0", "release-semantic-contracts");
     assert.equal(results["release-db"].result, "success");
     assert.equal(results["release-common"].result, "success");
     assert.equal(results["release-final"].result, "skipped");
-    assert.equal(results["release-stage"].result, "skipped");
+    assert.equal(results["release-recover"].result, "skipped");
     assert.equal(results["release-draft"].result, "skipped");
   }
 });
@@ -402,16 +430,15 @@ test("runtime workflows execute every exact packed compatibility cell", () => {
 
 test("job capabilities isolate OIDC and release writes", () => {
   assert.deepEqual(release.permissions, { contents: "read" });
-  assert.deepEqual(release.jobs["release-stage"].permissions, {
+  assert.deepEqual(release.jobs["release-recover"].permissions, {
     contents: "read",
     actions: "read",
     "id-token": "write",
   });
-  assert.deepEqual(release.jobs["release-recover"].permissions, release.jobs["release-stage"].permissions);
-  assert.deepEqual(release.jobs["release-draft"].permissions, { contents: "write" });
+  assert.deepEqual(release.jobs["release-draft"].permissions, { contents: "write", actions: "read" });
   for (const [name, job] of Object.entries(release.jobs)) {
     const permissions: Record<string, string> = job.permissions ?? release.permissions;
-    if (!["release-stage", "release-recover"].includes(name)) assert.notEqual(permissions["id-token"], "write");
+    if (name !== "release-recover") assert.notEqual(permissions["id-token"], "write");
     if (name !== "release-draft") assert.notEqual(permissions.contents, "write");
     for (const env of [release.env, job.env, ...(job.steps ?? []).map((step) => step.env)]) {
       for (const [key, value] of Object.entries(env ?? {})) {
@@ -420,7 +447,7 @@ test("job capabilities isolate OIDC and release writes", () => {
       }
     }
   }
-  const stage = release.jobs["release-stage"];
+  const stage = release.jobs["release-recover"];
   assert.ok(
     stage.steps.every((step) => step.with?.["registry-url"] === undefined),
     "setup-node must not inject fallback token configuration",
@@ -437,13 +464,14 @@ test("job capabilities isolate OIDC and release writes", () => {
 });
 
 test("staging is serialized, reuses the validated candidate, and preserves partial evidence", () => {
-  const stage = release.jobs["release-stage"];
-  assert.deepEqual(stage.concurrency, { group: "npm-stage-${{ github.ref }}", "cancel-in-progress": false });
+  const stage = release.jobs["release-recover"];
+  assert.deepEqual(stage.concurrency, {
+    group: "npm-stage-refs/tags/${{ inputs.candidate_tag }}",
+    "cancel-in-progress": false,
+  });
   const download = stage.steps.find((step) => step.uses?.startsWith("actions/download-artifact@"));
   assert.equal(download?.with?.name, "release-candidate-validated");
   assert.ok(stage.steps.some((step) => step.run?.includes("release-candidate-validated.tar.gz")));
-  assert.ok(stage.steps.some((step) => step.run?.includes("--mode stage-preflight")));
-  assert.ok(stage.steps.some((step) => step.run?.includes("--mode stage")));
   assert.ok(stage.steps.some((step) => step.name === "Mutate npm staging with pnpm OIDC"));
   assert.ok(stage.steps.every((step) => !/\bpnpm\s+(?:run\s+)?(?:build|pack)\b/u.test(step.run ?? "")));
   const evidence = stage.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
@@ -453,78 +481,147 @@ test("staging is serialized, reuses the validated candidate, and preserves parti
 });
 
 test("staging has no approval or direct publication path and draft release remains pending", () => {
-  const stage = release.jobs["release-stage"];
+  const stage = release.jobs["release-recover"];
   const stageRun = stage.steps.map((step) => step.run ?? "").join("\n");
-  assert.match(stageRun, /--mode stage-preflight\b/u);
-  assert.match(stageRun, /--mode stage\b/u);
   assert.doesNotMatch(stageRun, /--mode (?:publish|bootstrap|publish-dry-run)\b/u);
   assert.doesNotMatch(stageRun, /\bnpm\s+publish\b/u);
   assert.ok(!stage.steps.some((step) => /(?:approve|promote)/iu.test(`${step.name ?? ""}\n${step.run ?? ""}`)));
   const draft = release.jobs["release-draft"];
   assert.match(draft.name ?? "", /draft.*approval pending/iu);
-  const create = draft.steps.find((step) => step.run?.includes("gh release create"))?.run ?? "";
-  assert.match(create, /--draft/u);
-  assert.match(create, /release-prerelease-flag/u);
-  assert.match(create, /args\+=\(--prerelease\)/u);
-  assert.match(create, /generate-notes/u);
-  assert.match(create, /notes-file docs\/SQLBraid_1\.0\.0_release_notes\.md/u);
+  const create = draft.steps.find((step) => step.run?.includes("gh release create"));
+  assert.ok(create?.run);
+  const directory = mkdtempSync(join(tmpdir(), "sqlbraid-release-draft-"));
+  try {
+    mkdirSync(join(directory, "staged-evidence"));
+    for (const version of ["1.2.3", "1.2.3-rc.1"]) {
+      writeFileSync(join(directory, "staged-evidence", "release-manifest.json"), JSON.stringify({ version }));
+      const tag = `postgres-v${version}`;
+      const result: SpawnSyncReturns<string> = spawnSync(
+        "bash",
+        ["-e", "-c", `gh() { printf '%s\\n' "$@"; }\n${create.run}`],
+        {
+          cwd: new URL("..", import.meta.url),
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            RUNNER_TEMP: directory,
+            SQLBRAID_RELEASE_PACKAGE: "sqlbraid",
+            SQLBRAID_CANDIDATE_TAG: tag,
+            GITHUB_REF_NAME: "main",
+            GITHUB_REPOSITORY: "test/sqlbraid",
+          },
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(result.stdout.trim().split("\n"), [
+        "release",
+        "create",
+        tag,
+        "--repo",
+        "test/sqlbraid",
+        "--draft",
+        "--title",
+        `SQLBraid ${tag}`,
+        "--generate-notes",
+        ...(version.includes("-") ? ["--prerelease"] : []),
+        join(directory, "staged-evidence", "release-manifest.json"),
+        join(directory, "staged-evidence", "staged-publication.json"),
+        join(directory, "sqlbraid-release-artifacts", "release-evidence.json"),
+      ]);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
   assert.equal(releasePrereleaseArg("0.1.0-rc.2"), "--prerelease");
   assert.equal(releasePrereleaseArg("0.1.0"), undefined);
   assert.match(draft.steps.find((step) => step.run?.includes("--mode durable-evidence"))?.run ?? "", /--artifact-dir/u);
-  assert.match(create, /release-evidence\.json/u);
-  assert.match(draft.if ?? "", /needs\.release-stage\.result == 'success'/u);
 });
 
-test("staging distinguishes fresh and explicit cross-run reconciliation", () => {
-  const prep = release.jobs["release-prep"];
-  const priorCandidate = prep.steps.find((step) => step.name?.includes("prior validated candidate"));
-  assert.equal(priorCandidate?.uses, "actions/download-artifact@v8.0.1");
-  assert.equal(priorCandidate?.if, "inputs.release_mode == 'stage' && inputs.prior_run_id != ''");
-  assert.equal(priorCandidate?.with?.name, "release-candidate-validated");
-  assert.equal(priorCandidate?.with?.["run-id"], "${{ inputs.prior_run_id }}");
-  assert.ok(prep.steps.some((step) => step.name?.includes("Restore prior validated candidate")));
-  const pack = release.jobs["release-pack"];
-  const packCheck = pack.steps.find((step) => step.name?.includes("Validate candidate package"));
-  assert.equal(packCheck?.env?.SQLBRAID_SKIP_VSIX, "true");
-  assert.equal(packCheck?.env?.SQLBRAID_VSIX_INPUT, undefined);
-  assert.equal(packCheck?.env?.SQLBRAID_VSIX_OUTPUT, undefined);
-  assert.match(prep.steps.find((step) => step.name?.includes("Pack immutable"))?.if ?? "", /prior_run_id/u);
-  const stage = release.jobs["release-stage"];
-  const prior = stage.steps.find((step) => step.name?.includes("prior staged evidence"));
-  assert.equal(prior?.if, "inputs.prior_run_id != ''");
-  assert.equal(prior?.uses, "actions/download-artifact@v8.0.1");
-  assert.equal(prior?.with?.["run-id"], "${{ inputs.prior_run_id }}");
-  const preflight = stage.steps.find((step) => step.name === "Verify npm staging preconditions");
-  const mutate = stage.steps.find((step) => step.name === "Mutate npm staging with pnpm OIDC");
-  assert.match(preflight?.run ?? "", /--prior-staged-publication/u);
-  assert.match(preflight?.run ?? "", /--prior-candidate-run-id/u);
-  assert.match(mutate?.run ?? "", /--prior-staged-publication/u);
-  assert.match(mutate?.run ?? "", /--prior-candidate-run-id/u);
-  assert.equal(mutate?.env?.SQLBRAID_STAGE_PREFLIGHT_VERIFIED, "true");
-  assert.equal(release.on.workflow_dispatch?.inputs?.rejected_stages_confirmed?.type, "boolean");
-  assert.equal(release.on.workflow_dispatch?.inputs?.rejected_stages_confirmed?.default, false);
-  const confirmation = prep.steps.find((step) => step.name === "Validate rejected-stage confirmation");
-  assert.match(confirmation?.run ?? "", /SQLBRAID_RELEASE_MODE.*stage.*PRIOR_RUN_ID/u);
-  for (const step of [preflight, mutate]) {
-    assert.equal(step?.env?.REJECTED_STAGES_CONFIRMED, "${{ inputs.rejected_stages_confirmed }}");
-    assert.match(
-      step?.run ?? "",
-      /if \[\[ -n "\$PRIOR_RUN_ID" \]\]; then.*if \[\[ "\$REJECTED_STAGES_CONFIRMED" == "true" \]\]; then\s+args\+=\(--rejected-stages-confirmed\)\s+fi\s+fi/su,
-    );
+test("fresh staging and recovery share tools but only recovery downloads prior staged evidence", () => {
+  const stage = release.jobs["release-recover"];
+  const prior = stage.steps.find((step) => step.with?.name === "release-staged-publication");
+  assert.ok(prior);
+  assert.equal(graph(release, "workflow_dispatch", "stage").stepRuns(prior), false);
+  assert.equal(graph(release, "workflow_dispatch", "recover").stepRuns(prior), true);
+  const invocations = stage.steps.filter((step) => step.run?.includes("node scripts/release-recovery.mjs"));
+  for (const mode of ["stage", "recover"]) {
+    for (const [index, step] of invocations.entries()) {
+      const result = spawnSync("bash", ["-e", "-c", `node() { printf '%s\\n' "$@"; }\n${step.run}`], {
+        encoding: "utf8",
+        env: { ...process.env, SQLBRAID_RELEASE_MODE: mode, RUNNER_TEMP: "/candidate" },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const args = result.stdout.trim().split("\n");
+      assert.equal(args[0], "scripts/release-recovery.mjs");
+      assert.equal(args[args.indexOf("--mode") + 1], index === 0 ? "preflight" : "stage");
+      assert.equal(args.includes("--prior-staged-publication"), mode === "recover");
+      assert.equal(args[args.indexOf("--artifact-dir") + 1], "/candidate/sqlbraid-release-artifacts");
+    }
   }
-  const dryRun = release.jobs["release-final"].steps.find((step) => step.run?.includes("--mode stage-dry-run"));
-  assert.match(dryRun?.run ?? "", /--prior-candidate-run-id/u);
-  assert.match(String(release.env?.SQLBRAID_TAG_BEFORE), /github\.event\.before/u);
+  const draft = release.jobs["release-draft"];
+  for (const name of ["support-profile-evidence", "release-target-evidence"]) {
+    const download = draft.steps.find((step) => step.with?.name === name);
+    assert.equal(download?.with?.["run-id"], "${{ inputs.prior_run_id }}");
+  }
 });
 
-test("preparation resolves coordinated and package-specific release targets", () => {
+test("preparation executes facade and package-specific release selection", () => {
   const determine = release.jobs["release-prep"].steps.find((step) => step.name === "Determine release target");
-  assert.ok(determine);
-  assert.match(determine.run ?? "", /GITHUB_REF_TYPE.*tag/isu);
-  assert.match(determine.run ?? "", /\^v\(\.\+\)\$/u);
-  assert.match(determine.run ?? "", /-v\(\.\+\)\$/u);
-  assert.match(determine.run ?? "", /SQLBRAID_RELEASE_PACKAGE/u);
-  assert.match(determine.run ?? "", /GITHUB_OUTPUT/u);
+  assert.ok(determine?.run);
+  const directory = mkdtempSync(join(tmpdir(), "sqlbraid-release-target-"));
+  try {
+    writeFileSync(join(directory, "package.json"), JSON.stringify({ version: "9.9.9" }));
+    for (const [slug, version] of [
+      ["sqlbraid", "1.4.0"],
+      ["postgres", "2.3.0"],
+    ]) {
+      mkdirSync(join(directory, "packages", slug), { recursive: true });
+      writeFileSync(join(directory, "packages", slug, "package.json"), JSON.stringify({ version }));
+    }
+    for (const [ref, selector, expectedPackage, expectedVersion] of [
+      ["v1.2.3", "sqlbraid", "sqlbraid", "1.2.3"],
+      ["postgres-v1.2.3", "sqlbraid", "postgres", "1.2.3"],
+      ["", String(release.on.workflow_dispatch?.inputs?.release_package?.default), "sqlbraid", "1.4.0"],
+      ["", "postgres", "postgres", "2.3.0"],
+      ["sqlbraid-v1.2.3", "sqlbraid", "", ""],
+      ["", "all", "", ""],
+      ["", "*", "", ""],
+      ["v1.2.3", "all", "", ""],
+      ["", "../sqlbraid", "", ""],
+    ]) {
+      const output = join(directory, "output");
+      const environment = join(directory, "env");
+      rmSync(output, { force: true });
+      rmSync(environment, { force: true });
+      const result: SpawnSyncReturns<string> = spawnSync("bash", ["-e", "-c", determine.run], {
+        cwd: directory,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          INPUT_RELEASE_PACKAGE: selector,
+          SQLBRAID_RELEASE_MODE: "certify",
+          GITHUB_REF_TYPE: ref ? "tag" : "branch",
+          GITHUB_REF_NAME: ref || "main",
+          GITHUB_EVENT_NAME: "workflow_dispatch",
+          GITHUB_OUTPUT: output,
+          GITHUB_ENV: environment,
+        },
+      });
+      if (!expectedPackage) {
+        assert.equal(result.status, 1, `${ref}/${selector}: ${result.stdout}`);
+        continue;
+      }
+      assert.equal(result.status, 0, result.stderr);
+      const version = expectedVersion;
+      assert.equal(readFileSync(output, "utf8"), `package=${expectedPackage}\nversion=${version}\n`);
+      assert.equal(
+        readFileSync(environment, "utf8"),
+        `SQLBRAID_RELEASE_PACKAGE=${expectedPackage}\nSQLBRAID_RELEASE_VERSION=${version}\n`,
+      );
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("documentation pushes publish latest and tagged docs while manual deployment remains opt-in", () => {

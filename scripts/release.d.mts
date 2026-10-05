@@ -33,6 +33,13 @@ export interface StagedPublication {
   readonly runAttempt?: string | null;
   readonly candidateRunId?: string | null;
   readonly candidateRunAttempt?: string | null;
+  readonly tool?: Readonly<{
+    repository: string;
+    sha: string;
+    ref: string;
+    runId: string;
+    runAttempt: string;
+  }>;
   readonly manifestSha256: string;
   readonly candidateIdentitySha256: string;
   readonly reconciledFrom?: Readonly<{
@@ -109,7 +116,6 @@ export declare function assertManifestOrder(
   manifest: { packages: readonly { name: string }[] },
   order: readonly string[],
 ): void;
-export declare function assertMutationAuthorization(mode: string, env?: Record<string, string | undefined>): void;
 export declare function assertPublicationCredentials(mode: string, env?: Record<string, string | undefined>): void;
 export declare function assertPriorStagingEvidence(
   manifest: ReleaseManifest,
@@ -137,6 +143,7 @@ export declare function stageCandidates(
     rejectedStagesConfirmed?: boolean;
     currentRunId?: string | null;
     currentRunAttempt?: string | null;
+    tool?: StagedPublication["tool"];
   },
 ): Promise<StagedPublication | undefined>;
 export declare function verifyPublished(manifest: ReleaseManifest, evidence: StagedPublication): Promise<void>;

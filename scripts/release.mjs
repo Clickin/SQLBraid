@@ -7,7 +7,6 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { compareSemVer, isSemVer } from "./docs-history.mjs";
-import { assertNoPriorStageAttempt, assertReleaseWorkflows } from "./assert-release-workflows.mjs";
 import { formatReleaseError } from "./release-diagnostics.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -16,8 +15,10 @@ const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")
 const packageManager = rootManifest.packageManager;
 const pnpmVersion = /^pnpm@(\d+\.\d+\.\d+)$/u.exec(packageManager ?? "")?.[1];
 if (!pnpmVersion) throw new Error("Release requires an exact pnpm version in package.json#packageManager.");
-let version = process.env.SQLBRAID_RELEASE_VERSION ?? rootManifest.version;
-let releasePackage = process.env.SQLBRAID_RELEASE_PACKAGE ?? "*";
+let version =
+  process.env.SQLBRAID_RELEASE_VERSION ??
+  JSON.parse(readFileSync(join(root, "packages/sqlbraid/package.json"), "utf8")).version;
+let releasePackage = process.env.SQLBRAID_RELEASE_PACKAGE ?? "sqlbraid";
 let expectedTag = releaseCandidateTag(releasePackage, version);
 const packageFields = ["dependencies", "optionalDependencies", "peerDependencies"];
 const artifactArgument = option("--artifact-dir", process.env.SQLBRAID_RELEASE_ARTIFACT_DIR);
@@ -53,7 +54,7 @@ function releasePrereleaseArg(value) {
 }
 
 function releasePackageSlug(value) {
-  if (value === "*" || value === "all") return "*";
+  if (value === "*" || value === "all") throw new Error("Fresh releases must select exactly one package.");
   if (value === "sqlbraid") return "sqlbraid";
   if (typeof value === "string" && value.startsWith("@sqlbraid/")) value = value.slice("@sqlbraid/".length);
   if (typeof value !== "string" || !/^[a-z0-9][a-z0-9._-]*$/u.test(value))
@@ -63,7 +64,7 @@ function releasePackageSlug(value) {
 
 function releaseCandidateTag(packageName = releasePackage, releaseVersion = version) {
   const slug = releasePackageSlug(packageName);
-  return slug === "*" ? `v${releaseVersion}` : `${slug}-v${releaseVersion}`;
+  return slug === "sqlbraid" ? `v${releaseVersion}` : `${slug}-v${releaseVersion}`;
 }
 
 function releaseTag(releaseVersion = version) {
@@ -72,7 +73,6 @@ function releaseTag(releaseVersion = version) {
 
 function selectReleasePackages(packages, selector = releasePackage) {
   const slug = releasePackageSlug(selector);
-  if (slug === "*") return packages;
   const selected = packages.filter(({ manifest }) => releasePackageSlug(manifest.name) === slug);
   if (selected.length !== 1) throw new Error(`Unknown or ambiguous release package ${selector}.`);
   return selected;
@@ -763,7 +763,7 @@ async function assertPublishedInternalDependencies(manifest) {
       const found = await registryIntegrity(dependencyEntry.name, dependencyEntry.version);
       if (!found) {
         throw new Error(
-          `Release dependency ${dependencyEntry.name}@${dependencyEntry.version} required by ${entry.name}@${entry.version} is not public; release the dependency first or include it in a coordinated release.`,
+          `Release dependency ${dependencyEntry.name}@${dependencyEntry.version} required by ${entry.name}@${entry.version} is not public; release the dependency first.`,
         );
       }
     }
@@ -804,9 +804,14 @@ async function stageCandidates(
     rejectedStagesConfirmed = false,
     currentRunId = manifest.runId,
     currentRunAttempt = manifest.runAttempt,
+    tool,
   } = {},
 ) {
   assertManifestIdentity(manifest);
+  if (!priorEvidence && manifest.releasePackages.length !== 1)
+    throw new Error(
+      "Fresh releases must select exactly one package; coordinated artifacts require prior staging evidence for recovery.",
+    );
   if (
     typeof rejectedStagesConfirmed !== "boolean" ||
     (rejectedStagesConfirmed && (dryRun || !priorEvidence || !/^\d+$/u.test(priorRunId ?? "")))
@@ -893,6 +898,7 @@ async function stageCandidates(
       version: manifest.version,
       commit: manifest.commit,
       runId: currentRunId,
+      ...(tool ? { tool } : {}),
       runAttempt: currentRunAttempt,
       candidateRunId: manifest.runId,
       candidateRunAttempt: manifest.runAttempt,
@@ -1067,30 +1073,19 @@ async function main() {
       "pack",
       "pack-only",
       "stage-dry-run",
-      "stage-preflight",
-      "stage",
       "verify-published",
       "durable-evidence",
       "release-prerelease-flag",
     ].includes(mode)
   )
     throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
-  const priorEvidencePath = option("--prior-staged-publication");
   const priorCandidateRunId = option("--prior-candidate-run-id");
-  const rejectedStagesConfirmed = process.argv.includes("--rejected-stages-confirmed");
-  if (process.argv.some((argument) => argument.startsWith("--rejected-stages-confirmed=")))
-    throw new Error("Use the bare --rejected-stages-confirmed flag only after maintainer confirmation.");
   if (
-    rejectedStagesConfirmed &&
-    (!["stage-preflight", "stage"].includes(mode) || !priorEvidencePath || !/^\d+$/u.test(priorCandidateRunId ?? ""))
+    process.argv.some((argument) => /^--(?:prior-staged-publication|rejected-stages-confirmed)(?:=|$)/u.test(argument))
   )
-    throw new Error(
-      "Rejected-stage confirmation requires stage or stage-preflight with explicit prior staged evidence and a numeric prior run ID.",
-    );
-  if (priorEvidencePath && !["stage-preflight", "stage"].includes(mode))
-    throw new Error("Prior staged evidence is accepted only for explicit staging reconciliation.");
-  if (priorCandidateRunId && !["stage-preflight", "stage", "stage-dry-run"].includes(mode))
-    throw new Error("Prior candidate identity is accepted only for staging or staging certification.");
+    throw new Error("Prior staged evidence and rejected-stage confirmation require the main-based recovery workflow.");
+  if (priorCandidateRunId && mode !== "stage-dry-run")
+    throw new Error("Prior candidate identity is accepted only for staging certification.");
   if (mode === "durable-evidence") {
     const manifestPath = resolve(option("--manifest", join(artifactDir, "release-manifest.json")));
     const stagedPath = resolve(option("--staged-publication", join(artifactDir, "staged-publication.json")));
@@ -1124,8 +1119,7 @@ async function main() {
   process.stdout.write(`Release target: ${releaseNames.join(", ")} @ ${version}\n`);
   process.stdout.write(`Dependency-derived package order: ${order.join(" -> ")}\n`);
   if (mode === "preflight") {
-    if (process.env.SQLBRAID_RELEASE_MODE === "stage") assertMutationAuthorization("stage");
-    else if (![undefined, "certify", "pack-only"].includes(process.env.SQLBRAID_RELEASE_MODE))
+    if (![undefined, "certify", "pack-only"].includes(process.env.SQLBRAID_RELEASE_MODE))
       throw new Error("Unknown workflow release mode.");
     await assertCleanTree();
     if (process.env.GITHUB_REF?.startsWith("refs/tags/")) await assertTaggedSha();
@@ -1138,59 +1132,21 @@ async function main() {
     await pack(packages, order, sha, releaseNames);
     return;
   }
-  if (mode === "stage-preflight" || mode === "stage") {
-    assertMutationAuthorization("stage");
-    if (!artifactArgument) throw new Error("Staging requires --artifact-dir pointing at validated release artifacts.");
-  }
-  if (mode === "stage") {
-    assertPublicationCredentials(mode);
-    if (process.env.SQLBRAID_STAGE_PREFLIGHT_VERIFIED !== "true")
-      throw new Error("stage requires a successful stage-preflight step in the same official workflow job.");
-  }
   await assertCleanTree();
-  const sha = mode === "stage-preflight" || mode === "stage" ? await assertTaggedSha() : await currentSha();
+  const sha = await currentSha();
   const manifest = await readReleaseManifest(artifactDir, {
     priorCandidateRunId,
-    allowCurrentAttemptMismatch: mode === "stage-preflight" || mode === "stage" || mode === "stage-dry-run",
+    allowCurrentAttemptMismatch: true,
   });
   if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate commit.");
   assertManifestOrder(manifest, order);
   if (JSON.stringify(manifest.releasePackages) !== JSON.stringify(releaseNames))
     throw new Error("Validated release artifacts do not match the selected release package.");
-  const priorEvidence = priorEvidencePath ? await json(resolve(priorEvidencePath)) : undefined;
-  if (priorEvidence) assertPriorStagingEvidence(manifest, priorEvidence, priorCandidateRunId);
-  if (mode === "stage-preflight") {
-    await assertReleaseWorkflows();
-    await assertNoPriorStageAttempt(process.env, fetch, { allowReconciliation: Boolean(priorEvidence) });
-    process.stdout.write(
-      "Verified exact-tag workflow evidence and prior staging history; npm mutation remains untouched.\n",
-    );
-    return;
-  }
   await stageCandidates(manifest, {
-    dryRun: mode === "stage-dry-run",
-    priorEvidence,
-    priorRunId: priorCandidateRunId,
-    rejectedStagesConfirmed,
+    dryRun: true,
     currentRunId: process.env.GITHUB_RUN_ID ?? manifest.runId,
     currentRunAttempt: process.env.GITHUB_RUN_ATTEMPT ?? manifest.runAttempt,
   });
-}
-
-function assertMutationAuthorization(mode, env = process.env) {
-  if (mode !== "stage") throw new Error(`Not a staging mode: ${mode}.`);
-  if (env.GITHUB_ACTIONS !== "true" || env.GITHUB_EVENT_NAME !== "workflow_dispatch")
-    throw new Error("stage is allowed only from GitHub Actions workflow_dispatch.");
-  if (env.SQLBRAID_RELEASE_MODE !== mode) throw new Error("stage requires SQLBRAID_RELEASE_MODE=stage.");
-  const expected = `refs/tags/${expectedTag}`;
-  if (env.GITHUB_REF !== expected)
-    throw new Error(`stage requires GITHUB_REF=${expected}; found ${env.GITHUB_REF ?? "unset"}.`);
-  if (
-    !/^[a-f\d]{40}$/u.test(env.GITHUB_SHA ?? "") ||
-    !/^\d+$/u.test(env.GITHUB_RUN_ID ?? "") ||
-    !/^\d+$/u.test(env.GITHUB_RUN_ATTEMPT ?? "")
-  )
-    throw new Error("Staging requires exact workflow SHA, run ID, and run attempt.");
 }
 
 function assertPublicationCredentials(mode, env = process.env) {
@@ -1220,13 +1176,13 @@ function setReleaseVersion(nextVersion) {
 }
 
 function setReleasePackage(nextPackage) {
+  const tag = releaseCandidateTag(nextPackage, version);
   releasePackage = nextPackage;
-  expectedTag = releaseCandidateTag(nextPackage, version);
+  expectedTag = tag;
 }
 
 export {
   assertManifestOrder,
-  assertMutationAuthorization,
   assertPriorStagingEvidence,
   assertPublicationCredentials,
   assertTaggedSha,

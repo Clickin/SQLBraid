@@ -1,4 +1,8 @@
-import { resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 export const requiredReleaseWorkflows = [
@@ -8,7 +12,7 @@ export const requiredReleaseWorkflows = [
 const releaseWorkflow = ".github/workflows/release.yml";
 
 function isReleaseTagRef(ref) {
-  return /^refs\/tags\/(?:v.+|[a-z0-9][a-z0-9._-]*-v.+)$/u.test(ref ?? "");
+  return /^refs\/tags\/(?:v.+|(?!sqlbraid-v)[a-z0-9][a-z0-9._-]*-v.+)$/u.test(ref ?? "");
 }
 
 export function successfulExactRun(runs, { sha, ref, workflow }) {
@@ -75,10 +79,34 @@ export async function assertReleaseWorkflows(env = process.env, request = fetch)
   return evidence;
 }
 
+async function readLegacyCandidateEvidence(runId, repository, token) {
+  const directory = await mkdtemp(join(tmpdir(), "sqlbraid-stage-history-"));
+  try {
+    await promisify(execFile)(
+      "gh",
+      [
+        "run",
+        "download",
+        String(runId),
+        "--repo",
+        repository,
+        "--name",
+        "release-staged-publication",
+        "--dir",
+        directory,
+      ],
+      { env: { ...process.env, GH_TOKEN: token }, timeout: 30_000 },
+    );
+    return JSON.parse(await readFile(join(directory, "recovery-evidence.json"), "utf8"));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 export async function assertNoPriorStageAttempt(
   env = process.env,
   request = fetch,
-  { allowReconciliation = false } = {},
+  readPriorEvidence = readLegacyCandidateEvidence,
 ) {
   const {
     GITHUB_SHA: sha,
@@ -89,7 +117,6 @@ export async function assertNoPriorStageAttempt(
     GITHUB_RUN_ATTEMPT: runAttempt,
     GITHUB_API_URL: apiUrl = "https://api.github.com",
   } = env;
-  if (allowReconciliation) return [];
   if (runAttempt !== "1") {
     throw new Error("Release staging rerun requires explicit prior staged evidence for reconciliation.");
   }
@@ -117,7 +144,6 @@ export async function assertNoPriorStageAttempt(
   for (let page = 1; page <= 10; page += 1) {
     const url = new URL(`${apiUrl}/repos/${repository}/actions/workflows/${releaseWorkflow.split("/").at(-1)}/runs`);
     url.search = new URLSearchParams({
-      head_sha: sha,
       event: "workflow_dispatch",
       per_page: "100",
       page: String(page),
@@ -132,12 +158,18 @@ export async function assertNoPriorStageAttempt(
   for (const run of priorRuns) {
     if (
       String(run.id) === runId ||
-      run.head_sha !== sha ||
-      run.head_branch !== branch ||
+      !(
+        (run.head_sha === sha && run.head_branch === branch) ||
+        (run.head_branch === "main" &&
+          (run.display_title === `Release ${branch}` ||
+            !/^Release (?:v.+|[a-z0-9][a-z0-9._-]*-v.+)$/u.test(run.display_title ?? "")))
+      ) ||
       run.event !== "workflow_dispatch"
     )
       continue;
     if (!/^\d+$/u.test(String(run.id))) throw new Error("Invalid GitHub release run identity.");
+    if (["queued", "in_progress", "waiting", "pending", "requested"].includes(run.status))
+      throw new Error(`Prior npm staging run ${run.id} is unresolved for ${ref}; wait and reconcile its evidence.`);
     const jobsUrl = new URL(`${apiUrl}/repos/${repository}/actions/runs/${run.id}/jobs`);
     jobsUrl.search = new URLSearchParams({ per_page: "100", page: "1" }).toString();
     let stage;
@@ -145,7 +177,9 @@ export async function assertNoPriorStageAttempt(
       jobsUrl.searchParams.set("page", String(page));
       const jobs = await getJson(jobsUrl);
       if (!Array.isArray(jobs.jobs)) throw new Error("Invalid GitHub release job history response.");
-      stage = jobs.jobs.find((job) => /^Stage validated packages with pnpm OIDC(?:\s|$)/u.test(job.name ?? ""));
+      stage = jobs.jobs.find((job) =>
+        /^(?:Stage|Recover) validated packages with pnpm OIDC(?:\s|$)/u.test(job.name ?? ""),
+      );
       if (stage || jobs.jobs.length < 100) break;
       if (page === 10) throw new Error("Unable to bound GitHub release job history; refusing an unverified upload.");
     }
@@ -154,6 +188,21 @@ export async function assertNoPriorStageAttempt(
       ? stage.steps.find((step) => step.name === "Mutate npm staging with pnpm OIDC")
       : undefined;
     if (!mutationStep || mutationStep.conclusion === "skipped") continue;
+    if (run.head_branch === "main" && !/^Release (?:v.+|[a-z0-9][a-z0-9._-]*-v.+)$/u.test(run.display_title ?? "")) {
+      const evidence = await readPriorEvidence(run.id, repository, token);
+      if (
+        evidence?.tool?.repository !== repository ||
+        evidence.tool.ref !== "refs/heads/main" ||
+        evidence.tool.sha !== run.head_sha ||
+        evidence.tool.runId !== String(run.id) ||
+        evidence.tool.runAttempt !== String(run.run_attempt) ||
+        evidence.rejectedStagesConfirmed !== true ||
+        !isReleaseTagRef(evidence.candidate?.ref) ||
+        !/^[a-f\d]{40}$/u.test(evidence.candidate?.sha ?? "")
+      )
+        throw new Error(`Invalid legacy candidate evidence for staging run ${run.id}.`);
+      if (evidence.candidate.ref !== ref) continue;
+    }
     if (mutationStep.status !== "completed" || mutationStep.conclusion !== "skipped") {
       throw new Error(
         `Prior npm staging mutation ${run.id} exists for ${ref}; supply its staged evidence for explicit reconciliation instead of uploading again.`,

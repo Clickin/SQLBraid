@@ -107,17 +107,20 @@ is disabled.
 
 SQLBraid does not require lockstep npm package versions.
 
-- A coordinated workspace tag such as `v1.0.0` selects each publishable package
-  at that version.
-- After GA, a package tag such as `postgres-v1.0.1`, `opentelemetry-v1.1.0` or
-  `sqlbraid-v1.1.0` selects only that package.
+- A tag such as `v1.0.3` selects only the unscoped `sqlbraid` package.
+- A tag such as `postgres-v1.0.3` or `opentelemetry-v1.1.0` selects only that
+  `@sqlbraid/*` package. Do not use `sqlbraid-v*` for the facade.
 - Thus, the unscoped `sqlbraid` facade needs a new version only when its own
   public facade surface or its dependency rules change. Its semver dependency
   ranges resolve ordinary compatible driver releases.
 
+The existing `v1.0.0` and `v1.0.2` records keep their original coordinated
+package sets. Recovery uses their validated manifests. Do not move those tags
+or reinterpret their artifacts as facade-only releases.
+
 A `v*` push runs Release certification, Runtime portability and Documentation
 validation. The separate Documentation workflow also deploys Pages for that
-coordinated tag. A package-specific `*-v*` tag runs Release certification and
+facade tag. A package-specific `*-v*` tag runs Release certification and
 Runtime portability. The Release DAG still contains its own documentation gate.
 But package tags do not create documentation version archives.
 
@@ -130,10 +133,10 @@ None of these tag pushes do these things:
 
 The `stage` mutation has these requirements:
 
-- a `workflow_dispatch` from the exact coordinated tag or package/version tag;
-- the same identity for the tag target and the checkout;
-- a clean tree;
-- all certification jobs of the current run.
+- a `workflow_dispatch` from `main`;
+- an existing `candidate_tag` and its certified producer in `prior_run_id`;
+- the original validated candidate archive, with matching tag, SHA and hashes;
+- a clean tooling checkout and no previous mutation attempt for that candidate.
 
 The `recover` mode separates the tooling checkout from the package source.
 It requires a dispatch from `main`, an existing `candidate_tag`, a
@@ -143,12 +146,12 @@ The original candidate must have successful release certification.
 
 The selected package version must match the version in the tag. Unselected
 internal workspace dependencies must already exist publicly, at the exact
-workspace version that built the candidate. If not, the coordinated release must
-include them.
+workspace version that built the candidate. If not, release those dependencies
+first.
 
 Before the mutation, `scripts/assert-release-workflows.mjs` requires completed
 successful Runtime portability evidence for the exact SHA and the same tag.
-Coordinated `v*` releases also require the Documentation tag run. Only runs that
+Facade `v*` releases also require the Documentation tag run. Only runs that
 a push started are accepted.
 
 ## Pack once, validate once, stage those bytes
@@ -193,8 +196,8 @@ pnpm stage publish <validated-package-version.tgz> \
 The native staging endpoint of the command keeps the package out of the public
 registry until a human approves it.
 
-Certification runs `node scripts/release.mjs --mode stage-dry-run`. Only the
-explicitly dispatched mutation runs `node scripts/release.mjs --mode stage`.
+Certification runs `node scripts/release.mjs --mode stage-dry-run`. Explicit
+mutations use `scripts/release-recovery.mjs --mode stage` from `main`.
 
 ### The staged publication report
 
@@ -243,14 +246,21 @@ tested the real npm OIDC permissions.
 
 ### Fresh staging and recovery
 
-Fresh staging is the default. The candidate manifest and the `runId`/`runAttempt`
-of the current run must match. No prior publication report is imported.
+Fresh staging runs from `main` with `release_mode=stage`, `candidate_tag` and
+`prior_run_id`. The prior run identifies the certified candidate producer.
+The manifest keeps that producer identity. No prior publication report is imported.
 
 Before a fresh upload, the stage job checks a bounded part of the authenticated
 Actions run and job history. It looks for another non-skipped staging job for the
 exact tag and commit. A rerun (`runAttempt > 1`) also fails before upload when no
 prior evidence is supplied. This prevents a blank new artifact directory from
 turning an earlier uncertain or failed attempt into a second upload.
+
+Older `main` runs can lack a candidate tag in their title. The history check
+downloads their `release-staged-publication` artifact with authenticated `gh`.
+It validates `recovery-evidence.json` against the run before comparing candidate
+tags. A verified different candidate does not block a new release. Missing or
+mismatched evidence still blocks staging.
 
 Recovery across runs is an explicit workflow dispatch. Give the ID of the prior
 Release run in `prior_run_id`. The workflow then does these steps:
@@ -260,7 +270,7 @@ Release run in `prior_run_id`. The workflow then does these steps:
    stamp.
 2. It validates all hashes and identities.
 3. It gives the report to the script with `--prior-staged-publication`.
-4. It restores the prior prepared npm build and the candidate archive.
+4. It restores the original validated archive without building or packing again.
 
 No npm candidate is packed again. This workflow does not include or recover a
 VSIX.
@@ -282,10 +292,8 @@ for a maintainer.
 
 To retry rejected stages, first inspect npm staging with maintainer credentials.
 Reject every prior staged candidate. Check that each uncertain upload has no
-remaining stage. Then supply `prior_run_id` and set
-`rejected_stages_confirmed` to `true` in the `stage` workflow.
-The CLI equivalent adds `--rejected-stages-confirmed` to `stage-preflight` and
-`stage`, with both prior-evidence arguments.
+remaining stage. Then supply `candidate_tag` and `prior_run_id` from `main`.
+Select `release_mode=recover` and set `rejected_stages_confirmed` to `true`.
 
 This confirmation is a maintainer statement, not an automated registry check.
 The new report preserves the prior package states and stage IDs.
@@ -298,8 +306,8 @@ Staging errors include bounded, redacted causes and subprocess diagnostics.
 An invalid pnpm response includes its redacted output. These diagnostics do not
 authorize a retry or prove that an upload did not occur.
 
-If the original tag lacks a tooling fix, use `recover` from `main`.
-The candidate tag and package version do not change. Do not move the tag.
+Both staging modes use tooling from `main`, even when the tag lacks a tooling
+fix. The candidate tag and package version do not change. Do not move the tag.
 
 ### Recover with updated tooling from main
 
@@ -451,37 +459,34 @@ These steps are maintainer actions. Certification does **not** do them.
    run a bootstrap again. Do not use older RC evidence as evidence for this
    candidate.
 2. Create the candidate tag.
-   - For the initial GA candidate, prepare and freeze the exact source SHA.
-     Create and push the coordinated **new** tag `v1.0.0`. Each package that the
-     coordinated release selects must be at 1.0.0.
-   - After GA, to release one package, change only the version of that package
-     and the dependency ranges that must change. Then use a tag such as
-     `postgres-v1.0.1`.
+   - Change only the version of the package that needs a release and the
+     dependency ranges that must change.
+   - Use `v1.0.3` for `sqlbraid@1.0.3`, or `postgres-v1.0.3` for
+     `@sqlbraid/postgres@1.0.3`.
+   - Keep the existing coordinated release tags and their evidence unchanged.
    - Never reuse or move a candidate tag after a fix that follows the tag.
 
    This run, which the tag starts, does **certification only**. Wait for its
    Runtime, Documentation and Release certification gates. This page does not
    promise a new green SHA or substitute evidence.
 
-3. Verify the exact SHA before the mutation. The tag target, the checked-out
-   commit, the identity of the candidate manifest and the matching certification
-   artifacts must all agree. Then explicitly dispatch the stage mode from that
-   exact new tag: **Actions → Release → Run workflow → ref `<new-candidate-tag>` →
-   release_mode `stage`**. The CLI equivalent is:
+3. Verify the candidate SHA before the mutation. The tag target, candidate
+   manifest and certification artifacts must agree. Dispatch staging from
+   `main`, not from the candidate tag:
 
    ```sh
-   gh workflow run release.yml --ref <new-candidate-tag> -f release_mode=stage
+   gh workflow run release.yml --ref main -f release_mode=stage \
+     -f candidate_tag=<new-candidate-tag> -f prior_run_id=<certified-run-id>
    ```
 
    This run does these steps:
-   - It runs the complete certification DAG of the current run.
+   - It restores the validated candidate from the certified run without repacking.
    - It verifies the required evidence for the exact tag SHA.
    - It verifies the complete candidate hashes.
    - It stages, with OIDC, only the `releasePackages` that the manifest selects.
 
-   A coordinated release can contain many packages and keeps the dependency
-   order. A package-specific release uploads only that package. The run records
-   the stage IDs that `stage publish` returns. It does **not** list, view or
+   A new release uploads only the selected package. The run records the stage
+   IDs that `stage publish` returns. It does **not** list, view or
    download staged packages with the OIDC credential. It does **not** approve
    them. These read and approval operations stay inside the authenticated review
    boundary of the maintainer.
@@ -545,14 +550,14 @@ These steps are maintainer actions. Certification does **not** do them.
 
 ### Tag rules
 
-Freeze the exact source commit before you create a candidate tag. A `v*` tag is
-an immutable operational identity. Create it once. Do not move or delete it to
-add a fix. If the package contents must change after tagging, select a new
-version and run all exact-final gates again. A tooling-only fix can use
-`recover` with the original validated package bytes and unchanged tag.
+Freeze the exact source commit before you create a candidate tag. Both `v*`
+and `*-v*` tags are immutable operational identities. Create each tag once.
+Do not move or delete it to add a fix. If package contents change after tagging,
+select a new version and run all exact-final gates again. Tooling-only fixes
+run from `main` with the original validated bytes and unchanged tag.
 
-Configure a repository tag ruleset for `v*` manually. Enable both **restrict
-updates** and **restrict deletions**. Permit only the minimum maintainer or
+Configure repository tag rulesets for both `v*` and `*-v*` manually. Enable
+**restrict updates** and **restrict deletions**. Permit only the minimum maintainer or
 emergency bypass. Do not add workflow credentials that can change tags. Release
 preflight also rejects a tag-push event whose prior SHA is different from the
 checked-out candidate.

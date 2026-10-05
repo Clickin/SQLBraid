@@ -27,5 +27,5 @@ export declare function assertReleaseWorkflows(
 export declare function assertNoPriorStageAttempt(
   env?: Record<string, string | undefined>,
   request?: (url: URL, init: RequestInit) => Promise<Response>,
-  options?: { allowReconciliation?: boolean },
+  readPriorEvidence?: (runId: number, repository: string, token: string) => Promise<unknown>,
 ): Promise<never[]>;

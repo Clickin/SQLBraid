@@ -1,4 +1,5 @@
 name: Release
+run-name: ${{ inputs.candidate_tag && format('Release {0}', inputs.candidate_tag) || github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -14,22 +15,22 @@ on:
           - stage
           - recover
       candidate_tag:
-        description: "Existing candidate tag to recover using main tooling (required for recover, for example v1.0.2)"
+        description: "Existing certified candidate tag to stage or recover using main tooling (for example v1.0.2)"
         required: false
         default: ""
         type: string
       release_package:
-        description: "Package slug to release (for example postgres, sqlite, sqlbraid); all keeps the coordinated workspace release"
+        description: "Package slug to certify (for example postgres, sqlite, sqlbraid)"
         required: true
-        default: all
+        default: sqlbraid
         type: string
       prior_run_id:
-        description: "Prior Release run ID; required for recover, optional for stage reconciliation"
+        description: "Original certified producer run for stage; prior staged run for recover (required)"
         required: false
         default: ""
         type: string
       rejected_stages_confirmed:
-        description: "I rejected all prior staged candidates and checked every uncertain upload is absent from npm staging (requires stage or recover and prior_run_id)"
+        description: "Recovery only: I rejected all prior candidates and checked uncertain uploads are absent from npm staging"
         required: false
         default: false
         type: boolean
@@ -46,7 +47,7 @@ permissions:
 env:
   SQLBRAID_RELEASE_MODE: ${{ inputs.release_mode || 'certify' }}
   SQLBRAID_TAG_BEFORE: ${{ github.event.before || '' }}
-  SQLBRAID_RELEASE_PACKAGE: "*"
+  SQLBRAID_RELEASE_PACKAGE: sqlbraid
   NODE_VERSION: 22.18.0
   NODE_COMPAT_VERSION: 24.21.0
   BUN_VERSION: 1.3.14
@@ -55,7 +56,7 @@ env:
 
 jobs:
   release-prep:
-    if: inputs.release_mode != 'recover'
+    if: inputs.release_mode != 'recover' && inputs.release_mode != 'stage'
     name: Prepare immutable npm release candidate
     outputs:
       compatibility_matrix: ${{ steps.compatibility-matrix.outputs.matrix }}
@@ -67,18 +68,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - name: Validate rejected-stage confirmation
+      - name: Reject staging confirmation during certification
         env:
           REJECTED_STAGES_CONFIRMED: ${{ inputs.rejected_stages_confirmed }}
-          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
-        shell: bash
-        run: |
-          if [[ "$REJECTED_STAGES_CONFIRMED" == "true" ]]; then
-            [[ "$SQLBRAID_RELEASE_MODE" == "stage" && "$PRIOR_RUN_ID" =~ ^[0-9]+$ ]] || {
-              echo "rejected_stages_confirmed requires stage and a numeric prior_run_id."
-              exit 1
-            }
-          fi
+        run: test "$REJECTED_STAGES_CONFIRMED" != "true"
       - name: Check out exact release ref
         uses: actions/checkout@v7.0.1
         with:
@@ -92,72 +85,45 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Check formatting and lint
         run: pnpm run fmt:check && pnpm run lint
-      - name: Validate prior candidate run ID
-        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
-        env:
-          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
-        shell: bash
-        run: |
-          [[ "$PRIOR_RUN_ID" =~ ^[0-9]+$ ]] || {
-            echo "prior_run_id must be numeric."
-            exit 1
-          }
-      - name: Download prior validated candidate
-        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: release-candidate-validated
-          path: ${{ runner.temp }}/prior-validated
-          run-id: ${{ inputs.prior_run_id }}
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-      - name: Download prior prepared candidate
-        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: release-prepared
-          path: ${{ runner.temp }}/prior-prepared
-          run-id: ${{ inputs.prior_run_id }}
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
       - name: Determine release target
         id: release-target
         env:
-          INPUT_RELEASE_PACKAGE: ${{ inputs.release_package || 'all' }}
+          INPUT_RELEASE_PACKAGE: ${{ inputs.release_package || 'sqlbraid' }}
         shell: bash
         run: |
           selector="$INPUT_RELEASE_PACKAGE"
+          [[ "$selector" != "all" && "$selector" != "*" ]] || {
+            echo "Select one release package, not all."
+            exit 1
+          }
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             if [[ "$GITHUB_REF_NAME" =~ ^v(.+)$ ]]; then
-              package="*"
+              package="sqlbraid"
               release_version="${BASH_REMATCH[1]}"
             elif [[ "$GITHUB_REF_NAME" =~ ^([a-z0-9][a-z0-9._-]*)-v(.+)$ ]]; then
               package="${BASH_REMATCH[1]}"
               release_version="${BASH_REMATCH[2]}"
+              [[ "$package" != "sqlbraid" ]] || {
+                echo "The sqlbraid facade uses v<version>, not sqlbraid-v<version>."
+                exit 1
+              }
             else
               echo "Unsupported release tag: $GITHUB_REF_NAME"
               exit 1
             fi
           else
-            if [[ "$SQLBRAID_RELEASE_MODE" == "stage" ]]; then
-              echo "Release staging requires an exact package/version tag ref."
-              exit 1
-            fi
             if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
               package="sqlbraid"
-              release_version="$(node -p "JSON.parse(require('node:fs').readFileSync('packages/sqlbraid/package.json', 'utf8')).version")"
-            elif [[ "$selector" == "all" || "$selector" == "*" ]]; then
-              package="*"
-              release_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
             else
               package="$selector"
-              manifest_path="packages/$selector/package.json"
-              [[ -f "$manifest_path" ]] || {
-                echo "Unknown release package slug: $selector"
-                exit 1
-              }
-              release_version="$(node -p "JSON.parse(require('node:fs').readFileSync('$manifest_path', 'utf8')).version")"
             fi
+          fi
+          [[ "$package" =~ ^[a-z0-9][a-z0-9._-]*$ && -f "packages/$package/package.json" ]] || {
+            echo "Unknown release package slug: $package"
+            exit 1
+          }
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            release_version="$(node -p "JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8')).version" "packages/$package/package.json")"
           fi
           echo "SQLBRAID_RELEASE_PACKAGE=$package" >> "$GITHUB_ENV"
           echo "SQLBRAID_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
@@ -171,37 +137,20 @@ jobs:
       - name: Typecheck packages
         run: pnpm run typecheck:packages
       - name: Build packages once
-        if: inputs.release_mode != 'stage' || inputs.prior_run_id == ''
         run: pnpm run build:packages
       - name: Pack immutable release candidate
-        if: inputs.release_mode != 'stage' || inputs.prior_run_id == ''
         env:
           SQLBRAID_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
         run: node scripts/release.mjs --mode pack --artifact-dir "$SQLBRAID_RELEASE_ARTIFACT_DIR"
-      - name: Restore prior validated candidate
-        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
-        run: tar -xzf "$RUNNER_TEMP/prior-validated/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP"
-      - name: Restore prior prepared build and candidate archive
-        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
-        run: |
-          cp "$RUNNER_TEMP/prior-prepared/release-candidate.tar.gz" "$RUNNER_TEMP/release-candidate.tar.gz"
-          cp "$RUNNER_TEMP/prior-prepared/prepared-build.tar.gz" "$RUNNER_TEMP/prepared-build.tar.gz"
       - name: Archive candidate and prepared build
-        if: inputs.release_mode != 'stage' || inputs.prior_run_id == ''
         run: |
           tar -czf "$RUNNER_TEMP/release-candidate.tar.gz" -C "$RUNNER_TEMP" sqlbraid-release-artifacts
           tar -czf "$RUNNER_TEMP/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE" packages/*/dist
       - name: Verify and export certification candidate identity
         env:
           SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
-          SQLBRAID_CERT_EXPECTED_RUN_ID: ${{ inputs.release_mode == 'stage' && inputs.prior_run_id != '' && inputs.prior_run_id || github.run_id }}
-          SQLBRAID_CERT_EXPECTED_CANDIDATE: ${{ inputs.release_mode == 'stage' && inputs.prior_run_id != '' && format('{0}/prior-prepared/candidate.json', runner.temp) || '' }}
-        run: |
-          args=(node scripts/certification.mjs --verify-candidate --source-sha "$GITHUB_SHA" --candidate-dir "$RUNNER_TEMP" --output "$RUNNER_TEMP/candidate.json")
-          if [[ -n "$SQLBRAID_CERT_EXPECTED_CANDIDATE" ]]; then
-            args+=(--expected-candidate "$SQLBRAID_CERT_EXPECTED_CANDIDATE")
-          fi
-          "${args[@]}"
+          SQLBRAID_CERT_EXPECTED_RUN_ID: ${{ github.run_id }}
+        run: node scripts/certification.mjs --verify-candidate --source-sha "$GITHUB_SHA" --candidate-dir "$RUNNER_TEMP" --output "$RUNNER_TEMP/candidate.json"
       - name: Export exact compatibility matrix
         id: compatibility-matrix
         run: |
@@ -704,7 +653,7 @@ jobs:
 
   release-semantic-contracts:
     needs: [release-prep, release-common, release-db, release-browser, release-bun-sql]
-    if: always() && inputs.release_mode != 'recover'
+    if: always() && inputs.release_mode != 'recover' && inputs.release_mode != 'stage'
     name: Require complete semantic contract matrix
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -737,7 +686,7 @@ jobs:
 
   release-support-evidence:
     needs: [release-prep, release-common, release-db, release-browser, release-bun-sql]
-    if: always() && inputs.release_mode != 'recover'
+    if: always() && inputs.release_mode != 'recover' && inputs.release_mode != 'stage'
     name: Aggregate release support evidence
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -781,7 +730,7 @@ jobs:
 
   release-target-evidence:
     needs: release-db
-    if: always() && inputs.release_mode != 'recover'
+    if: always() && inputs.release_mode != 'recover' && inputs.release_mode != 'stage'
     name: Validate additional target evidence
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -873,105 +822,11 @@ jobs:
         run: node scripts/release.mjs --mode preflight
       - name: pnpm stage dry run
         if: env.SQLBRAID_RELEASE_MODE != 'pack-only'
-        env:
-          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
-        shell: bash
-        run: |
-          args=(node scripts/release.mjs --mode stage-dry-run --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
-          if [[ -n "$PRIOR_RUN_ID" ]]; then
-            args+=(--prior-candidate-run-id "$PRIOR_RUN_ID")
-          fi
-          "${args[@]}"
-
-  release-stage:
-    if: github.event_name == 'workflow_dispatch' && inputs.release_mode == 'stage'
-    needs: [release-final, release-prep]
-    name: Stage validated packages with pnpm OIDC
-    env:
-      SQLBRAID_RELEASE_PACKAGE: ${{ needs.release-prep.outputs.release_package }}
-      SQLBRAID_RELEASE_VERSION: ${{ needs.release-prep.outputs.release_version }}
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-    concurrency:
-      group: npm-stage-${{ github.ref }}
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out exact release ref
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: release-candidate-validated
-          path: ${{ runner.temp }}/validated
-      - run: tar -xzf "$RUNNER_TEMP/validated/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP"
-      - name: Download prior staged evidence for explicit reconciliation
-        if: inputs.prior_run_id != ''
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: release-staged-publication
-          path: ${{ runner.temp }}/prior-staged-evidence
-          run-id: ${{ inputs.prior_run_id }}
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-      - name: Verify npm staging preconditions
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
-          REJECTED_STAGES_CONFIRMED: ${{ inputs.rejected_stages_confirmed }}
-        shell: bash
-        run: |
-          args=(node scripts/release.mjs --mode stage-preflight --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
-          if [[ -n "$PRIOR_RUN_ID" ]]; then
-            [[ "$PRIOR_RUN_ID" =~ ^[0-9]+$ ]] || { echo "prior_run_id must be numeric."; exit 1; }
-            args+=(--prior-candidate-run-id "$PRIOR_RUN_ID"
-              --prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json")
-            if [[ "$REJECTED_STAGES_CONFIRMED" == "true" ]]; then
-              args+=(--rejected-stages-confirmed)
-            fi
-          fi
-          "${args[@]}"
-      - name: Mutate npm staging with pnpm OIDC
-        env:
-          SQLBRAID_STAGE_PREFLIGHT_VERIFIED: "true"
-          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
-          REJECTED_STAGES_CONFIRMED: ${{ inputs.rejected_stages_confirmed }}
-        shell: bash
-        run: |
-          args=(node scripts/release.mjs --mode stage --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
-          if [[ -n "$PRIOR_RUN_ID" ]]; then
-            args+=(--prior-candidate-run-id "$PRIOR_RUN_ID"
-              --prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json")
-            if [[ "$REJECTED_STAGES_CONFIRMED" == "true" ]]; then
-              args+=(--rejected-stages-confirmed)
-            fi
-          fi
-          "${args[@]}"
-      - name: Preserve staged publication evidence
-        if: always()
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: release-staged-publication
-          path: |
-            ${{ runner.temp }}/sqlbraid-release-artifacts/staged-publication.json
-            ${{ runner.temp }}/sqlbraid-release-artifacts/release-manifest.json
-          if-no-files-found: error
-          retention-days: 14
+        run: node scripts/release.mjs --mode stage-dry-run --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts"
 
   release-recover:
-    if: github.event_name == 'workflow_dispatch' && inputs.release_mode == 'recover'
-    name: Recover validated packages with pnpm OIDC
+    if: github.event_name == 'workflow_dispatch' && (inputs.release_mode == 'stage' || inputs.release_mode == 'recover')
+    name: ${{ inputs.release_mode == 'stage' && 'Stage validated packages with pnpm OIDC' || 'Recover validated packages with pnpm OIDC' }}
     env:
       SQLBRAID_RECOVERY_TAG: ${{ inputs.candidate_tag }}
       SQLBRAID_RECOVERY_RUN_ID: ${{ inputs.prior_run_id }}
@@ -987,24 +842,37 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Validate explicit recovery authorization
+        env:
+          INPUT_RELEASE_PACKAGE: ${{ inputs.release_package || 'sqlbraid' }}
         shell: bash
         run: |
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
-            echo "Recovery must be dispatched from main."
+            echo "Staging and recovery must be dispatched from main."
             exit 1
           }
           [[ "$SQLBRAID_RECOVERY_RUN_ID" =~ ^[0-9]+$ ]] || {
-            echo "Recovery requires a numeric prior_run_id."
+            echo "Staging and recovery require a numeric prior_run_id."
             exit 1
           }
           [[ "$SQLBRAID_RECOVERY_TAG" =~ ^([a-z0-9][a-z0-9._-]*-)?v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || {
-            echo "Recovery requires an existing version candidate_tag."
+            echo "Staging and recovery require an existing version candidate_tag."
             exit 1
           }
-          [[ "$SQLBRAID_REJECTED_STAGES_CONFIRMED" == "true" ]] || {
-            echo "Recovery requires rejected_stages_confirmed."
-            exit 1
-          }
+          if [[ "$SQLBRAID_RELEASE_MODE" == "recover" ]]; then
+            [[ "$SQLBRAID_REJECTED_STAGES_CONFIRMED" == "true" ]] || {
+              echo "Recovery requires rejected_stages_confirmed."
+              exit 1
+            }
+          else
+            [[ "$INPUT_RELEASE_PACKAGE" != "all" && "$INPUT_RELEASE_PACKAGE" != "*" ]] || {
+              echo "Fresh staging requires one release package."
+              exit 1
+            }
+            [[ "$SQLBRAID_REJECTED_STAGES_CONFIRMED" != "true" && "$SQLBRAID_RECOVERY_TAG" != sqlbraid-v* ]] || {
+              echo "Fresh staging rejects recovery confirmation and sqlbraid-v aliases."
+              exit 1
+            }
+          fi
       - name: Check out exact main tooling commit
         uses: actions/checkout@v7.0.1
         with:
@@ -1026,6 +894,7 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
       - name: Download original staged publication evidence
+        if: inputs.release_mode == 'recover'
         uses: actions/download-artifact@v8.0.1
         with:
           name: release-staged-publication
@@ -1038,18 +907,24 @@ jobs:
       - name: Verify original candidate recovery preconditions
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: >-
-          node scripts/release-recovery.mjs --mode preflight
-          --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts"
-          --prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json"
+        shell: bash
+        run: |
+          args=(node scripts/release-recovery.mjs --mode preflight --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
+          if [[ "$SQLBRAID_RELEASE_MODE" == "recover" ]]; then
+            args+=(--prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json")
+          fi
+          "${args[@]}"
       - name: Mutate npm staging with pnpm OIDC
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SQLBRAID_STAGE_PREFLIGHT_VERIFIED: "true"
-        run: >-
-          node scripts/release-recovery.mjs --mode stage
-          --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts"
-          --prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json"
+        shell: bash
+        run: |
+          args=(node scripts/release-recovery.mjs --mode stage --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
+          if [[ "$SQLBRAID_RELEASE_MODE" == "recover" ]]; then
+            args+=(--prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json")
+          fi
+          "${args[@]}"
       - name: Preserve recovery staged publication evidence
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -1073,20 +948,21 @@ jobs:
   release-draft:
     if: >-
       always() && github.event_name == 'workflow_dispatch' &&
-      inputs.release_mode == 'stage' && needs.release-stage.result == 'success'
-    needs: [release-final, release-stage, release-prep]
+      inputs.release_mode == 'stage' && needs.release-recover.result == 'success'
+    needs: release-recover
     name: Create draft GitHub Release after staging (approval pending)
     env:
-      SQLBRAID_RELEASE_PACKAGE: ${{ needs.release-prep.outputs.release_package }}
-      SQLBRAID_RELEASE_VERSION: ${{ needs.release-prep.outputs.release_version }}
+      SQLBRAID_CANDIDATE_TAG: ${{ inputs.candidate_tag }}
     permissions:
       contents: write
+      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out exact release ref
+      - name: Check out exact main tooling commit
         uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/download-artifact@v8.0.1
         with:
@@ -1101,10 +977,16 @@ jobs:
         with:
           name: support-profile-evidence
           path: ${{ runner.temp }}/support-evidence
+          run-id: ${{ inputs.prior_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
       - uses: actions/download-artifact@v8.0.1
         with:
           name: release-target-evidence
           path: ${{ runner.temp }}/release-target-evidence
+          run-id: ${{ inputs.prior_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
       - name: Create compact durable release evidence
         run: >-
           node scripts/release.mjs --mode durable-evidence
@@ -1118,14 +1000,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          args=(gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft
-            --title "SQLBraid $GITHUB_REF_NAME")
-          if [[ "$SQLBRAID_RELEASE_PACKAGE" == "*" && "$SQLBRAID_RELEASE_VERSION" == "1.0.0" ]]; then
-            args+=(--notes-file docs/SQLBraid_1.0.0_release_notes.md)
-          else
-            args+=(--generate-notes)
-          fi
-          if [[ "$(node scripts/release.mjs --mode release-prerelease-flag --version "$SQLBRAID_RELEASE_VERSION")" == "--prerelease" ]]; then
+          release_version="$(node -p "JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8')).version" "$RUNNER_TEMP/staged-evidence/release-manifest.json")"
+          args=(gh release create "$SQLBRAID_CANDIDATE_TAG" --repo "$GITHUB_REPOSITORY" --draft
+            --title "SQLBraid $SQLBRAID_CANDIDATE_TAG")
+          args+=(--generate-notes)
+          if [[ "$(node scripts/release.mjs --mode release-prerelease-flag --version "$release_version")" == "--prerelease" ]]; then
             args+=(--prerelease)
           fi
           args+=(

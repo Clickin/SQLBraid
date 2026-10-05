@@ -10,33 +10,33 @@ import { setReleasePackage, setReleaseVersion } from "../scripts/release.mjs";
 const directories: string[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
-  setReleasePackage("*");
+  setReleasePackage("sqlbraid");
   setReleaseVersion("0.1.0-rc.0");
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-async function fixture() {
+async function fixture(names = ["@sqlbraid/core"], version = "1.0.2") {
   const directory = await mkdtemp(join(tmpdir(), "sqlbraid-recovery-test-"));
   directories.push(directory);
   const candidateSha = "a".repeat(40);
   const toolSha = "b".repeat(40);
   const bytes = Buffer.from("original validated archive bytes");
   const entry = {
-    name: "@sqlbraid/core",
-    version: "1.0.2",
-    file: "core.tgz",
+    name: names[0],
+    version,
+    file: "package-0.tgz",
     dependencies: [],
     sha256: createHash("sha256").update(bytes).digest("hex"),
     integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
   };
   const manifest = {
     version: entry.version,
-    releasePackages: [entry.name],
+    releasePackages: names,
     commit: candidateSha,
     runId: "123",
     runAttempt: "1",
-    packages: [entry],
+    packages: names.map((name, index) => (index === 0 ? entry : { ...entry, name, file: `package-${index}.tgz` })),
   };
   const report = {
     format: "sqlbraid-staged-publication",
@@ -54,24 +54,22 @@ async function fixture() {
       commit: candidateSha,
       packages: manifest.packages,
     }),
-    latestBefore: { [entry.name]: { latest: "1.0.1" } },
+    latestBefore: Object.fromEntries(names.map((name) => [name, { latest: "0.9.0" }])),
     complete: false,
-    packages: [
-      {
-        name: entry.name,
-        version: entry.version,
-        candidateSha256: entry.sha256,
-        candidateIntegrity: entry.integrity,
-        tag: "latest",
-        state: "pending",
-      },
-    ],
+    packages: manifest.packages.map((item) => ({
+      name: item.name,
+      version: item.version,
+      candidateSha256: item.sha256,
+      candidateIntegrity: item.integrity,
+      tag: "latest",
+      state: "pending",
+    })),
     approvalCommands: [],
   };
   const stamp = {
     version: manifest.version,
     commit: manifest.commit,
-    packages: [{ name: entry.name, sha256: entry.sha256 }],
+    packages: manifest.packages.map(({ name, sha256 }) => ({ name, sha256 })),
   };
   const priorStagedPublication = join(directory, "prior.json");
   const save = async () => {
@@ -79,7 +77,7 @@ async function fixture() {
     await writeFile(priorStagedPublication, JSON.stringify(report));
     await writeFile(join(directory, "pack-check-success.json"), JSON.stringify(stamp));
   };
-  await writeFile(join(directory, entry.file), bytes);
+  await Promise.all(manifest.packages.map((item) => writeFile(join(directory, item.file), bytes)));
   await save();
   const env: Record<string, string> = {
     GITHUB_ACTIONS: "true",
@@ -92,7 +90,7 @@ async function fixture() {
     GITHUB_RUN_ATTEMPT: "1",
     SQLBRAID_RELEASE_MODE: "recover",
     SQLBRAID_RECOVERY_RUN_ID: "123",
-    SQLBRAID_RECOVERY_TAG: "v1.0.2",
+    SQLBRAID_RECOVERY_TAG: `v${version}`,
     SQLBRAID_REJECTED_STAGES_CONFIRMED: "true",
     SQLBRAID_STAGE_PREFLIGHT_VERIFIED: "true",
     ACTIONS_ID_TOKEN_REQUEST_URL: "https://oidc.actions.example/token",
@@ -111,7 +109,7 @@ async function fixture() {
     head_repository: { full_name: env.GITHUB_REPOSITORY },
     path: ".github/workflows/release.yml",
     head_sha: candidateSha,
-    head_branch: "v1.0.2",
+    head_branch: `v${version}`,
     status: "completed",
     conclusion: "failure",
     event: "workflow_dispatch",
@@ -141,7 +139,7 @@ async function fixture() {
     packedName: entry.name,
     packedDependencies: {},
     failUpload: false,
-    gateBranch: "v1.0.2",
+    gateBranch: `v${version}`,
   };
   const commands: string[][] = [];
   const requests: string[] = [];
@@ -151,6 +149,7 @@ async function fixture() {
     let body;
     if (url.endsWith("/runs/123")) body = run;
     else if (url.includes("/runs/123/attempts/1/jobs")) body = { jobs };
+    else if (url.includes("/actions/workflows/release.yml/runs")) body = { workflow_runs: [] };
     else if (url.includes("/actions/workflows/")) {
       const workflow = url.includes("runtime-portability") ? "runtime-portability.yml" : "docs-pages.yml";
       assert.ok(url.includes(`head_sha=${candidateSha}`));
@@ -175,13 +174,14 @@ async function fixture() {
     if (file === "git") {
       if (args[0] === "status") return behavior.dirty;
       if (args[1] === "HEAD") return behavior.head;
-      assert.deepEqual(args, ["rev-parse", "--verify", "refs/tags/v1.0.2^{commit}"]);
+      assert.deepEqual(args, ["rev-parse", "--verify", `refs/tags/${env.SQLBRAID_RECOVERY_TAG}^{commit}`]);
       return behavior.tag;
     }
     if (file === "tar") {
+      const packed = manifest.packages.find((item) => args[1] === join(directory, item.file))!;
       if (args[0] === "-xOf")
         return JSON.stringify({
-          name: behavior.packedName,
+          name: packed === entry ? behavior.packedName : packed.name,
           version: entry.version,
           dependencies: behavior.packedDependencies,
         });
@@ -192,19 +192,20 @@ async function fixture() {
       if (args[0] === "config") return "https://registry.npmjs.org/";
       if (args[0] === "ping") return "";
       if (args[0] === "view") {
-        if (args[2] === "versions") return JSON.stringify(["1.0.1"]);
-        if (args[2] === "dist-tags") return JSON.stringify({ latest: "1.0.1" });
+        if (args[2] === "versions") return JSON.stringify(["0.9.0"]);
+        if (args[2] === "dist-tags") return JSON.stringify({ latest: "0.9.0" });
         if (args[2] === "dist.integrity" || args[2] === "version") return "null";
       }
       if (args[0] === "stage" && args[1] === "publish") {
-        assert.equal(args[2], join(directory, entry.file));
+        const staged = manifest.packages.find((item) => args[2] === join(directory, item.file));
+        assert.ok(staged);
         assert.deepEqual(await readFile(args[2]), bytes);
         if (behavior.failUpload) throw new Error("upload interrupted");
         return JSON.stringify({
-          [entry.name]: {
-            name: entry.name,
-            version: entry.version,
-            integrity: entry.integrity,
+          [staged.name]: {
+            name: staged.name,
+            version: staged.version,
+            integrity: staged.integrity,
             stageId: "00000000-0000-0000-0000-000000000001",
           },
         });
@@ -213,7 +214,14 @@ async function fixture() {
     throw new Error(`Unexpected command ${file} ${args.join(" ")}`);
   };
   const recover = (mode: "preflight" | "stage" = "preflight") =>
-    recoverRelease({ mode, artifactDir: directory, priorStagedPublication, env, request, command });
+    recoverRelease({
+      mode,
+      artifactDir: directory,
+      priorStagedPublication: env.SQLBRAID_RELEASE_MODE === "recover" ? priorStagedPublication : undefined,
+      env,
+      request,
+      command,
+    });
   const uploads = () => commands.filter(([file, cmd]) => file === "pnpm" && cmd === "stage");
   return {
     directory,
@@ -240,7 +248,7 @@ async function fixture() {
 test("recovery preflight verifies original failed stage run and exact tag gates without npm commands", async () => {
   const f = await fixture();
   const evidence = await f.recover();
-  assert.ok(evidence && "tool" in evidence);
+  assert.ok(evidence && "candidate" in evidence);
   assert.equal(evidence.tool.sha, f.env.GITHUB_SHA);
   assert.equal(evidence.candidate.sha, f.manifest.commit);
   assert.equal(
@@ -256,7 +264,7 @@ test.each([
   ["wrong main ref", "GITHUB_REF", "refs/tags/v1.0.2"],
   ["wrong event", "GITHUB_EVENT_NAME", "push"],
   ["not Actions", "GITHUB_ACTIONS", "false"],
-  ["wrong mode", "SQLBRAID_RELEASE_MODE", "stage"],
+  ["wrong mode", "SQLBRAID_RELEASE_MODE", "certify"],
   ["missing rejection", "SQLBRAID_REJECTED_STAGES_CONFIRMED", "false"],
   ["invalid SHA", "GITHUB_SHA", "abc"],
   ["invalid run", "GITHUB_RUN_ID", "0"],
@@ -493,4 +501,105 @@ test("recovery rejects forged prior main-tool provenance before any further uplo
   const uploadsBefore = f.uploads().length;
   await assert.rejects(f.recover("stage"), /mismatched tool or candidate provenance/);
   assert.equal(f.uploads().length, uploadsBefore);
+});
+
+test.each(["1.0.0", "1.0.2", "2.3.4"])(
+  "coordinated recovery trusts original selected artifacts and provenance at %s",
+  async (version) => {
+    const f = await fixture(["@sqlbraid/core", "sqlbraid"], version);
+    const evidence = await f.recover("stage");
+    assert.ok(evidence && "packages" in evidence);
+    assert.deepEqual(
+      evidence.packages.map(({ name }) => name),
+      ["@sqlbraid/core", "sqlbraid"],
+    );
+    assert.equal(f.uploads().length, 2);
+    assert.deepEqual(JSON.parse(await readFile(join(f.directory, "release-manifest.json"), "utf8")), f.manifest);
+  },
+);
+
+test.each(["sqlbraid", "@sqlbraid/core"])("fresh main staging uploads only the certified %s artifact", async (name) => {
+  const f = await fixture([name], "2.3.4");
+  f.env.SQLBRAID_RELEASE_MODE = "stage";
+  f.env.SQLBRAID_REJECTED_STAGES_CONFIRMED = "false";
+  f.env.SQLBRAID_RECOVERY_TAG = name === "sqlbraid" ? "v2.3.4" : "core-v2.3.4";
+  f.run.head_branch = f.env.SQLBRAID_RECOVERY_TAG;
+  f.run.event = "push";
+  f.run.conclusion = "success";
+  f.behavior.gateBranch = f.env.SQLBRAID_RECOVERY_TAG;
+  f.jobs.splice(1);
+  await f.recover();
+  assert.equal(f.uploads().length, 0);
+  const evidence = await f.recover("stage");
+  assert.ok(evidence && "packages" in evidence);
+  assert.equal(evidence.mode, "fresh");
+  assert.equal(evidence.tool?.sha, f.env.GITHUB_SHA);
+  assert.equal(evidence.commit, f.manifest.commit);
+  assert.equal(evidence.candidateRunId, "123");
+  assert.equal(evidence.rejectedStagesConfirmation, undefined);
+  assert.deepEqual(
+    evidence.packages.map((item) => item.name),
+    [name],
+  );
+  assert.equal(f.uploads().length, 1);
+  assert.deepEqual(await readFile(join(f.directory, f.entry.file)), f.bytes);
+});
+
+test.each<[string, string[]]>([
+  ["v1.0.2", ["@sqlbraid/core", "sqlbraid"]],
+  ["v1.0.2", ["@sqlbraid/core"]],
+  ["sqlbraid-v1.0.2", ["sqlbraid"]],
+  ["core-v1.0.2", ["sqlbraid"]],
+])("fresh staging rejects mismatched or noncanonical candidate %s / %s", async (tag, names) => {
+  const f = await fixture(names);
+  f.env.SQLBRAID_RELEASE_MODE = "stage";
+  f.env.SQLBRAID_REJECTED_STAGES_CONFIRMED = "false";
+  f.env.SQLBRAID_RECOVERY_TAG = tag;
+  await assert.rejects(f.recover("stage"), /canonical|selected release package/);
+  assert.equal(f.uploads().length, 0);
+});
+
+test("fresh staging requires the producer run, not an unrelated artifact download run", async () => {
+  const f = await fixture(["sqlbraid"]);
+  f.env.SQLBRAID_RELEASE_MODE = "stage";
+  f.env.SQLBRAID_REJECTED_STAGES_CONFIRMED = "false";
+  f.env.SQLBRAID_RECOVERY_RUN_ID = "999";
+  await assert.rejects(f.recover("stage"), /original certified candidate producer/);
+  assert.equal(f.uploads().length, 0);
+});
+
+test("recovery of a failed fresh main stage retains original producer and validates staging tool provenance", async () => {
+  const f = await fixture(["sqlbraid"]);
+  f.env.SQLBRAID_RELEASE_MODE = "stage";
+  f.env.SQLBRAID_REJECTED_STAGES_CONFIRMED = "false";
+  f.behavior.failUpload = true;
+  await assert.rejects(f.recover("stage"), /outcome unresolved/);
+  const prior = await readFile(join(f.directory, "staged-publication.json"));
+  await writeFile(f.priorStagedPublication, prior);
+  await rm(join(f.directory, "staged-publication.json"));
+  f.env.SQLBRAID_RELEASE_MODE = "recover";
+  f.env.SQLBRAID_REJECTED_STAGES_CONFIRMED = "true";
+  f.env.SQLBRAID_RECOVERY_RUN_ID = "456";
+  f.env.GITHUB_RUN_ID = "789";
+  f.behavior.failUpload = false;
+  const request: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/runs/456"))
+      return new Response(JSON.stringify({ ...f.run, id: 456, head_sha: f.env.GITHUB_SHA, head_branch: "main" }));
+    if (url.includes("/runs/456/attempts/1/jobs"))
+      return new Response(JSON.stringify({ jobs: [{ ...f.jobs[1], run_id: 456, head_sha: f.env.GITHUB_SHA }] }));
+    return f.request(input, init);
+  };
+  const evidence = await recoverRelease({
+    mode: "stage",
+    artifactDir: f.directory,
+    priorStagedPublication: f.priorStagedPublication,
+    env: f.env,
+    command: f.command,
+    request,
+  });
+  assert.ok(evidence && "recovery" in evidence);
+  assert.equal(evidence.candidateRunId, "123");
+  assert.equal(evidence.reconciledFrom?.runId, "456");
+  assert.equal(evidence.rejectedStagesConfirmation?.confirmed, true);
 });

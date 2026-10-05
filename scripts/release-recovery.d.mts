@@ -23,8 +23,8 @@ export interface RecoveryEvidence {
 export declare function recoverRelease(options: {
   mode: "preflight" | "stage";
   artifactDir: string;
-  priorStagedPublication: string;
+  priorStagedPublication?: string;
   env?: Record<string, string | undefined>;
   request?: typeof fetch;
   command?: Parameters<typeof setReleaseCommand>[0];
-}): Promise<RecoveryEvidence | (StagedPublication & { recovery: RecoveryEvidence }) | undefined>;
+}): Promise<RecoveryEvidence | StagedPublication | (StagedPublication & { recovery: RecoveryEvidence }) | undefined>;

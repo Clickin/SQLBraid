@@ -146,10 +146,6 @@ test("staging rejects a prior npm mutation but ignores a preflight-only failure"
     "/repos/Clickin/SQLBraid/actions/runs/111/jobs",
   ]);
   await assert.doesNotReject(
-    assertNoPriorStageAttempt({ ...stageHistoryEnv, GITHUB_RUN_ATTEMPT: "2" }, request, { allowReconciliation: true }),
-  );
-
-  await assert.doesNotReject(
     assertNoPriorStageAttempt(stageHistoryEnv, async (url) => {
       if (url.pathname.endsWith("/runs")) return Response.json({ workflow_runs: [priorRun] });
       return Response.json({
@@ -198,5 +194,127 @@ test("staging history fails closed on API errors and treats skipped stage jobs a
         ],
       });
     }),
+  );
+});
+
+test("the sqlbraid-v alias never authorizes release workflow gates", async () => {
+  await assert.rejects(
+    assertReleaseWorkflows({ ...env, GITHUB_REF: "refs/tags/sqlbraid-v1.2.3" }, async () => {
+      throw new Error("Alias must be rejected before fetching evidence.");
+    }),
+    /requires an exact tag/,
+  );
+});
+
+test.each(["Stage", "Recover"])("history rejects a prior main %s mutation across tooling SHAs", async (kind) => {
+  await assert.rejects(
+    assertNoPriorStageAttempt(stageHistoryEnv, async (url) => {
+      if (url.pathname.endsWith("/runs")) {
+        assert.equal(url.searchParams.has("head_sha"), false);
+        return Response.json({
+          workflow_runs: [
+            {
+              id: 111,
+              head_sha: "b".repeat(40),
+              head_branch: "main",
+              display_title: "Release v0.1.0-rc.0",
+              event: "workflow_dispatch",
+              status: "completed",
+            },
+          ],
+        });
+      }
+      return Response.json({
+        jobs: [
+          {
+            name: `${kind} validated packages with pnpm OIDC`,
+            steps: [{ name: "Mutate npm staging with pnpm OIDC", status: "completed", conclusion: "failure" }],
+          },
+        ],
+      });
+    }),
+    /Prior npm staging mutation/,
+  );
+});
+
+test("history blocks an unresolved same-candidate main run but ignores another candidate", async () => {
+  const priorRun = {
+    id: 111,
+    head_sha: "b".repeat(40),
+    head_branch: "main",
+    display_title: "Release v0.1.0-rc.0",
+    event: "workflow_dispatch",
+    status: "in_progress",
+  };
+  await assert.rejects(
+    assertNoPriorStageAttempt(stageHistoryEnv, async () => Response.json({ workflow_runs: [priorRun] })),
+    /unresolved/,
+  );
+  priorRun.display_title = "Release core-v1.2.3";
+  await assert.doesNotReject(
+    assertNoPriorStageAttempt(stageHistoryEnv, async () => Response.json({ workflow_runs: [priorRun] })),
+  );
+});
+
+const legacyRun = {
+  id: 37266867709,
+  head_sha: "b".repeat(40),
+  head_branch: "main",
+  display_title: "Release",
+  event: "workflow_dispatch",
+  status: "completed",
+  run_attempt: 1,
+};
+const legacyHistory = async (url: URL) =>
+  url.pathname.endsWith("/runs")
+    ? Response.json({ workflow_runs: [legacyRun] })
+    : Response.json({
+        jobs: [
+          {
+            name: "Recover validated packages with pnpm OIDC",
+            steps: [{ name: "Mutate npm staging with pnpm OIDC", status: "completed", conclusion: "success" }],
+          },
+        ],
+      });
+const legacyEvidence = () => ({
+  tool: {
+    repository: env.GITHUB_REPOSITORY,
+    sha: legacyRun.head_sha,
+    ref: "refs/heads/main",
+    runId: String(legacyRun.id),
+    runAttempt: "1",
+  },
+  candidate: { ref: "refs/tags/v1.0.2", sha },
+  rejectedStagesConfirmed: true,
+});
+
+test.each(["v1.0.3", "postgres-v1.0.3"])("legacy v1.0.2 recovery does not block %s", async (tag) => {
+  await assert.doesNotReject(
+    assertNoPriorStageAttempt({ ...stageHistoryEnv, GITHUB_REF: `refs/tags/${tag}` }, legacyHistory, async () =>
+      legacyEvidence(),
+    ),
+  );
+});
+
+test("legacy recovery still blocks its own candidate and rejects unverified evidence", async () => {
+  await assert.rejects(
+    assertNoPriorStageAttempt({ ...stageHistoryEnv, GITHUB_REF: "refs/tags/v1.0.2" }, legacyHistory, async () =>
+      legacyEvidence(),
+    ),
+    /Prior npm staging mutation/,
+  );
+  await assert.rejects(
+    assertNoPriorStageAttempt(stageHistoryEnv, legacyHistory, async () => {
+      const evidence = legacyEvidence();
+      evidence.tool.runId = "999";
+      return evidence;
+    }),
+    /candidate evidence/,
+  );
+  await assert.rejects(
+    assertNoPriorStageAttempt(stageHistoryEnv, legacyHistory, async () => {
+      throw new Error("Artifact expired");
+    }),
+    /Artifact expired/,
   );
 });
