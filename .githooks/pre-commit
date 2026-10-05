@@ -1,0 +1,5 @@
+#!/bin/sh
+# Same checks as the CI "Formatting and lint" job. Bypass once with `git commit --no-verify`.
+set -e
+pnpm run --silent fmt:check
+pnpm run --silent lint

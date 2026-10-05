@@ -84,6 +84,7 @@
     "test:certification:stress": "node scripts/certification.mjs --stress",
     "lint": "oxlint . --deny-warnings",
     "lint:fix": "oxlint . --fix",
+    "prepare": "node scripts/install-git-hooks.mjs",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check .",
     "dependency:ownership": "node scripts/validate-dependency-ownership.mjs"
