@@ -106,11 +106,6 @@
         "driver": {
           "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/driver" }]
         },
-        "peers": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": { "$ref": "#/$defs/driver" }
-        },
         "smoke": { "$ref": "#/$defs/smoke" },
         "releaseBlocking": {
           "type": "boolean"

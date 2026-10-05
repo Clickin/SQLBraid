@@ -139,14 +139,6 @@ async function validateRuntimeCompatibility({ root = scriptRoot } = {}) {
         fail("RUNTIME_COMPATIBILITY_DRIVER", `${cell.id} has an unregistered driver ${cell.driver.package}.`);
       }
     }
-    for (const peer of cell.peers ?? []) {
-      assertExactVersion(peer.version, `${cell.id}.peers.${peer.package}`);
-      if (!cell.packages.some((name) => packages.get(name)?.peerDependenciesMeta?.[peer.package]?.optional === true))
-        fail(
-          "RUNTIME_COMPATIBILITY_PEER",
-          `${cell.id} installs ${peer.package}, which no cell package declares as an optional peer.`,
-        );
-    }
     const smokePath = join(root, cell.smoke.entrypoint);
     try {
       await access(smokePath);

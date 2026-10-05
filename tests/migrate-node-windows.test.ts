@@ -1,101 +1,38 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { test, vi } from "vitest";
-import { loadMigrations } from "../packages/migrate/src/node.js";
+import { join, win32 } from "node:path";
+import { test } from "vitest";
+import { generateManifestModule } from "../packages/migrate/src/node.js";
+import { relativeSpecifier } from "../packages/migrate/src/sources.js";
 
-interface ResolveArgs {
-  readonly path: string;
-  readonly importer: string;
-  readonly namespace: string;
-  readonly resolveDir: string;
-  readonly kind: string;
-  readonly pluginData: unknown;
-  readonly with: Record<string, string>;
-}
-type ResolveResult = { readonly external?: boolean } | null | undefined;
-interface ResolveHandler {
-  readonly filter: RegExp;
-  readonly callback: (args: ResolveArgs) => ResolveResult | Promise<ResolveResult>;
-}
-interface Plugin {
-  readonly name: string;
-  setup(builder: unknown): unknown;
-}
-interface BuildOptions {
-  readonly plugins?: readonly Plugin[];
-}
-
-const builds = vi.hoisted((): BuildOptions[] => []);
-
-// esbuild belongs to @sqlbraid/migrate, so mock the copy that the migration loader resolves.
-vi.mock("../packages/migrate/node_modules/esbuild", async (importOriginal) => {
-  const actual = await importOriginal<{ build(options: BuildOptions): Promise<unknown> }>();
-  return {
-    ...actual,
-    build: (options: BuildOptions) => {
-      builds.push(options);
-      return actual.build(options);
-    },
-  };
+test("manifest import specifiers use forward slashes relative to a Windows output file", () => {
+  assert.equal(relativeSpecifier("C:\\proj\\migrations", "C:\\proj\\migrations\\V1__ts.ts", win32), "./V1__ts.ts");
+  assert.equal(
+    relativeSpecifier("C:\\proj\\src", "C:\\proj\\migrations\\2026\\V2__ts.ts", win32),
+    "../migrations/2026/V2__ts.ts",
+  );
+  assert.equal(relativeSpecifier("c:\\proj\\src", "C:\\Proj\\migrations\\V3__ts.ts", win32), "../migrations/V3__ts.ts");
+  assert.throws(() => relativeSpecifier("C:\\proj\\src", "D:\\proj\\migrations\\V1__ts.ts", win32), {
+    code: "BRAID_MIGRATE_SOURCE",
+  });
 });
 
-async function resolveHandlers(plugins: readonly Plugin[]): Promise<ResolveHandler[]> {
-  const handlers: ResolveHandler[] = [];
-  const builder = {
-    onResolve: (options: { filter: RegExp }, callback: ResolveHandler["callback"]) => {
-      handlers.push({ filter: options.filter, callback });
-    },
-    onLoad: () => undefined,
-    onStart: () => undefined,
-    onEnd: () => undefined,
-    onDispose: () => undefined,
-    resolve: async (path: string) => ({
-      path,
-      external: false,
-      errors: [],
-      warnings: [],
-      namespace: "file",
-      suffix: "",
-      sideEffects: true,
-      pluginData: undefined,
-    }),
-    initialOptions: {},
-  };
-  await Promise.all(plugins.map((plugin) => plugin.setup(builder)));
-  return handlers;
-}
-
-test("TypeScript migration loading keeps Windows absolute entry paths inside the bundle", async () => {
-  const path = await mkdtemp(join(tmpdir(), "sqlbraid-migrations-windows-"));
+test("generated manifests import TypeScript lazily relative to the output file", async () => {
+  const path = await mkdtemp(join(tmpdir(), "sqlbraid-migrations-specifier-"));
   try {
-    await writeFile(join(path, "V1__ts.ts"), "export default async () => {};");
-    const manifest = await loadMigrations(path, { dialects: ["sqlite"] });
-    builds.length = 0;
-    assert.equal(typeof (await manifest.dialects.sqlite!.versioned[0]!.load()), "function");
-    const plugins = builds.flatMap((options) => options.plugins ?? []);
-    assert.ok(plugins.length > 0, "the Node loader must bundle through esbuild plugins");
-    const handlers = await resolveHandlers(plugins);
-    const cases = ["C:\\proj\\migrations\\V2__x.ts", "D:/proj/migrations/V2__x.ts"].flatMap((windowsPath) =>
-      (["entry-point", "import-statement"] as const).flatMap((kind) =>
-        handlers
-          .filter((handler) => handler.filter.test(windowsPath))
-          .map(async (handler) => {
-            const result = await handler.callback({
-              path: windowsPath,
-              importer: kind === "entry-point" ? "" : "C:\\proj\\migrations\\V1__ts.ts",
-              namespace: "file",
-              resolveDir: "C:\\proj\\migrations",
-              kind,
-              pluginData: undefined,
-              with: {},
-            });
-            assert.notEqual(result?.external, true, `${kind} ${windowsPath} must not become an external import`);
-          }),
-      ),
+    await mkdir(join(path, "migrations", "nested"), { recursive: true });
+    await writeFile(join(path, "migrations", "nested", "V1__ts.ts"), "export default async () => {};");
+    const outfile = join(path, "src", "migrations.mjs");
+    const code = await generateManifestModule(join(path, "migrations"), { dialects: ["sqlite"], outfile });
+    assert.ok(code.includes('async () => (await import("../migrations/nested/V1__ts.ts")).default'), code);
+    assert.ok(!/^\s*import\s/mu.test(code), "TypeScript migrations must not use static imports");
+    const local = await generateManifestModule(join(path, "migrations"), { dialects: ["sqlite"] });
+    assert.ok(local.includes('import("./nested/V1__ts.ts")'), local);
+    assert.equal(
+      await readFile(join(path, "migrations", "nested", "V1__ts.ts"), "utf8"),
+      "export default async () => {};",
     );
-    await Promise.all(cases);
   } finally {
     await rm(path, { recursive: true, force: true });
   }

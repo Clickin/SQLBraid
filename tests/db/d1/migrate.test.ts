@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { build as viteBuild } from "vite";
 import { Miniflare } from "miniflare";
+import sqlbraid from "@sqlbraid/vite";
+import { generateManifestModule } from "@sqlbraid/migrate/node";
 import { docsClaim } from "../docs-claims.js";
 
 docsClaim(
@@ -60,6 +62,85 @@ docsClaim(
     } finally {
       if (worker !== undefined) await worker.dispose();
       await rm(outputDirectory, { recursive: true, force: true });
+    }
+  },
+);
+
+docsClaim(
+  "packages/migrate/README.md",
+  "A generated manifest with SQL and guarded TypeScript migrations bundles and applies on D1",
+  async () => {
+    const project = await mkdtemp(resolve(import.meta.dirname, "../../.d1-manifest-"));
+    const outputDirectory = join(project, "out");
+    let worker: Miniflare | undefined;
+    try {
+      await mkdir(join(project, "migrations"));
+      await writeFile(join(project, "migrations/V1__create.sql"), "CREATE TABLE items (value TEXT);\n");
+      await writeFile(
+        join(project, "migrations/V2__seed.ts"),
+        `import { sql } from "@sqlbraid/sqlite";
+import { defineMigration } from "@sqlbraid/migrate";
+import type { Database } from "@sqlbraid/core";
+const label: string = "typed";
+export default defineMigration(async (db: Database) => {
+  const extra = false;
+  await db.execute(sql.command\`INSERT INTO items (value) VALUES (\${label}) /*@braid if \${extra}*/ , (\${"never"}) /*@braid end*/\`);
+});
+`,
+      );
+      const outfile = join(project, "src/manifest.mjs");
+      await mkdir(join(project, "src"));
+      await writeFile(
+        outfile,
+        await generateManifestModule(join(project, "migrations"), { dialects: ["sqlite"], outfile }),
+      );
+      await writeFile(
+        join(project, "src/worker.mjs"),
+        `import { createD1Database } from "@sqlbraid/sqlite/d1";
+import { dialect, sql } from "@sqlbraid/sqlite";
+import { createMigrator } from "@sqlbraid/migrate";
+import manifest from "./manifest.mjs";
+export default {
+  async fetch(_request, env) {
+    const db = createD1Database(env.DB);
+    const status = (await createMigrator({ dialect, manifest }).up(db)).status;
+    return Response.json({ status, rows: await db.all(sql.rows\`SELECT value FROM items\`) });
+  },
+};
+`,
+      );
+      await viteBuild({
+        configFile: false,
+        root: project,
+        plugins: [sqlbraid()],
+        resolve: { conditions: ["workerd", "browser", "import"] },
+        build: {
+          lib: { entry: join(project, "src/worker.mjs"), formats: ["es"], fileName: () => "worker.mjs" },
+          outDir: outputDirectory,
+          emptyOutDir: true,
+          rollupOptions: { external: ["node:async_hooks"], output: { codeSplitting: false } },
+        },
+        ssr: { noExternal: true },
+        logLevel: "silent",
+      });
+      worker = new Miniflare({
+        workers: [
+          {
+            compatibilityDate: "2026-07-30",
+            compatibilityFlags: ["nodejs_compat"],
+            modulesRoot: outputDirectory,
+            modules: [{ type: "ESModule", path: join(outputDirectory, "worker.mjs") }],
+            d1Databases: ["DB"],
+          },
+        ],
+      });
+      const response = await worker.dispatchFetch("http://sqlbraid.test/migrate");
+      const body = await response.text();
+      assert.equal(response.status, 200, body);
+      assert.deepEqual(JSON.parse(body), { status: "current", rows: [{ value: "typed" }] });
+    } finally {
+      if (worker !== undefined) await worker.dispose();
+      await rm(project, { recursive: true, force: true });
     }
   },
 );

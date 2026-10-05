@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createClient } from "@libsql/client";
 import { createLibsqlDatabase } from "@sqlbraid/sqlite/libsql";
 import { dialect, sql } from "@sqlbraid/sqlite";
 import { createMigrator } from "@sqlbraid/migrate";
-import { loadMigrations } from "@sqlbraid/migrate/node";
+import { generateManifestModule, loadMigrations } from "@sqlbraid/migrate/node";
 import { createSchemaDrift } from "@sqlbraid/migrate/drift";
 
 const directory = await mkdtemp(join(process.cwd(), "migration-smoke-"));
@@ -14,18 +15,13 @@ try {
   const sources = join(directory, "migrations");
   await mkdir(sources);
   await writeFile(join(sources, "V001__create.sql"), "CREATE TABLE users (name TEXT NOT NULL);\n");
-  await writeFile(
-    join(sources, "V002__seed.ts"),
-    `
-    import { sql } from "@sqlbraid/sqlite";
-    import { defineMigration } from "@sqlbraid/migrate";
-    export default defineMigration(async (db) => {
-      await db.execute(sql.command\`INSERT INTO users (name) VALUES (\${"Alice"})\`);
-    });
-  `,
-  );
+  await writeFile(join(sources, "V002__seed.sql"), "INSERT INTO users (name) VALUES ('Alice');\n");
   const db = createLibsqlDatabase(client, { intMode: "string" });
-  const manifest = await loadMigrations(sources, { dialects: ["sqlite"] });
+  const loaded = await loadMigrations(sources, { dialects: ["sqlite"] });
+  const outfile = join(directory, "manifest.mjs");
+  await writeFile(outfile, await generateManifestModule(sources, { dialects: ["sqlite"], outfile }));
+  const { default: manifest } = await import(pathToFileURL(outfile).href);
+  assert.equal(manifest.dialects.sqlite.hash, loaded.dialects.sqlite.hash);
   const drift = createSchemaDrift({
     inspector: {
       dialect: "sqlite",
@@ -58,7 +54,9 @@ try {
   assert.equal((await migrator.startup(db, { schema: "hash" })).status, "current");
   await db.execute(sql.command`ALTER TABLE users ADD COLUMN email TEXT`);
   await assert.rejects(migrator.startup(db, { schema: "hash" }), { code: "BRAID_MIGRATE_SCHEMA_DRIFT" });
-  console.info("PASS packed migrations: SQL + TypeScript apply, startup verify, exactly-once history, schema drift");
+  console.info(
+    "PASS packed migrations: SQL files + generated manifest apply, startup verify, exactly-once history, schema drift",
+  );
 } finally {
   client.close();
   await rm(directory, { recursive: true, force: true });

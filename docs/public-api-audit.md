@@ -341,13 +341,15 @@ interchangeable:
 - `@sqlbraid/metadata`: snapshots, validation, hashing, drift and the model for inspectors.
 - `@sqlbraid/migrate`: optional `createMigrator`, `defineMigration`, manifest and
   report types, `MigrationError` and `MigrationStartupError`. Its `/node` subpath
-  loads sources and generates manifests; `/vite` supplies server-only manifests;
+  loads sources and generates plain ESM manifests without a bundler; `/vite`
+  supplies server-only manifests;
   `/drift` adapts a metadata inspector. Runtime packages do not depend on it.
 - `@sqlbraid/codegen`: the pure `generateModels` and deterministic model source.
 - `@sqlbraid/tooling`: Node-first services for config, workspace and evidence.
 - `@sqlbraid/operations`: fingerprints and declaration manifests.
 - `@sqlbraid/cli`: the optional entry point for the CLI process. Install it
   separately for the codegen, inspect, diagnostics, drift and migrate commands.
+  The migrate commands load the optional `@sqlbraid/migrate` peer only when they run.
 - `@sqlbraid/language-server`: an embedded service and the standard stdio LSP transport.
 
 Runtime packages do not get metadata, compiler, codegen, tooling, editor or Vite

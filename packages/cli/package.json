@@ -44,10 +44,19 @@
     "@sqlbraid/compiler": "workspace:^1.0.0",
     "@sqlbraid/core": "workspace:^1.0.0",
     "@sqlbraid/metadata": "workspace:^1.0.0",
-    "@sqlbraid/migrate": "workspace:^0.1.0",
     "@sqlbraid/operations": "workspace:^1.0.0",
-    "@sqlbraid/tooling": "workspace:^1.0.0",
-    "esbuild": "0.21.5"
+    "@sqlbraid/tooling": "workspace:^1.0.0"
+  },
+  "devDependencies": {
+    "@sqlbraid/migrate": "workspace:^0.1.0"
+  },
+  "peerDependencies": {
+    "@sqlbraid/migrate": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@sqlbraid/migrate": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=22.18.0"

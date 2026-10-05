@@ -42,10 +42,9 @@
         "@sqlbraid/migrate"
       ],
       "driver": { "package": "@libsql/client", "version": "0.18.0" },
-      "peers": [{ "package": "esbuild", "version": "0.21.5" }],
       "smoke": { "entrypoint": "tests/scripts/migrate-consumer.mjs" },
       "releaseBlocking": true,
-      "reason": "Packed migration runtime, SQL/TypeScript loading with the optional esbuild peer, and optional schema drift with a real SQLite database."
+      "reason": "Packed migration runtime, SQL loading, a pre-generated manifest and optional schema drift with a real SQLite database."
     },
     {
       "id": "node-16-20-2-runtime",

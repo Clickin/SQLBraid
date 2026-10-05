@@ -21,6 +21,7 @@ import {
 } from "../packages/migrate/src/node.js";
 import type { MigrationManifest } from "../packages/migrate/src/types.js";
 import migrations from "../packages/migrate/src/vite.js";
+import sqlbraid from "@sqlbraid/vite";
 
 async function directory(files: Readonly<Record<string, string>>): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), "sqlbraid-migrations-"));
@@ -161,7 +162,7 @@ test("duplicate canonical versions and SQL/TS variants are rejected", async () =
   }
 });
 
-test("Node TS loading erases types, bundles relative helpers and stays lazy", async () => {
+test("Node TS loading imports through the host runtime, resolves .ts helpers and stays lazy", async () => {
   const path = await directory({
     "V1__typescript.ts":
       'import { value } from "./helper.ts"; export default async (db: { values: number[] }): Promise<void> => { db.values.push(value); };',
@@ -180,7 +181,7 @@ test("Node TS loading erases types, bundles relative helpers and stays lazy", as
   }
 });
 
-test("Node TS loading resolves ESM-only dependencies without require hooks", async () => {
+test("Node TS loading resolves ESM-only dependencies from the migration file", async () => {
   const path = await directory({
     "V1__esm.ts":
       'import value from "migration-esm"; export default async (db: { values: number[] }) => { db.values.push(value); };',
@@ -205,11 +206,11 @@ test("Node TS loading resolves ESM-only dependencies without require hooks", asy
   }
 });
 
-test("Node rejects guarded TS while generated ESM lowers it through the compiler", async () => {
+test("Node rejects guarded TS before import; the Vite plugin needs @sqlbraid/vite to lower it", async () => {
   const path = await mkdtemp(join(process.cwd(), ".migration-guard-"));
   await writeFile(
     join(path, "V1__guard.ts"),
-    'import { sql } from "@sqlbraid/sqlite"; export default async (db: { execute(query: unknown): Promise<void> }) => { await db.execute(sql.command`UPDATE t SET a=1 /*@braid if ${false}*/ WHERE a=${(() => { throw new Error("inactive branch"); })()} /*@braid end*/`); };',
+    'import { sql } from "@sqlbraid/sqlite"; globalThis.__guardImported = true; export default async (db: { execute(query: unknown): Promise<void> }) => { await db.execute(sql.command`UPDATE t SET a=1 /*@braid if ${false}*/ WHERE a=${(() => { throw new Error("inactive branch"); })()} /*@braid end*/`); };',
   );
   const native = new DatabaseSync(":memory:");
   try {
@@ -218,23 +219,46 @@ test("Node rejects guarded TS while generated ESM lowers it through the compiler
       manifest.dialects.sqlite!.versioned[0]!.load(),
       (error: unknown) => error instanceof Error && /Guarded SQL directives.*ordinary tags only/su.test(error.message),
     );
-    const generated = await generateManifestModule(path, { dialects: ["sqlite"] });
-    const output = join(path, "manifest.mjs");
-    await writeFile(output, generated);
-    // The generated module path exists only for this test run.
-    const module: { default: MigrationManifest } = await import(pathToFileURL(output).href);
-    const body = await module.default.dialects.sqlite!.versioned[0]!.load();
-    if (typeof body !== "function") throw new Error("Expected generated migration function");
-    native.exec("CREATE TABLE t(a INTEGER); INSERT INTO t VALUES (2), (3);");
-    await body(createNodeSqliteDatabase(native));
-    assert.deepEqual(
-      native
-        .prepare("SELECT a FROM t ORDER BY rowid")
-        .all()
-        .map((row) => row.a),
-      [1, 1],
-    );
+    assert.equal(Reflect.get(globalThis, "__guardImported"), undefined);
+    const plain = await createServer({
+      configFile: false,
+      root: path,
+      logLevel: "silent",
+      plugins: [migrations({ directory: path, dialects: ["sqlite"] })],
+      server: { middlewareMode: true },
+      optimizeDeps: { noDiscovery: true },
+    });
+    try {
+      await assert.rejects(plain.ssrLoadModule("virtual:sqlbraid-migrations"), /need the sqlbraid\(\) plugin/u);
+    } finally {
+      await plain.close();
+    }
+    const server = await createServer({
+      configFile: false,
+      root: path,
+      logLevel: "silent",
+      plugins: [sqlbraid(), migrations({ directory: path, dialects: ["sqlite"] })],
+      server: { middlewareMode: true },
+      optimizeDeps: { noDiscovery: true },
+    });
+    try {
+      const module = (await server.ssrLoadModule("virtual:sqlbraid-migrations")) as { default: MigrationManifest };
+      const body = await module.default.dialects.sqlite!.versioned[0]!.load();
+      if (typeof body !== "function") throw new Error("Expected a lowered migration function");
+      native.exec("CREATE TABLE t(a INTEGER); INSERT INTO t VALUES (2), (3);");
+      await body(createNodeSqliteDatabase(native));
+      assert.deepEqual(
+        native
+          .prepare("SELECT a FROM t ORDER BY rowid")
+          .all()
+          .map((row) => row.a),
+        [1, 1],
+      );
+    } finally {
+      await server.close();
+    }
   } finally {
+    Reflect.deleteProperty(globalThis, "__guardImported");
     native.close();
     await rm(path, { recursive: true, force: true });
   }
@@ -257,27 +281,31 @@ test("generated manifest without a dialect list accepts dialect-only versions", 
   }
 });
 
-test("generated bundled ESM has executable SQL and TS loaders with original source identities", async () => {
+test("generated plain ESM embeds SQL, imports TS lazily and keeps original source identities", async () => {
   const path = await directory({
     "V1__sql.sql": "SELECT 1;\r\n",
-    "V2__ts.ts": "export default async (db: { values: string[] }) => { db.values.push('ran'); };",
+    "V2__ts.ts":
+      "globalThis.__manifestTsRan = (globalThis.__manifestTsRan ?? 0) + 1; export default async (db: { values: string[] }) => { db.values.push('ran'); };",
   });
   try {
     const expected = await loadMigrations(path, { dialects: ["sqlite"] });
-    const generated = await generateManifestModule(path, { dialects: ["sqlite"] });
-    const module: { default: MigrationManifest } = await import(
-      `data:text/javascript;base64,${Buffer.from(generated).toString("base64")}`
-    );
+    const outfile = join(path, "manifest.mjs");
+    await writeFile(outfile, await generateManifestModule(path, { dialects: ["sqlite"], outfile }));
+    // The generated module path exists only for this test run.
+    const module: { default: MigrationManifest } = await import(pathToFileURL(outfile).href);
     const manifest = module.default;
     assert.equal(manifest.dialects.sqlite!.hash, expected.dialects.sqlite!.hash);
     assert.equal(await manifest.dialects.sqlite!.versioned[0]!.load(), "SELECT 1;\n");
+    assert.equal(Reflect.get(globalThis, "__manifestTsRan"), undefined);
     const body = await manifest.dialects.sqlite!.versioned[1]!.load();
+    assert.equal(Reflect.get(globalThis, "__manifestTsRan"), 1);
     assert.equal(typeof body, "function");
     const values: string[] = [];
     if (typeof body !== "function") throw new Error("Expected TypeScript migration");
     await Reflect.apply(body, undefined, [{ values }]);
     assert.deepEqual(values, ["ran"]);
   } finally {
+    Reflect.deleteProperty(globalThis, "__manifestTsRan");
     await rm(path, { recursive: true, force: true });
   }
 });
@@ -408,7 +436,8 @@ test("TypeScript loading accepts a defineMigration() result and rejects other de
     const body = await (await loadMigrations(path, { dialects: ["sqlite"] })).dialects.sqlite!.versioned[0]!.load();
     assert.equal(typeof body, "object");
     assert.equal((body as { transaction: boolean }).transaction, false);
-    await writeFile(join(path, "V1__definition.ts"), "export default { run: 1, transaction: false };");
+    await rm(join(path, "V1__definition.ts"));
+    await writeFile(join(path, "V1__invalid.ts"), "export default { run: 1, transaction: false };");
     await assert.rejects((await loadMigrations(path, { dialects: ["sqlite"] })).dialects.sqlite!.versioned[0]!.load(), {
       code: "BRAID_MIGRATE_SOURCE",
     });

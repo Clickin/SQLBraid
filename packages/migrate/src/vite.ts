@@ -2,8 +2,7 @@ import { relative, resolve, sep } from "node:path";
 import type { Database } from "@sqlbraid/core";
 import type { Plugin, ViteDevServer } from "vite";
 import { createMigrator } from "./index.js";
-import { generateManifestModule } from "./node.js";
-import type { LoadMigrationsOptions } from "./node.js";
+import { DIRECTIVE, manifestModuleSource, type LoadMigrationsOptions } from "./sources.js";
 import type { MigrationManifest, MigrationReport, MigratorOptions, StartupOptions } from "./types.js";
 
 const VIRTUAL_ID = "virtual:sqlbraid-migrations";
@@ -23,6 +22,7 @@ export interface MigrationViteOptions extends LoadMigrationsOptions {
 export default function migrations(options: MigrationViteOptions = {}): Plugin {
   let directory = resolve(options.directory ?? "migrations");
   let serverBuild = false;
+  let lowering = false;
   let server: ViteDevServer | undefined;
   let queue = Promise.resolve();
   let overlay: { message: string; stack: string; plugin: string } | undefined;
@@ -69,6 +69,8 @@ export default function migrations(options: MigrationViteOptions = {}): Plugin {
     configResolved(config) {
       directory = resolve(config.root, options.directory ?? "migrations");
       serverBuild = Boolean(config.build.ssr);
+      // @sqlbraid/vite lowers guarded SQL in every application module, including migrations.
+      lowering = config.plugins.some((plugin) => plugin.name === "sqlbraid");
     },
     resolveId(id) {
       return id === VIRTUAL_ID ? RESOLVED_ID : null;
@@ -78,10 +80,17 @@ export default function migrations(options: MigrationViteOptions = {}): Plugin {
       if (!context?.ssr && !serverBuild)
         this.error(`${VIRTUAL_ID} is server-only; do not import migrations into a browser entry point.`);
       this.addWatchFile(directory);
-      return generateManifestModule(directory, {
-        dialects: options.dialects ?? (options.dev ? [options.dev.migrator.dialect.id] : undefined),
-        compile: true,
-      });
+      const { code, sources } = await manifestModuleSource(
+        directory,
+        { dialects: options.dialects ?? (options.dev ? [options.dev.migrator.dialect.id] : undefined) },
+        (file) => file.split(sep).join("/"),
+      );
+      const guarded = sources.find((source) => source.typescript && DIRECTIVE.test(source.text));
+      if (guarded && !lowering)
+        this.error(
+          `Guarded SQL directives in migration ${guarded.source} need the sqlbraid() plugin from @sqlbraid/vite.`,
+        );
+      return code;
     },
     configureServer(devServer) {
       server = devServer;

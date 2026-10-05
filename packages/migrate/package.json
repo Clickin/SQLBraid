@@ -48,25 +48,15 @@
     "@sqlbraid/template": "workspace:^"
   },
   "devDependencies": {
-    "@sqlbraid/compiler": "workspace:^",
     "@sqlbraid/metadata": "workspace:^",
-    "esbuild": "0.21.5",
     "vite": ">=8.0.0"
   },
   "peerDependencies": {
-    "@sqlbraid/compiler": "^1.0.2",
     "@sqlbraid/metadata": "^1.0.2",
-    "esbuild": ">=0.21.5",
     "vite": ">=8.0.0"
   },
   "peerDependenciesMeta": {
-    "@sqlbraid/compiler": {
-      "optional": true
-    },
     "@sqlbraid/metadata": {
-      "optional": true
-    },
-    "esbuild": {
       "optional": true
     },
     "vite": {

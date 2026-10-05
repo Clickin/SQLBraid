@@ -213,39 +213,60 @@ test("migration new rejects unknown dialects and follows symbolic links", async 
   }
 }, 30_000);
 
-test("packed migration loader handles SQL without esbuild and names the missing peer for TypeScript", async () => {
-  const directory = await mkdtemp(resolve("tests/.migrate-no-esbuild-"));
+test("packed migration loader imports TypeScript through the runtime and names a missing TypeScript runtime", async () => {
+  const directory = await mkdtemp(resolve("tests/.migrate-ts-runtime-"));
   try {
     await mkdir(join(directory, "migrations"));
     await writeFile(join(directory, "migrations/V1__create.sql"), "CREATE TABLE t (id INTEGER);");
-    await writeFile(join(directory, "migrations/V2__seed.ts"), "export default async () => {};");
-    const hooks = `export async function resolve(specifier, context, next) {
-  if (specifier === "esbuild") throw Object.assign(new Error("Cannot find package 'esbuild'"), { code: "ERR_MODULE_NOT_FOUND" });
-  return next(specifier, context);
-}`;
-    const script = `import { register } from "node:module";
-register(${JSON.stringify(`data:text/javascript,${encodeURIComponent(hooks)}`)});
-const { loadMigrations, generateManifestModule } = await import(${JSON.stringify(pathToFileURL(resolve("packages/migrate/dist/node.js")).href)});
+    await writeFile(
+      join(directory, "migrations/V2__seed.ts"),
+      "export default async (db: { values: number[] }): Promise<void> => { db.values.push(1); };",
+    );
+    const script = `const { loadMigrations } = await import(${JSON.stringify(pathToFileURL(resolve("packages/migrate/dist/node.js")).href)});
 const manifest = await loadMigrations(${JSON.stringify(join(directory, "migrations"))}, { dialects: ["sqlite"] });
 const [sql, typescript] = manifest.dialects.sqlite.versioned;
 const result = { sql: await sql.load() };
-for (const [name, run] of [["typescript", () => typescript.load()], ["manifest", () => generateManifestModule(${JSON.stringify(join(directory, "migrations"))})]]) {
-  try { await run(); result[name] = "loaded"; } catch (error) { result[name] = error.message; }
-}
+try { const values = []; await (await typescript.load())({ values }); result.typescript = values; } catch (error) { result.typescript = error.message; }
 console.log(JSON.stringify(result));`;
     await writeFile(join(directory, "probe.mjs"), script);
-    const result = JSON.parse((await exec(process.execPath, [join(directory, "probe.mjs")])).stdout);
-    assert.match(result.sql, /CREATE TABLE t/u);
-    assert.match(
-      result.typescript,
-      /BRAID_MIGRATE_SOURCE: TypeScript migration V2__seed\.ts requires the optional esbuild peer/u,
+    const stripped = JSON.parse((await exec(process.execPath, [join(directory, "probe.mjs")])).stdout);
+    assert.match(stripped.sql, /CREATE TABLE t/u);
+    assert.deepEqual(stripped.typescript, [1]);
+    const plain = JSON.parse(
+      (await exec(process.execPath, ["--no-experimental-strip-types", join(directory, "probe.mjs")])).stdout,
     );
+    assert.match(plain.sql, /CREATE TABLE t/u);
     assert.match(
-      result.manifest,
-      /BRAID_MIGRATE_SOURCE: Migration manifest generation requires the optional esbuild peer/u,
+      plain.typescript,
+      /BRAID_MIGRATE_SOURCE: Cannot import TypeScript migration V2__seed\.ts: run with a runtime or loader that handles TypeScript, or use a generated manifest/u,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("the packed CLI runs codegen without @sqlbraid/migrate and names the missing optional peer", async () => {
+  const f = await fixture();
+  try {
+    const hooks = `export async function resolve(specifier, context, next) {
+  if (specifier === "@sqlbraid/migrate" || specifier.startsWith("@sqlbraid/migrate/"))
+    throw Object.assign(new Error("Cannot find package '@sqlbraid/migrate'"), { code: "ERR_MODULE_NOT_FOUND" });
+  return next(specifier, context);
+}`;
+    const register = `import { register } from "node:module"; register(${JSON.stringify(`data:text/javascript,${encodeURIComponent(hooks)}`)});`;
+    const run = (...args: string[]) =>
+      exec(process.execPath, ["--import", `data:text/javascript,${encodeURIComponent(register)}`, cliEntry, ...args], {
+        cwd: f.directory,
+      });
+    assert.deepEqual(JSON.parse((await run("codegen", "--json")).stdout), []);
+    assert.match((await run("migrate", "--help")).stdout, /accept-schema/u);
+    await assert.rejects(run("migrate", "status"), (error: Error & { code?: number; stderr?: string }) => {
+      assert.equal(error.code, 2);
+      assert.match(String(error.stderr), /Install @sqlbraid\/migrate/u);
+      return true;
+    });
+  } finally {
+    await f.remove();
   }
 }, 30_000);
 

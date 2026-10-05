@@ -37,7 +37,6 @@ for (const packageName of cell.packages) {
   dependencies[packageName] = `file:${tarball}`;
 }
 if (cell.driver) dependencies[cell.driver.package] = cell.driver.version;
-for (const peer of cell.peers ?? []) dependencies[peer.package] = peer.version;
 writeFileSync(
   join(consumer, "package.json"),
   JSON.stringify(

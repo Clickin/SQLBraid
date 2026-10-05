@@ -761,7 +761,13 @@ try {
     maxBuffer: 2 * 1024 * 1024,
   });
   assert.equal(JSON.parse(cliCheck.stdout)[0].status, "unchanged");
-  console.info("PASS isolated @sqlbraid/cli install and npx codegen --check");
+  if ((await readdir(join(cliConsumer, "node_modules/@sqlbraid"))).includes("migrate"))
+    throw new Error("@sqlbraid/cli installed the optional @sqlbraid/migrate peer.");
+  await assert.rejects(
+    execFile("npx", ["--no-install", "sqlbraid", "migrate", "status"], { cwd: cliConsumer }),
+    (error) => error.code === 2 && /Install @sqlbraid\/migrate/u.test(String(error.stderr)),
+  );
+  console.info("PASS isolated @sqlbraid/cli install and npx codegen --check without the optional migrate peer");
 
   const entry = join(consumer, "index.mjs");
   await writeFile(

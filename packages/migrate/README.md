@@ -55,12 +55,26 @@ A TypeScript migration exports a function or a `defineMigration()` result as its
 `defineMigration(fn)` returns a frozen `{ run, transaction }` object. `transaction` defaults to `true`.
 The only option is `transaction`. `defineMigration()` rejects other option keys.
 
-TypeScript migrations need the optional `esbuild` peer dependency. Install `esbuild` in the application.
-`loadMigrations()` loads SQL-only directories without `esbuild`. Manifest generation and the Vite plugin always need it.
-The CLI installs `esbuild` as its own dependency.
+### TypeScript loading
 
-The Node loader accepts ordinary SQLBraid tags. It rejects guarded `/*@braid ...*/` directives in TypeScript.
-The manifest generator and Vite plugin lower guarded directives through the optional `@sqlbraid/compiler` peer.
+SQLBraid does not compile or bundle TypeScript migrations.
+`loadMigrations()` imports each `.ts` migration with `import()` when the runner applies it.
+The runtime or a loader must handle TypeScript. These hosts can do this:
+
+- Node 22.18.0 or later, which strips erasable TypeScript syntax;
+- Bun and Deno;
+- Node with a loader, such as `node --import tsx`.
+
+If the runtime cannot import a `.ts` file, the loader reports `BRAID_MIGRATE_SOURCE`.
+In that case, use a runtime or loader that handles TypeScript, or use a generated manifest.
+
+For Node type stripping, enable `erasableSyntaxOnly` in `tsconfig.json`.
+Node does not strip `enum`, `namespace` or parameter properties.
+Write relative imports with the `.ts` extension, for example `import { seed } from "./seed.ts"`.
+TypeScript accepts these imports with `allowImportingTsExtensions` or `rewriteRelativeImportExtensions`.
+
+The Node loader accepts ordinary SQLBraid tags. It rejects guarded `/*@braid ...*/` directives in TypeScript before it imports the file.
+A bundler lowers guarded directives with the `sqlbraid()` plugin from `@sqlbraid/vite`, as it does for application code.
 
 ## Startup
 
@@ -225,16 +239,19 @@ These paths do not assign new Official support labels to driver/runtime tuples.
 
 ## Bundled hosts and Vite
 
-`sqlbraid migrate manifest` writes an ESM manifest with SQL text and TypeScript loaders.
-Local TypeScript modules are bundled; external package imports remain imports.
-Give this manifest to `createMigrator` in Workers, Deno, Bun or another bundled server.
+`sqlbraid migrate manifest` writes a plain ESM manifest. It does not bundle or compile code.
+The manifest contains each SQL migration as a string literal.
+It loads each TypeScript migration with a lazy `import()`. The top-level code of a migration runs only when the runner applies it.
+The import specifiers are relative to the manifest file and use forward slashes.
+The manifest and the migrations must be on the same drive.
+
+Give this manifest to `createMigrator` in Workers, Deno, Bun or another server.
+Your bundler, such as Wrangler or Vite, bundles the manifest and its TypeScript migrations like application code.
+If a TypeScript migration uses guarded SQL, add the `sqlbraid()` plugin from `@sqlbraid/vite` to the bundler.
 The runtime root performs no filesystem access.
 
-The manifest imports each TypeScript migration statically.
-Thus, the top-level code of a TypeScript migration runs when the host imports the manifest module.
-`loadMigrations()` is different: it loads a TypeScript migration only when the runner applies it.
-
-`generateManifestModule()` from `@sqlbraid/migrate/node` also generates ESM manifests.
+`generateManifestModule()` from `@sqlbraid/migrate/node` returns the same ESM source.
+Pass `outfile` with the location where you write the module. Without `outfile`, the specifiers are relative to `<directory>/manifest.mjs`.
 Without a `dialects` list, it includes only dialects with a source for every migration.
 An explicit list rejects missing sources. `loadMigrations()` without a list checks sources when the selected dialect is accessed.
 
@@ -260,6 +277,8 @@ declare module "virtual:sqlbraid-migrations" {
 ```
 
 The plugin rejects browser imports. It does not own a database connection.
+The virtual module imports the TypeScript migrations, and Vite transforms them.
+If a TypeScript migration uses guarded SQL, also add `sqlbraid()` from `@sqlbraid/vite`. Otherwise the plugin reports an error.
 To enable development reports, pass `dev: { db, migrator: { dialect } }` to the plugin.
 It runs read-only checks at startup and after migration file changes, and reports differences in the terminal and Vite overlay.
 
@@ -291,5 +310,6 @@ Set `options.schemaCheck: "hash"` for checks and optionally set `snapshot` to th
 `sqlbraid migrate snapshot` writes `migrations/schema.snapshot.json` by default.
 
 The runtime root, Node loader and optional drift helper require Node 16.20.2 or later.
-Vite, compiler and CLI integration require Node 22.18.0 or later.
+TypeScript migrations need a runtime or loader that handles TypeScript.
+Vite and CLI integration require Node 22.18.0 or later.
 Runtime-only SQLBraid installs do not pull in this migration package.

@@ -2,9 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createMigrator, type MigrationReport } from "@sqlbraid/migrate";
-import { createSchemaDrift } from "@sqlbraid/migrate/drift";
-import { generateManifestModule, loadMigrations } from "@sqlbraid/migrate/node";
+import type { MigrationReport } from "@sqlbraid/migrate";
 import { parseSnapshotJson } from "@sqlbraid/metadata";
 import {
   ConfigurationError,
@@ -48,6 +46,26 @@ async function loadMigrationConfig(configPath: string | undefined): Promise<{
   validateConfig(value);
   if (!value.migrations) throw new ConfigurationError("Configuration must define migrations.");
   return { config: value.migrations, directory: dirname(path) };
+}
+
+/** @sqlbraid/migrate is an optional peer: only `sqlbraid migrate` loads it. */
+async function loadMigrate(): Promise<{
+  readonly migrate: typeof import("@sqlbraid/migrate");
+  readonly node: typeof import("@sqlbraid/migrate/node");
+  readonly drift: typeof import("@sqlbraid/migrate/drift");
+}> {
+  let migrate: typeof import("@sqlbraid/migrate");
+  try {
+    migrate = await import("@sqlbraid/migrate");
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    if (code !== "ERR_MODULE_NOT_FOUND" && code !== "MODULE_NOT_FOUND") throw error;
+    throw new ConfigurationError(
+      "sqlbraid migrate requires the optional @sqlbraid/migrate package. Install @sqlbraid/migrate in the project.",
+    );
+  }
+  const [node, drift] = await Promise.all([import("@sqlbraid/migrate/node"), import("@sqlbraid/migrate/drift")]);
+  return { migrate, node, drift };
 }
 
 async function atomicWrite(path: string, source: string): Promise<void> {
@@ -147,6 +165,8 @@ export async function runMigrate(argv: readonly string[]): Promise<void> {
     else if (arg) positional.push(arg);
   }
   if (positional.length !== (command === "new" || command === "baseline" ? 1 : 0)) throw new ConfigurationError(HELP);
+  // `new` only writes a file; every other command needs the optional migrate package first.
+  const modules = command === "new" ? undefined : await loadMigrate();
   const loaded = await loadMigrationConfig(values.get("--config"));
   const config = loaded.config;
   const directory = resolve(loaded.directory, config.directory);
@@ -157,14 +177,15 @@ export async function runMigrate(argv: readonly string[]): Promise<void> {
     console.log(await newMigration(directory, positional[0]!, values.get("--dialect")));
     return;
   }
+  const { migrate, node, drift: driftModule } = modules!;
   if (command === "manifest") {
     const path = values.has("--out-file") ? resolve(values.get("--out-file")!) : resolve(directory, "manifest.mjs");
-    const source = await generateManifestModule(directory, { dialects: [config.dialect.id], outfile: path });
+    const source = await node.generateManifestModule(directory, { dialects: [config.dialect.id], outfile: path });
     await atomicWrite(path, source);
     console.log(path);
     return;
   }
-  const manifest = await loadMigrations(directory, { dialects: [config.dialect.id] });
+  const manifest = await node.loadMigrations(directory, { dialects: [config.dialect.id] });
   const resource: MigrationDatabaseResource = await config.database();
   if (!resource || typeof resource.cleanup !== "function")
     throw new ConfigurationError(
@@ -179,7 +200,10 @@ export async function runMigrate(argv: readonly string[]): Promise<void> {
       // snapshot rewrites the committed file, so it never reads or validates the existing file.
       if (command !== "snapshot") {
         try {
-          drift = createSchemaDrift({ inspector, snapshot: parseSnapshotJson(await readFile(snapshotPath, "utf8")) });
+          drift = driftModule.createSchemaDrift({
+            inspector,
+            snapshot: parseSnapshotJson(await readFile(snapshotPath, "utf8")),
+          });
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "ENOENT")
             throw new ConfigurationError(
@@ -187,10 +211,15 @@ export async function runMigrate(argv: readonly string[]): Promise<void> {
             );
         }
       }
-      drift ??= createSchemaDrift({ inspector });
+      drift ??= driftModule.createSchemaDrift({ inspector });
     }
     const { ahead, schemaCheck, ...options } = config.options ?? {};
-    const migrator = createMigrator({ manifest, dialect: config.dialect, ...options, ...(drift ? { drift } : {}) });
+    const migrator = migrate.createMigrator({
+      manifest,
+      dialect: config.dialect,
+      ...options,
+      ...(drift ? { drift } : {}),
+    });
     if (command === "snapshot") {
       const path = values.has("--out-file") ? resolve(values.get("--out-file")!) : snapshotPath;
       await atomicWrite(path, `${JSON.stringify(await migrator.snapshot(resource.db), null, 2)}\n`);
