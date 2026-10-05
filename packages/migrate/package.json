@@ -1,0 +1,79 @@
+{
+  "name": "@sqlbraid/migrate",
+  "version": "0.1.0",
+  "description": "Versioned SQL migrations and explicit startup checks for SQLBraid",
+  "keywords": [
+    "database",
+    "migrations",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/migrate"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
+    },
+    "./drift": {
+      "types": "./dist/drift.d.ts",
+      "import": "./dist/drift.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:^",
+    "@sqlbraid/template": "workspace:^"
+  },
+  "devDependencies": {
+    "@sqlbraid/compiler": "workspace:^",
+    "@sqlbraid/metadata": "workspace:^",
+    "esbuild": "0.21.5",
+    "vite": ">=8.0.0"
+  },
+  "peerDependencies": {
+    "@sqlbraid/compiler": "^1.0.2",
+    "@sqlbraid/metadata": "^1.0.2",
+    "esbuild": ">=0.21.5",
+    "vite": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@sqlbraid/compiler": {
+      "optional": true
+    },
+    "@sqlbraid/metadata": {
+      "optional": true
+    },
+    "esbuild": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=16.20.2"
+  }
+}

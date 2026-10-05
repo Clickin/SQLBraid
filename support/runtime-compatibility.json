@@ -15,11 +15,12 @@
     "@sqlbraid/postgres": ">=16.20.2",
     "@sqlbraid/mysql": ">=16.20.2",
     "@sqlbraid/mariadb": ">=16.20.2",
+    "@sqlbraid/migrate": ">=16.20.2",
     "@sqlbraid/sqlite": ">=16.20.2",
     "@sqlbraid/oracle": ">=16.20.2",
     "@sqlbraid/mssql": ">=16.20.2",
     "sqlbraid": ">=16.20.2",
-    "@sqlbraid/metadata": ">=22.18.0",
+    "@sqlbraid/metadata": ">=16.20.2",
     "@sqlbraid/compiler": ">=22.18.0",
     "@sqlbraid/codegen": ">=22.18.0",
     "@sqlbraid/vite": ">=22.18.0",
@@ -29,6 +30,23 @@
     "@sqlbraid/language-server": ">=22.18.0"
   },
   "cells": [
+    {
+      "id": "node-16-20-2-migrate",
+      "runtime": { "id": "node", "version": "16.20.2" },
+      "packages": [
+        "@sqlbraid/core",
+        "@sqlbraid/template",
+        "@sqlbraid/runtime",
+        "@sqlbraid/metadata",
+        "@sqlbraid/sqlite",
+        "@sqlbraid/migrate"
+      ],
+      "driver": { "package": "@libsql/client", "version": "0.18.0" },
+      "peers": [{ "package": "esbuild", "version": "0.21.5" }],
+      "smoke": { "entrypoint": "tests/scripts/migrate-consumer.mjs" },
+      "releaseBlocking": true,
+      "reason": "Packed migration runtime, SQL/TypeScript loading with the optional esbuild peer, and optional schema drift with a real SQLite database."
+    },
     {
       "id": "node-16-20-2-runtime",
       "runtime": {

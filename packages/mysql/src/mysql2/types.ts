@@ -60,6 +60,7 @@ export interface Mysql2RawCommandLike {
 
 export interface Mysql2RawConnectionLike {
   execute(sqlOrOptions: string | Mysql2ExecuteOptionsLike, values?: Mysql2Parameter[]): Mysql2RawCommandLike;
+  query?(options: Mysql2ExecuteOptionsLike): Mysql2RawCommandLike;
   destroy(): void;
   readonly stream?: {
     readonly destroyed?: boolean;
@@ -79,7 +80,7 @@ export interface Mysql2ConnectionLike {
   ): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
   prepare?(sql: string): Promise<Mysql2PreparedStatementLike>;
   unprepare?(sql: string): void | Promise<void>;
-  query?(sql: string): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
+  query?(sqlOrOptions: string | Mysql2ExecuteOptionsLike): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
   beginTransaction(): Promise<void>;
   commit(): Promise<void>;
   rollback(): Promise<void>;

@@ -16,7 +16,10 @@ const excluded = new Set(["CHANGELOG.md", "docs/SQLBraid_1.0.0_release_notes.md"
 const fence = /^```(ts|typescript|tsx|js|javascript|mjs)(?=[ \t\n])[^\n]*\n([\s\S]*?)^```/gmu;
 const skipMarker = /(?:<!--|\{\/\*)\s*doc-snippet:\s*skip\b/u;
 
-const files = execFileSync("git", ["ls-files", "*.md", "*.mdx"], { cwd: root, encoding: "utf8" })
+const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "*.md", "*.mdx"], {
+  cwd: root,
+  encoding: "utf8",
+})
   .split("\n")
   .filter((file) => file && !excluded.has(file));
 

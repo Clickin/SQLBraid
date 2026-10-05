@@ -10,6 +10,10 @@ const sourceAliases = {
   "@sqlbraid/metadata": resolve("packages/metadata/src/index.ts"),
   "@sqlbraid/compiler": resolve("packages/compiler/src/index.ts"),
   "@sqlbraid/vite": resolve("packages/vite/src/index.ts"),
+  "@sqlbraid/migrate/node": resolve("packages/migrate/src/node.ts"),
+  "@sqlbraid/migrate/vite": resolve("packages/migrate/src/vite.ts"),
+  "@sqlbraid/migrate/drift": resolve("packages/migrate/src/drift.ts"),
+  "@sqlbraid/migrate": resolve("packages/migrate/src/index.ts"),
   "@sqlbraid/tooling": resolve("packages/tooling/src/index.ts"),
   "@sqlbraid/opentelemetry": resolve("packages/opentelemetry/src/index.ts"),
   "@sqlbraid/cli": resolve("packages/cli/src/index.ts"),
@@ -70,14 +74,14 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["tests/*.test.ts", "tests/certification/**/*.test.ts"],
-          exclude: ["tests/consumer.test.ts", "tests/cli.test.ts", "tests/db/**"],
+          exclude: ["tests/consumer.test.ts", "tests/cli.test.ts", "tests/migrate-cli.test.ts", "tests/db/**"],
         },
       },
       {
         extends: true,
         test: {
           name: "cli",
-          include: ["tests/cli.test.ts"],
+          include: ["tests/cli.test.ts", "tests/migrate-cli.test.ts"],
           fileParallelism: false,
         },
       },

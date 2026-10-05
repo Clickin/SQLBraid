@@ -20,6 +20,7 @@ import { createD1Executor } from "@sqlbraid/sqlite/d1";
 import { createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";
 import { createSqliteWasmExecutor } from "@sqlbraid/sqlite/wasm";
 import { DatabaseResultKindError, DatabaseResultValidationError, DatabaseScopeError } from "@sqlbraid/runtime";
+import { MigrationError, MigrationStartupError } from "@sqlbraid/migrate";
 
 const docs = [
   new URL("../website/src/content/docs/reference/errors.md", import.meta.url),
@@ -52,7 +53,13 @@ test("the public registry links to exported owner classes and both error referen
     // oxlint-disable-next-line no-array-sort -- These copied lists normalize comparison order without mutating the public registry.
     assert.deepEqual([...registryCodesForOwner].sort(), [...codes].sort(), `${owner} registry linkage changed`);
   }
-  const dynamicOwners = [UnsupportedFeatureError.name, AdapterError.name, SqlRenderError.name];
+  const dynamicOwners = [
+    UnsupportedFeatureError.name,
+    AdapterError.name,
+    SqlRenderError.name,
+    `@sqlbraid/migrate:${MigrationError.name}`,
+    `@sqlbraid/migrate:${MigrationStartupError.name}`,
+  ];
   const nonClassOwners = new Set([
     "TypeError with code",
     "prepared query validation",

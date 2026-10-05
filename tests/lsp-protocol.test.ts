@@ -588,6 +588,7 @@ test("stdio server registers only relevant project file watchers", async () => {
       .flatMap((entry) => entry.registerOptions?.watchers ?? [])
       .map((watcher) => watcher.globPattern);
     assert.deepEqual(watchers, [
+      "**/sqlbraid.config.ts",
       "**/sqlbraid.config.mjs",
       "**/sqlbraid.config.js",
       "**/sqlbraid.config.cjs",

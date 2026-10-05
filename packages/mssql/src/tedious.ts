@@ -785,6 +785,7 @@ function collect(
   policy: TypePolicy,
   routineProcedure?: { readonly name: string; readonly parameterNames: readonly string[] },
   options?: ExecutionOptions,
+  batch = false,
 ): Promise<CollectedResult> {
   assertExecutionOptions(options);
   return new Promise<CollectedResult>((resolve, reject) => {
@@ -983,6 +984,9 @@ function collect(
           );
         }
         connection.callProcedure(request);
+      } else if (batch && typeof connection.execSqlBatch === "function") {
+        // A plain batch keeps SET options, #temp tables and USE for later batches on this connection.
+        connection.execSqlBatch(request);
       } else {
         connection.execSql(request);
       }
@@ -1662,6 +1666,7 @@ function makeTediousExecutor(
         policy,
         undefined,
         executionOptions,
+        execution.description.reuse.requested === "simple" && execution.parameters.length === 0,
       );
       if (result.outputSeen)
         throw new UnsupportedFeatureError(

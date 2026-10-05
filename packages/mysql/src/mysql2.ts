@@ -417,7 +417,10 @@ export const mysql2StatementBinding: StatementBindingAdapter = Object.freeze({
       adapterId: "mysql2",
       transport: "text-positional",
       placeholder: () => "?",
-      reuse: { effective: "reuse", owner: "driver" },
+      reuse: {
+        effective: context.requestedReuse === "simple" && statement.parameters.length === 0 ? "simple" : "reuse",
+        owner: "driver",
+      },
     });
     describedStatements.set(description, statement);
     return description;
@@ -453,7 +456,7 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
 function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
-): { readonly text: string; readonly values: readonly unknown[] } {
+): { readonly text: string; readonly values: readonly unknown[]; readonly simple: boolean } {
   statement = createRenderedStatement(statement);
   const description =
     binding ??
@@ -469,6 +472,7 @@ function materialize(
   return {
     text: description.parameterizedSql,
     values: statement.parameters.map((parameter) => parameter.value),
+    simple: description.reuse.effective === "simple",
   };
 }
 
@@ -590,8 +594,12 @@ export function createMysql2Executor(
       assertParameterHintsUnsupported(rendered);
       assertNoRoutineOutputsForQuery(rendered);
       const prepared = materialize(rendered, binding);
+      if (prepared.simple && !connection.query)
+        throw new TypeError("BRAID_BIND_TRANSPORT: MySQL simple execution requires query().");
       const [payload, rawFields] = await withMysqlCancellation(connection, executionOptions?.signal, () =>
-        executePrepared(connection, prepared.text, prepared.values as unknown as Mysql2Parameter[]),
+        prepared.simple
+          ? connection.query!({ sql: prepared.text, rowsAsArray: true, disableEval: true })
+          : executePrepared(connection, prepared.text, prepared.values as unknown as Mysql2Parameter[]),
       );
       if (isMultipleResultPayload(payload, rawFields)) {
         throw unsupported(
@@ -717,7 +725,11 @@ export function createMysql2Executor(
       let pendingError: Error | undefined;
       let projectRow: ((value: unknown) => Record<string, unknown>) | undefined;
       try {
-        command = streamPrepared(raw, prepared.text, prepared.values as Mysql2Parameter[]);
+        if (prepared.simple && !raw.query)
+          throw new TypeError("BRAID_BIND_TRANSPORT: MySQL simple streaming requires query().");
+        command = prepared.simple
+          ? raw.query!({ sql: prepared.text, rowsAsArray: true, disableEval: true })
+          : streamPrepared(raw, prepared.text, prepared.values as Mysql2Parameter[]);
         nativeOwned = true;
         initializationCleanup.add(() => destroyRaw(setupError));
         source = command.stream({ highWaterMark });
@@ -833,8 +845,12 @@ export function createMysql2Executor(
       assertRoutineOutputsUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
+      if (prepared.simple && !connection.query)
+        throw new TypeError("BRAID_BIND_TRANSPORT: MySQL simple execution requires query().");
       const [payload, rawFields] = await withMysqlCancellation(connection, executionOptions?.signal, () =>
-        executePrepared(connection, prepared.text, prepared.values as unknown as Mysql2Parameter[]),
+        prepared.simple
+          ? connection.query!({ sql: prepared.text, rowsAsArray: true, disableEval: true })
+          : executePrepared(connection, prepared.text, prepared.values as unknown as Mysql2Parameter[]),
       );
       if (!Array.isArray(payload))
         return {

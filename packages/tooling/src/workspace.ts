@@ -8,7 +8,7 @@ import { AUTHORING_MODULE_CATALOG } from "@sqlbraid/core";
 import { generateModels, type CodegenResult } from "@sqlbraid/codegen";
 import { hashSnapshot, parseSnapshotJson, type MetadataSnapshot } from "@sqlbraid/metadata";
 import { createLanguageService } from "./service.js";
-import { ConfigurationCancellationError, loadConfig, type CodegenTargetConfig } from "./config.js";
+import { CONFIG_NAMES, ConfigurationCancellationError, loadConfig, type CodegenTargetConfig } from "./config.js";
 import { SOURCE_FILE_LOADER, type InternalLanguageServiceOptions, type SourceFileLoader } from "./internal.js";
 import type {
   Cancellation,
@@ -329,17 +329,8 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
     checkCancellation(cancellation);
     const configPath = options.configPath ? canonicalPath(options.configPath, rootPath) : undefined;
     let loaded;
-    if (
-      configPath ||
-      ["sqlbraid.config.mjs", "sqlbraid.config.js", "sqlbraid.config.cjs"].some((name) =>
-        existsSync(join(rootPath, name)),
-      )
-    ) {
-      const key =
-        configPath ??
-        ["sqlbraid.config.mjs", "sqlbraid.config.js", "sqlbraid.config.cjs"]
-          .map((name) => join(rootPath, name))
-          .find((path) => existsSync(path));
+    if (configPath || CONFIG_NAMES.some((name) => existsSync(join(rootPath, name)))) {
+      const key = configPath ?? CONFIG_NAMES.map((name) => join(rootPath, name)).find((path) => existsSync(path));
       if (key) {
         const evidence = await fileEvidence(key, fileCache, maxEntries, cancellation);
         const cacheKey = evidence?.key ?? key;

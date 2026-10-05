@@ -1,4 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import type { RequestedReuse } from "./binding.js";
 import type { RoutineCallResult, RoutineContract } from "./routine.js";
 import type { RenderedStatement } from "./statement.js";
 import type { QueryResultKind, TemplateIr } from "./template-ir.js";
@@ -52,6 +53,8 @@ export type QueryExecutionResult<Row = unknown> = RowsExecutionResult<Row> | Com
 /** Execution controls shared by materialized, routine, batch, and stream operations. */
 export interface ExecutionOptions {
   readonly signal?: AbortSignal;
+  /** Override the database reuse preference for this operation; adapters select the effective strategy. */
+  readonly reuse?: RequestedReuse;
 }
 
 /** Physical SPI may complete synchronously; the public database surface remains asynchronous. */

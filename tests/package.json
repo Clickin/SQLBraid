@@ -18,6 +18,7 @@
     "@sqlbraid/language-server": "workspace:*",
     "@sqlbraid/mariadb": "workspace:*",
     "@sqlbraid/metadata": "workspace:*",
+    "@sqlbraid/migrate": "workspace:*",
     "@sqlbraid/mssql": "workspace:*",
     "@sqlbraid/mysql": "workspace:*",
     "@sqlbraid/opentelemetry": "workspace:*",

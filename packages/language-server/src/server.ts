@@ -63,6 +63,7 @@ const DIAGNOSTIC_DEBOUNCE_MS = 30;
 const MAX_WORKSPACES = 32;
 const MAX_WORKSPACE_SYMBOLS = 256;
 const FILE_WATCH_GLOBS = [
+  "**/sqlbraid.config.ts",
   "**/sqlbraid.config.mjs",
   "**/sqlbraid.config.js",
   "**/sqlbraid.config.cjs",

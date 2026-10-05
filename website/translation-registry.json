@@ -193,13 +193,13 @@
       "source": "website/src/content/docs/reference/errors.md",
       "translation": "website/src/content/docs/ko/reference/errors.md",
       "translationOf": "website/src/content/docs/reference/errors.md",
-      "sourceDigest": "a40b9ab8302f8106bc0d1a5364ff86fc17630b85ddf5f3900d69f1cfe8fde44d"
+      "sourceDigest": "0ea61e3333b0fd23318ccc56023c7aaf9869e3f5e899e1c295190c71d98cad26"
     },
     {
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "0e180f7493e374e0655522ce1eb2cab2387dba09bce2cb33b6080f5ea407b22b"
+      "sourceDigest": "ed0995ddeb8997b673f141827237a60b3e3f10e8c64a342d936548d4a6ea2579"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",

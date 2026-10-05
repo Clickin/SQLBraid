@@ -25,6 +25,8 @@ this reference.
 - An already-aborted `AbortSignal` rejects with its original `reason`.
 - Adapter input and transport failures use the `AdapterError` (`TypeError`)
   class when they expose a stable code.
+- The optional `@sqlbraid/migrate` package exports `MigrationError` and
+  `MigrationStartupError`. The latter includes the migration report.
 
 | Code                                   | Meaning                                                                                                                                                                                                               |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -81,6 +83,15 @@ this reference.
 | `BRAID_DEPTH`                          | Template or rendered-fragment nesting exceeds its configured limit.                                                                                                                                                   |
 | `BRAID_STRUCTURE_LIMIT`                | Rendered structural items exceed `maxStructuralItems`.                                                                                                                                                                |
 | `BRAID_SQL_LIMIT` / `BRAID_BIND_LIMIT` | Rendered output exceeds configured limits.                                                                                                                                                                            |
+| `BRAID_MIGRATE_SOURCE`                 | Migration sources, a manifest or SQL separators are invalid, or a required dialect variant is missing.                                                                                                                |
+| `BRAID_MIGRATE_UNINITIALIZED`          | The migration history table does not exist.                                                                                                                                                                           |
+| `BRAID_MIGRATE_PENDING`                | Verification found pending versions or changed repeatable migrations.                                                                                                                                                 |
+| `BRAID_MIGRATE_AHEAD`                  | The database has newer migrations and the startup policy rejects them.                                                                                                                                                |
+| `BRAID_MIGRATE_CHECKSUM`               | An applied version has a different source checksum.                                                                                                                                                                   |
+| `BRAID_MIGRATE_ORDER`                  | A source is missing, a version is out of order, a baseline has nonempty history, or no successful migration can store an accepted schema hash.                                                                        |
+| `BRAID_MIGRATE_DIRTY`                  | History contains a failed attempt or invalid state. Inspect the database before repair.                                                                                                                               |
+| `BRAID_MIGRATE_BUSY`                   | Verification found a running attempt, or an apply exceeded its lock or claim timeout.                                                                                                                                 |
+| `BRAID_MIGRATE_SCHEMA_DRIFT`           | The inspected schema hash differs from the hash stored in migration history.                                                                                                                                          |
 
 `UnsupportedFeatureError` has `(feature, code, message, options?)`. Its code is
 limited to `BRAID_${string}`. An already-aborted signal rejects with its

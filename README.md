@@ -147,6 +147,8 @@ Most applications install `sqlbraid` and one external driver. `node:sqlite` is p
 
 For Bun.SQL, select the database dialect explicitly. Authors of custom adapters can use the dialect-only subpaths `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle` and `sqlbraid/mssql`. The [full package map](https://clickin.github.io/SQLBraid/latest/reference/packages/) shows the granular `@sqlbraid/*` packages and the tooling.
 
+For versioned SQL files, deployment commands and explicit startup checks, install the optional [`@sqlbraid/migrate`](./packages/migrate/README.md) package.
+
 ---
 
 [Get started](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [Documentation](https://clickin.github.io/SQLBraid/latest/) · [Driver support](https://clickin.github.io/SQLBraid/latest/reference/support/) · [Package map](https://clickin.github.io/SQLBraid/latest/reference/packages/) · [Architecture](./docs/mental-model.md)

@@ -25,10 +25,11 @@ import {
   type CodegenTargetConfig,
 } from "@sqlbraid/tooling";
 import { codegenOutputCollisionKey } from "./codegen-path.js";
+import { runMigrate } from "./migrate.js";
 
 function usage(): never {
   console.error(
-    "Usage: sqlbraid check|manifest|build --file <path> [--out-file <path>] | sqlbraid check --project <path> | sqlbraid drift --before <path> --after <path> | sqlbraid codegen [--config <path>] [--target <name>]... [--check] [--json] | sqlbraid inspect query --file <path> --line <n> --column <n> [--config <path>] [--json] | sqlbraid inspect symbol <name> [--config <path>] [--json] | sqlbraid inspect diagnostics --file <path> [--config <path>] [--json]\nOptions: --help, --version",
+    "Usage: sqlbraid check|manifest|build --file <path> [--out-file <path>] | sqlbraid check --project <path> | sqlbraid drift --before <path> --after <path> | sqlbraid codegen [--config <path>] [--target <name>]... [--check] [--json] | sqlbraid inspect query --file <path> --line <n> --column <n> [--config <path>] [--json] | sqlbraid inspect symbol <name> [--config <path>] [--json] | sqlbraid inspect diagnostics --file <path> [--config <path>] [--json] | sqlbraid migrate <new|status [--check]|up|baseline|repair|accept-schema|manifest|snapshot> [--config <path>]\nOptions: --help, --version",
   );
   process.exit(2);
 }
@@ -380,7 +381,7 @@ async function main(argv: readonly string[]): Promise<void> {
   if (command === "--help" || command === "-h") {
     console.log(
       "SQLBraid SQL-first compiler and metadata tooling\n\n" +
-        "Usage: sqlbraid <check|build|manifest|drift|codegen|inspect> [options]\n\nRun `sqlbraid <command> --help` for command options.",
+        "Usage: sqlbraid <check|build|manifest|drift|codegen|inspect|migrate> [options]\n\nRun `sqlbraid <command> --help` for command options.",
     );
     return;
   }
@@ -389,6 +390,10 @@ async function main(argv: readonly string[]): Promise<void> {
     return;
   }
   const json = argv.includes("--json");
+  if (command === "migrate") {
+    await runMigrate(argv.slice(1));
+    return;
+  }
   if (command === "inspect") {
     await runInspect(argv.slice(1), json);
     return;

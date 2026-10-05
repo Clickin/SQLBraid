@@ -147,6 +147,8 @@ SQLBraid는 ORM도 쿼리 빌더도 아닙니다. 다음 일은 하지 않습니
 
 Bun.SQL을 쓸 때는 데이터베이스 방언을 직접 지정하세요. 어댑터를 직접 만든다면 방언 전용 하위 경로 `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle`, `sqlbraid/mssql`을 쓸 수 있습니다. 세분화된 `@sqlbraid/*` 패키지와 도구는 [전체 패키지 구성](https://clickin.github.io/SQLBraid/latest/reference/packages/)에 있습니다.
 
+버전별 SQL 파일, 배포 명령, 명시적인 시작 검사가 필요하면 선택 패키지 [`@sqlbraid/migrate`](./packages/migrate/README.md)를 설치하세요.
+
 ---
 
 [시작하기](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [문서](https://clickin.github.io/SQLBraid/latest/) · [드라이버 지원](https://clickin.github.io/SQLBraid/latest/reference/support/) · [패키지 구성](https://clickin.github.io/SQLBraid/latest/reference/packages/) · [아키텍처](./docs/mental-model.ko.md)

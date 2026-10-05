@@ -51,6 +51,7 @@ export interface StreamRuntime {
     batchId?: string,
     alreadyRendered?: RenderedStatement,
     operationId?: string,
+    executionOptions?: ExecutionOptions,
   ) => PreparedOperation<Q>;
   readonly leaseForUse: (
     stream: boolean,
@@ -80,7 +81,14 @@ export function streamOperation<Row>(
     try {
       operation =
         preparedOperation === undefined
-          ? (prepare(query, undefined, undefined, undefined, operationId) as PreparedOperation<ExecutableQuery>)
+          ? (prepare(
+              query,
+              undefined,
+              undefined,
+              undefined,
+              operationId,
+              streamOptions,
+            ) as PreparedOperation<ExecutableQuery>)
           : (preparedOperation as PreparedOperation<ExecutableQuery>);
     } catch (error) {
       openStreams.delete(stream);

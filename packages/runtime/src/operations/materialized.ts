@@ -47,6 +47,7 @@ export interface MaterializedRuntime {
     query: Q,
     preparedName?: string,
     batchId?: string,
+    executionOptions?: ExecutionOptions,
   ) => Promise<PreparedOperation<Q>>;
 }
 
@@ -312,7 +313,7 @@ export function createMaterializedOperations(runtime: MaterializedRuntime) {
     executionOptions?: ExecutionOptions,
   ): Promise<RawOperation<Q>> => {
     assertExecutableQuery(query);
-    return runPrepared(await prepareObserved(query, preparedName, batchId), executionOptions);
+    return runPrepared(await prepareObserved(query, preparedName, batchId, executionOptions), executionOptions);
   };
   const materializedPreparedResult = async <Q extends ExecutableQuery>(
     operation: PreparedOperation<Q>,
@@ -331,7 +332,7 @@ export function createMaterializedOperations(runtime: MaterializedRuntime) {
     executionOptions?: ExecutionOptions,
   ): Promise<QueryExecutionResult<unknown>> => {
     return materializedPreparedResult(
-      await prepareObserved(query, preparedName, batchId),
+      await prepareObserved(query, preparedName, batchId, executionOptions),
       executionSchema,
       executionOptions,
     );

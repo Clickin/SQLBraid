@@ -1,8 +1,9 @@
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import { createStatementBindingDescription } from "@sqlbraid/core";
-import { sql } from "@sqlbraid/sqlite";
+import { dialect, sql } from "@sqlbraid/sqlite";
 import { createPooledDatabase } from "@sqlbraid/runtime";
 import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
+import { createMigrator } from "@sqlbraid/migrate";
 
 const nativeMarkers = "literal $1 :1 @p1 ?";
 const jsonText =
@@ -517,6 +518,53 @@ async function conservativeScopeAdmission() {
   };
 }
 
+async function migrations(sqlite3) {
+  let queries = 0;
+  const { native, db } = database(sqlite3, [
+    {
+      onEvent(event) {
+        if (event.type === "query:ready") queries += 1;
+      },
+    },
+  ]);
+  try {
+    const migrator = createMigrator({
+      dialect,
+      manifest: {
+        format: "sqlbraid-migrations",
+        formatVersion: 1,
+        dialects: {
+          sqlite: {
+            hash: "a".repeat(64),
+            repeatable: [],
+            versioned: [
+              {
+                version: "1",
+                description: "browser migration",
+                source: "V1__browser.sql",
+                checksum: "b".repeat(64),
+                load: async () =>
+                  "CREATE TABLE migrated (value TEXT); INSERT INTO migrated (value) VALUES ('browser;wasm');",
+              },
+            ],
+          },
+        },
+      },
+    });
+    const applied = (await migrator.up(db)).status;
+    queries = 0;
+    const verified = (await migrator.startup(db, { mode: "verify" })).status;
+    const verifyQueries = queries;
+    const rows = await db.all(sql.rows`SELECT value FROM migrated`);
+    expect(applied === "current" && verified === "current", "WASM migrations did not become current.");
+    expect(verifyQueries === 1, "WASM current startup must read history once.");
+    expect(rows.length === 1 && rows[0].value === "browser;wasm", "WASM migration SQL did not execute.");
+    return { applied, verified, verifyQueries, rows };
+  } finally {
+    native.close();
+  }
+}
+
 async function run() {
   expect(typeof WebAssembly === "object", "SQLite WASM conformance did not run with WebAssembly.");
   const sqlite3 = await sqlite3InitModule();
@@ -537,6 +585,7 @@ async function run() {
       "wasm.execution.stream": await streamCase(sqlite3),
       "wasm.execution.bulk": await bulkCase(sqlite3),
       "wasm.execution.mapped-transaction": await mappedTransaction(sqlite3),
+      "wasm.migrate.apply-verify": await migrations(sqlite3),
       "wasm.runtime.conservative-scope-admission": await conservativeScopeAdmission(),
     },
   };

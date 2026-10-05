@@ -14,7 +14,7 @@ const compatibilityMatrix = compatibilityManifest.cells.map((cell) => ({
   driver_version: cell.driver?.version ?? null,
 }));
 const allPatterns = [
-  /^packages\/(?:core|template|runtime|operations)\//u,
+  /^packages\/(?:core|template|runtime|operations|migrate)\//u,
   /^(?:shared|vitest\.config\.ts|tsconfig[^/]*|tsdown\.config\.ts|pnpm-workspace\.yaml|pnpm-lock\.yaml|package\.json)\b/u,
   /^tests\/(?!db\/(?:postgres|mysql|mariadb|oracle|mssql|sqlite|bun-sql|d1|wasm)\/)/u,
   /^(?:support|\.github\/workflows)\//u,

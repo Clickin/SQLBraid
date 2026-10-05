@@ -6,6 +6,7 @@ import { beforeAll, test } from "vitest";
 import { typePolicy } from "@sqlbraid/sqlite";
 import { exactJsonText } from "../fidelity.js";
 import { stampSupportEnvironment } from "../support-target.js";
+import { docsClaim } from "../docs-claims.js";
 
 interface TransparencyEvidence {
   readonly logicalSegments: readonly string[];
@@ -64,6 +65,12 @@ interface WasmReport {
     readonly capabilities: Readonly<Record<string, { readonly status: string }>>;
   };
   readonly cases: {
+    readonly "wasm.migrate.apply-verify": {
+      readonly applied: string;
+      readonly verified: string;
+      readonly verifyQueries: number;
+      readonly rows: readonly { readonly value: string }[];
+    };
     readonly "wasm.sql.native-transparency": TransparencyEvidence;
     readonly "wasm.sql.generated-structure": GeneratedEvidence;
     readonly "wasm.numeric.exact-integer": IntegerEvidence;
@@ -285,3 +292,16 @@ test("wasm.execution.mapped-transaction", () => {
   assert.deepEqual(evidence.deleted, { id: "1" });
   assert.deepEqual(evidence.remaining, []);
 });
+
+docsClaim(
+  "packages/migrate/README.md",
+  "browser WASM applies migrations and verifies current history in one query",
+  async () => {
+    assert.deepEqual(report.cases["wasm.migrate.apply-verify"], {
+      applied: "current",
+      verified: "current",
+      verifyQueries: 1,
+      rows: [{ value: "browser;wasm" }],
+    });
+  },
+);

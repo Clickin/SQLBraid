@@ -280,6 +280,31 @@ test("MSSQL query rejects actual output return values instead of discarding them
   await assert.rejects(async () => executor.query(sql`SELECT 1`.render()), /BRAID_CALL_OUT_UNSUPPORTED/u);
 });
 
+test("MSSQL sends parameterless simple-reuse statements as plain batches", async () => {
+  const calls: string[] = [];
+  const finish = (request: TediousRequestLike): void => {
+    completeRequest(request);
+    emit(request, "requestCompleted");
+  };
+  const executor = createTediousExecutor({
+    ...mockConnection((request) => {
+      calls.push("execSql");
+      finish(request);
+    }),
+    execSqlBatch(request) {
+      calls.push("execSqlBatch");
+      finish(request);
+    },
+  });
+  const plain = sql.command`SET IDENTITY_INSERT t ON`.render();
+  const bound = sql.command`DELETE FROM t WHERE id = ${1}`.render();
+  const simple = { dialectId: "mssql", requestedReuse: "simple" } as const;
+  await executor.query(plain, executor.statementBinding.describe(plain, simple));
+  await executor.query(bound, executor.statementBinding.describe(bound, simple));
+  await executor.query(plain);
+  assert.deepEqual(calls, ["execSqlBatch", "execSql", "execSql"]);
+});
+
 test("MSSQL result labels remain own properties on ordinary rows", async () => {
   const executor = createTediousExecutor(
     mockConnection((request) => {

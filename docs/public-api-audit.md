@@ -4,6 +4,10 @@ This inventory records the stable public boundary of SQLBraid 1.x. It classifies
 the API and is a compatibility reference. It is not a publication claim and not a
 support claim.
 
+Packages have independent versions. The optional `@sqlbraid/migrate@0.1.0`
+surface is pre-1.0; listing it here does not give it the 1.x compatibility
+guarantee of the `sqlbraid` facade.
+
 SQLBraid 1.0.0 is GA. The exact-SHA records below are kept as the provenance of
 the pre-GA audit. They do not certify later revisions.
 
@@ -57,6 +61,10 @@ applications.
 `RoutineResultFromContract`, `RoutineResultSet`, `RoutineResultSetTuple`,
 `StandardSchemaV1`, `UnsupportedFeatureError`, `AdapterError`,
 `ResultExactnessError`, `RoutineMappingError`.
+
+`ExecutionOptions.reuse` optionally overrides the database reuse preference for one operation.
+It accepts `"auto"`, `"simple"` or `"reuse"` and also applies to prepared-handle invocations.
+The adapter selects and reports the effective strategy; a preference does not permit client-side parameter interpolation.
 
 `PUBLIC_ERROR_DEFINITIONS` and its types `PublicErrorDefinition` and
 `PublicErrorCategory` list the error reference that is public on purpose. They
@@ -331,16 +339,26 @@ interchangeable:
   `TypeScriptSourceContext`, `createProjectContext`, `createSourceContext`).
 - `@sqlbraid/vite`: a Vite pre-transform. Vite stays responsible for TS and JSX.
 - `@sqlbraid/metadata`: snapshots, validation, hashing, drift and the model for inspectors.
+- `@sqlbraid/migrate`: optional `createMigrator`, `defineMigration`, manifest and
+  report types, `MigrationError` and `MigrationStartupError`. Its `/node` subpath
+  loads sources and generates manifests; `/vite` supplies server-only manifests;
+  `/drift` adapts a metadata inspector. Runtime packages do not depend on it.
 - `@sqlbraid/codegen`: the pure `generateModels` and deterministic model source.
 - `@sqlbraid/tooling`: Node-first services for config, workspace and evidence.
 - `@sqlbraid/operations`: fingerprints and declaration manifests.
 - `@sqlbraid/cli`: the optional entry point for the CLI process. Install it
-  separately for the codegen, inspect, diagnostics and drift commands.
+  separately for the codegen, inspect, diagnostics, drift and migrate commands.
 - `@sqlbraid/language-server`: an embedded service and the standard stdio LSP transport.
 
 Runtime packages do not get metadata, compiler, codegen, tooling, editor or Vite
 dependencies. Metadata is open-world positive evidence. An absent object does
 not become an invalid-SQL diagnostic.
+
+Migration startup is explicit: `startup` or the promise-caching `once` method.
+The migrator also exposes `up`, `baseline`, `repair`, `acceptSchema` and `snapshot`.
+The shared project config has an optional `migrations` section. Its database
+factory owns connection creation and returns a cleanup function.
+There is no migration hook in database construction and no new required driver SPI.
 
 ## Deliberate nonfeatures
 

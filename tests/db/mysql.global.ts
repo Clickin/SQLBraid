@@ -17,6 +17,8 @@ export default async function setup(project: TestProject) {
     .withUsername("sqlbraid")
     .withUserPassword("sqlbraid")
     .withRootPassword("root-sqlbraid")
+    // Permit the non-root test user to create stored functions and triggers with binary logging enabled.
+    .withCommand(["--log-bin-trust-function-creators=1"])
     .start();
   const connectionUri = container.getConnectionUri();
   project.provide("mysql", { connectionUri, image: MYSQL_IMAGE, version: "8.4.2" });

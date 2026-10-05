@@ -6,4 +6,11 @@ export {
   loadConfig,
   validateConfig,
 } from "@sqlbraid/tooling";
-export type { CodegenTargetConfig, LoadedConfig, SqlBraidConfig } from "@sqlbraid/tooling";
+export type {
+  CodegenTargetConfig,
+  LoadedConfig,
+  MigrationConfigDrift,
+  MigrationDatabaseResource,
+  MigrationsConfig,
+  SqlBraidConfig,
+} from "@sqlbraid/tooling";

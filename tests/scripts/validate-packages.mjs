@@ -46,6 +46,7 @@ const requiredPackageNames = new Set([
   "language-server",
   "mariadb",
   "metadata",
+  "migrate",
   "mssql",
   "mysql",
   "operations",
@@ -349,6 +350,7 @@ try {
     }
     for (const tooling of [
       "@sqlbraid/metadata",
+      "@sqlbraid/migrate",
       "@sqlbraid/codegen",
       "@sqlbraid/tooling",
       "@sqlbraid/compiler",
@@ -404,9 +406,18 @@ try {
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], boundaryConsumer);
   const runtimeInstalledPackages = await readdir(join(boundaryConsumer, "node_modules/@sqlbraid"));
   if (
-    ["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode", "opentelemetry"].some(
-      (name) => runtimeInstalledPackages.includes(name),
-    )
+    [
+      "metadata",
+      "migrate",
+      "codegen",
+      "tooling",
+      "compiler",
+      "vite",
+      "cli",
+      "language-server",
+      "vscode",
+      "opentelemetry",
+    ].some((name) => runtimeInstalledPackages.includes(name))
   )
     throw new Error("Runtime consumer installed development tooling or optional integrations transitively.");
   const runtimeTopLevelPackages = await readdir(join(boundaryConsumer, "node_modules"));

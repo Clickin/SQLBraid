@@ -9,6 +9,8 @@ import type {
   CodegenRelationFilter,
   CodegenTypeOverrides,
 } from "@sqlbraid/codegen";
+import type { Database, Dialect } from "@sqlbraid/core";
+import type { MetadataInspector } from "@sqlbraid/metadata";
 import type { Cancellation } from "./types.js";
 
 /** One offline codegen target loaded from project configuration. */
@@ -22,11 +24,45 @@ export interface CodegenTargetConfig {
   readonly typeOverrides?: CodegenTypeOverrides;
 }
 
+/** Optional migration drift adapter, structurally compatible with @sqlbraid/migrate. */
+export interface MigrationConfigDrift {
+  inspect(): Promise<{ readonly hash: string; readonly snapshot: unknown; readonly differences?: readonly string[] }>;
+}
+
+/** The factory owns its connections; the CLI always calls cleanup after a database command. */
+export interface MigrationDatabaseResource {
+  readonly db: Database;
+  cleanup(): void | Promise<void>;
+  readonly inspector?: MetadataInspector;
+  readonly drift?: MigrationConfigDrift;
+}
+
+/** Executable migration configuration; never transferred out of the inspection worker. */
+export interface MigrationsConfig {
+  readonly directory: string;
+  readonly dialect: Dialect;
+  readonly database: () => MigrationDatabaseResource | Promise<MigrationDatabaseResource>;
+  readonly options?: {
+    readonly scope?: string;
+    readonly table?: string;
+    readonly schema?: string;
+    readonly appliedBy?: string;
+    readonly busyTimeoutMs?: number;
+    readonly ahead?: "allow" | "error";
+    readonly schemaCheck?: "hash";
+  };
+  readonly inspector?: MetadataInspector;
+  readonly drift?: MigrationConfigDrift;
+  /** Committed snapshot path, relative to the config directory. */
+  readonly snapshot?: string;
+}
+
 /** Project configuration consumed by CLI/tooling; config files execute as Node modules. */
 export interface SqlBraidConfig {
   readonly codegen?: {
     readonly targets: readonly CodegenTargetConfig[];
   };
+  readonly migrations?: MigrationsConfig;
 }
 
 /** Configuration failures are user input errors, not internal tooling failures. */
@@ -160,9 +196,49 @@ function validateConfigOptions(target: Record<string, unknown>): void {
   }
 }
 
+function validateMigrations(value: unknown): void {
+  if (value === undefined) return;
+  if (!isRecord(value)) throw new ConfigurationError("Configuration migrations must be an object.");
+  if (typeof value.directory !== "string" || !value.directory)
+    throw new ConfigurationError("Configuration migrations.directory must be a non-empty string.");
+  if (!isRecord(value.dialect) || typeof value.dialect.id !== "string" || !value.dialect.id)
+    throw new ConfigurationError("Configuration migrations.dialect must be a dialect object.");
+  if (typeof value.database !== "function")
+    throw new ConfigurationError("Configuration migrations.database must be a factory returning { db, cleanup }.");
+  if (value.snapshot !== undefined && (typeof value.snapshot !== "string" || !value.snapshot))
+    throw new ConfigurationError("Configuration migrations.snapshot must be a non-empty path.");
+  for (const key of ["inspector", "drift"]) {
+    const adapter = value[key];
+    if (adapter !== undefined && (!isRecord(adapter) || typeof adapter.inspect !== "function"))
+      throw new ConfigurationError(`Configuration migrations.${key} must have an inspect method.`);
+  }
+  const options = value.options;
+  if (options === undefined) return;
+  if (!isRecord(options)) throw new ConfigurationError("Configuration migrations.options must be an object.");
+  for (const key of ["scope", "table", "schema", "appliedBy"]) {
+    if (options[key] !== undefined && (typeof options[key] !== "string" || !options[key]))
+      throw new ConfigurationError(`Configuration migrations.options.${key} must be a non-empty string.`);
+  }
+  if (options.ahead !== undefined && options.ahead !== "allow" && options.ahead !== "error")
+    throw new ConfigurationError("Configuration migrations.options.ahead must be allow or error.");
+  if (options.schemaCheck !== undefined && options.schemaCheck !== "hash")
+    throw new ConfigurationError("Configuration migrations.options.schemaCheck must be hash.");
+  if (
+    options.busyTimeoutMs !== undefined &&
+    (typeof options.busyTimeoutMs !== "number" ||
+      !Number.isSafeInteger(options.busyTimeoutMs) ||
+      options.busyTimeoutMs < 0 ||
+      options.busyTimeoutMs > 2_147_483_647)
+  )
+    throw new ConfigurationError(
+      "Configuration migrations.options.busyTimeoutMs must be a nonnegative integer no greater than 2147483647.",
+    );
+}
+
 /** Validate config shape and target uniqueness before codegen or filesystem writes. */
 export function validateConfig(value: unknown): asserts value is SqlBraidConfig {
   if (!isRecord(value)) throw new ConfigurationError("Configuration default export must be an object.");
+  validateMigrations(value.migrations);
   const codegen = value.codegen;
   if (codegen === undefined) return;
   if (!isRecord(codegen) || !Array.isArray(codegen.targets))
@@ -196,9 +272,15 @@ interface WorkerConfigMessage {
   readonly configuration?: boolean;
 }
 
-const CONFIG_NAMES = ["sqlbraid.config.mjs", "sqlbraid.config.js", "sqlbraid.config.cjs"] as const;
+const CONFIG_NAMES = [
+  "sqlbraid.config.ts",
+  "sqlbraid.config.mjs",
+  "sqlbraid.config.js",
+  "sqlbraid.config.cjs",
+] as const;
 
-function resolveConfigPath(configPath: string | undefined, rootPath: string): string {
+/** Resolve the single shared project config without executing it. */
+export function resolveConfigPath(configPath: string | undefined, rootPath: string): string {
   if (configPath) return resolve(rootPath, configPath);
   const candidates = CONFIG_NAMES.map((candidate) => resolve(rootPath, candidate)).filter((candidate) =>
     existsSync(candidate),
@@ -208,7 +290,7 @@ function resolveConfigPath(configPath: string | undefined, rootPath: string): st
       `Multiple configuration files found: ${candidates.map((candidate) => relative(rootPath, candidate)).join(", ")}.`,
     );
   const path = candidates[0];
-  if (!path) throw new ConfigurationError("No sqlbraid.config.mjs, sqlbraid.config.js, or sqlbraid.config.cjs found.");
+  if (!path) throw new ConfigurationError(`No ${CONFIG_NAMES.join(", ")} found.`);
   return path;
 }
 
@@ -223,10 +305,8 @@ export async function loadConfig(
 ): Promise<LoadedConfig> {
   if (cancellation?.isCancellationRequested) throw new ConfigurationCancellationError();
   const path = resolveConfigPath(configPath, rootPath);
-  if (![".mjs", ".js", ".cjs"].includes(extname(path)))
-    throw new ConfigurationError(
-      "Codegen configuration must be .mjs, .js, or .cjs; TypeScript configs are not supported.",
-    );
+  if (![".ts", ".mjs", ".js", ".cjs"].includes(extname(path)))
+    throw new ConfigurationError("Configuration must be .ts, .mjs, .js, or .cjs.");
   let file;
   try {
     file = await stat(path, { bigint: true });

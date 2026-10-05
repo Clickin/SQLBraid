@@ -190,8 +190,11 @@ pure.
 The generic capability checks for transactions and savepoints still apply
 independently.
 
-`ExecutionOptions` contains `signal?: AbortSignal`. Row validation options add
-`schema`. Stream options add the same schema and the signal.
+`ExecutionOptions` contains `signal?: AbortSignal` and `reuse?: RequestedReuse`.
+Row and stream options also accept `schema`.
+An operation's `reuse` overrides the database default, including for prepared handles.
+The runtime passes the selected preference to `StatementBindingContext.requestedReuse`
+before acquisition. The adapter reports its effective strategy in the binding description.
 
 - If the signal is already aborted, reject with its `reason`.
 - An active signal requires a real cancellation path in the adapter.

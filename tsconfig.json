@@ -16,6 +16,10 @@
       "@sqlbraid/metadata": ["packages/metadata/src/index.ts"],
       "@sqlbraid/compiler": ["packages/compiler/src/index.ts"],
       "@sqlbraid/vite": ["packages/vite/src/index.ts"],
+      "@sqlbraid/migrate": ["packages/migrate/src/index.ts"],
+      "@sqlbraid/migrate/node": ["packages/migrate/src/node.ts"],
+      "@sqlbraid/migrate/vite": ["packages/migrate/src/vite.ts"],
+      "@sqlbraid/migrate/drift": ["packages/migrate/src/drift.ts"],
       "@sqlbraid/tooling": ["packages/tooling/src/index.ts"],
       "@sqlbraid/opentelemetry": ["packages/opentelemetry/src/index.ts"],
 

@@ -11,6 +11,7 @@
     "packages/template/src/**/*.ts",
     "packages/runtime/src/**/*.ts",
     "packages/operations/src/**/*.ts",
+    "packages/metadata/src/**/*.ts",
     "packages/postgres/src/**/*.ts",
     "packages/mysql/src/**/*.ts",
     "packages/mariadb/src/**/*.ts",

@@ -218,6 +218,7 @@ function createScopedDatabase(
     batchId?: string,
     alreadyRendered?: RenderedStatement,
     operationId = nextOperationId(),
+    executionOptions?: ExecutionOptions,
   ): PreparedOperation<Q> => {
     assertOpen();
     let rendered: RenderedStatement;
@@ -228,7 +229,8 @@ function createScopedDatabase(
     }
     const adapter = statementBinding;
     const requestedReuse =
-      options.reuse === "simple" ? "simple" : preparedName === undefined ? (options.reuse ?? "auto") : "reuse";
+      executionOptions?.reuse ??
+      (options.reuse === "simple" ? "simple" : preparedName === undefined ? (options.reuse ?? "auto") : "reuse");
     let binding: StatementBindingDescription;
     try {
       binding = assertBindingDescription(
@@ -281,11 +283,12 @@ function createScopedDatabase(
     query: Q,
     preparedName?: string,
     batchId?: string,
+    executionOptions?: ExecutionOptions,
   ): Promise<PreparedOperation<Q>> => {
     const operationId = nextOperationId();
     let operation: PreparedOperation<Q>;
     try {
-      operation = prepare(query, preparedName, batchId, undefined, operationId);
+      operation = prepare(query, preparedName, batchId, undefined, operationId, executionOptions);
     } catch (error) {
       const failure = error instanceof PreparationFailure ? error : undefined;
       const reported = failure === undefined ? error : failure.cause;
@@ -314,6 +317,7 @@ function createScopedDatabase(
     factory: () => PreparableQuery,
     preparedName: string,
     shape: { value?: string },
+    executionOptions?: ExecutionOptions,
   ): Promise<PreparedOperation<PreparableQuery>> => {
     const operationId = nextOperationId();
     let query: PreparableQuery;
@@ -345,7 +349,7 @@ function createScopedDatabase(
     }
     let operation: PreparedOperation<PreparableQuery>;
     try {
-      operation = prepare(query, preparedName, undefined, rendered, operationId);
+      operation = prepare(query, preparedName, undefined, rendered, operationId, executionOptions);
     } catch (error) {
       const failure = error instanceof PreparationFailure ? error : undefined;
       const reported = failure === undefined ? error : failure.cause;
@@ -478,7 +482,7 @@ function createScopedDatabase(
     ): Promise<Result> {
       assertOpen();
       if (query.resultKind !== "call") throw new TypeError("Only call queries may be executed with database.call().");
-      const operation = preparedOperation ?? (await prepareObserved(query));
+      const operation = preparedOperation ?? (await prepareObserved(query, undefined, undefined, executionOptions));
       try {
         assertExecutionOptions(executor, executionOptions, options.capabilities);
       } catch (error) {
@@ -763,7 +767,7 @@ function createScopedDatabase(
         binding = assertBulkBindingDescription(
           statementBinding.describeBulk(bulk, {
             dialectId: canonicalRendered!.dialectId,
-            requestedReuse: options.reuse ?? "auto",
+            requestedReuse: executionOptions?.reuse ?? options.reuse ?? "auto",
             transactionScoped: options.transaction,
           }),
           statementBinding,
@@ -1001,7 +1005,10 @@ function createScopedDatabase(
 
       for (const query of queries) {
         try {
-          entries.push({ operation: await prepareObserved(query, undefined, batchId), terminal: false });
+          entries.push({
+            operation: await prepareObserved(query, undefined, batchId, executionOptions),
+            terminal: false,
+          });
         } catch (error) {
           const failures = await abortEntries(error, "prepared");
           throw batchFailure(error, failures);
@@ -1128,7 +1135,12 @@ function createScopedDatabase(
       const operation = async (args: readonly unknown[]): Promise<PreparedOperation<PreparableQuery>> => {
         assertOpen();
         const invoke = takesInput ? () => factory(args[0] as never) : () => factory();
-        return prepareNamedFactoryObserved(invoke, name, shape);
+        return prepareNamedFactoryObserved(
+          invoke,
+          name,
+          shape,
+          (takesInput ? args[1] : args[0]) as ExecutionOptions | undefined,
+        );
       };
       const prepared: Record<string, unknown> = {
         name,

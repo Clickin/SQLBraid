@@ -464,10 +464,10 @@ Keep these Node policies separate:
 The repository toolchain can stay on a modern Node release. The published
 runtime tarballs are tested on older Node versions. If a driver raises its own
 minimum Node version, it must not raise the floors of unrelated `@sqlbraid/*`
-packages. The published runtime packages currently declare `node >=16.20.2`. The
-tooling packages (CLI, compiler, codegen, metadata, tooling, language server and
-Vite) declare `node >=22.18.0`. Change a floor only to a version that the packed
-consumer gate proves.
+packages. The published runtime packages, metadata and the migration runtime
+declare `node >=16.20.2`. The CLI, compiler, codegen, tooling, language server
+and Vite integrations require `node >=22.18.0`. Change a floor only to a
+version that the packed consumer gate proves.
 
 Compatibility tests must use this procedure:
 

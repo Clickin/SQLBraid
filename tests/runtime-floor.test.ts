@@ -10,6 +10,7 @@ const runtimePackages = [
   "template",
   "runtime",
   "operations",
+  "metadata",
   "postgres",
   "mysql",
   "mariadb",

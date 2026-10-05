@@ -45,6 +45,7 @@ export interface TediousRequestLike {
 
 export interface TediousConnectionLike {
   execSql(request: TediousRequestLike): void;
+  execSqlBatch?(request: TediousRequestLike): void;
   prepare?(request: TediousRequestLike): void;
   execute?(request: TediousRequestLike, parameters: Record<string, unknown>): void;
   unprepare?(request: TediousRequestLike): void;

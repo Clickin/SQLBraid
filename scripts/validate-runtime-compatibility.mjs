@@ -14,11 +14,12 @@ const expectedPackageEngines = Object.freeze({
   "@sqlbraid/postgres": ">=16.20.2",
   "@sqlbraid/mysql": ">=16.20.2",
   "@sqlbraid/mariadb": ">=16.20.2",
+  "@sqlbraid/migrate": ">=16.20.2",
   "@sqlbraid/sqlite": ">=16.20.2",
   "@sqlbraid/oracle": ">=16.20.2",
   "@sqlbraid/mssql": ">=16.20.2",
   sqlbraid: ">=16.20.2",
-  "@sqlbraid/metadata": ">=22.18.0",
+  "@sqlbraid/metadata": ">=16.20.2",
   "@sqlbraid/compiler": ">=22.18.0",
   "@sqlbraid/codegen": ">=22.18.0",
   "@sqlbraid/vite": ">=22.18.0",
@@ -33,6 +34,7 @@ const requiredCells = new Set([
   "node-22-18-0-better-sqlite3-13-0-3",
   "node-16-20-2-libsql-0-18-0",
   "node-16-20-2-opentelemetry-api-1-9-1",
+  "node-16-20-2-migrate",
 ]);
 
 function fail(code, detail) {
@@ -136,6 +138,14 @@ async function validateRuntimeCompatibility({ root = scriptRoot } = {}) {
       if (cell.driver.package !== "better-sqlite3" && cell.driver.package !== "@libsql/client") {
         fail("RUNTIME_COMPATIBILITY_DRIVER", `${cell.id} has an unregistered driver ${cell.driver.package}.`);
       }
+    }
+    for (const peer of cell.peers ?? []) {
+      assertExactVersion(peer.version, `${cell.id}.peers.${peer.package}`);
+      if (!cell.packages.some((name) => packages.get(name)?.peerDependenciesMeta?.[peer.package]?.optional === true))
+        fail(
+          "RUNTIME_COMPATIBILITY_PEER",
+          `${cell.id} installs ${peer.package}, which no cell package declares as an optional peer.`,
+        );
     }
     const smokePath = join(root, cell.smoke.entrypoint);
     try {

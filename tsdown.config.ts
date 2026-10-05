@@ -22,6 +22,7 @@ function packageBuild(cwd: string, entry: Record<string, string>): UserConfig {
     "packages/template",
     "packages/runtime",
     "packages/operations",
+    "packages/metadata",
     "packages/postgres",
     "packages/mysql",
     "packages/mariadb",
@@ -48,6 +49,15 @@ export default defineConfig([
   packageBuild("packages/metadata", { index: "src/index.ts" }),
   packageBuild("packages/compiler", { index: "src/index.ts" }),
   packageBuild("packages/vite", { index: "src/index.ts" }),
+  {
+    ...packageBuild("packages/migrate", {
+      index: "src/index.ts",
+      node: "src/node.ts",
+      vite: "src/vite.ts",
+      drift: "src/drift.ts",
+    }),
+    target: "es2021",
+  },
   packageBuild("packages/tooling", { index: "src/index.ts", "config-worker": "src/config-worker.ts" }),
   packageBuild("packages/operations", { index: "src/index.ts" }),
   packageBuild("packages/opentelemetry", { index: "src/index.ts" }),
