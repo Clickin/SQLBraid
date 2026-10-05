@@ -224,7 +224,18 @@ test("uncertain uploads retain pending evidence and never retry blindly", async 
   for (const flag of ["failAfterUpload", "invalidSummary"] as const) {
     const f = await fixture();
     f.behavior[flag] = true;
-    await assert.rejects(f.run(), /outcome unresolved/);
+    await assert.rejects(f.run(), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /outcome unresolved/);
+      assert.ok(error.cause instanceof Error);
+      if (flag === "invalidSummary") {
+        assert.ok("stdout" in error);
+        assert.equal(error.stdout, "truncated JSON");
+      } else {
+        assert.match(error.cause.message, /connection lost after upload/);
+      }
+      return true;
+    });
     assert.equal(f.uploads().length, 1);
     const report = await f.evidence();
     assert.equal(report.packages[0].state, "pending");
@@ -403,6 +414,160 @@ test("cross-run reconciliation binds the requested run and original manifest dig
     /immutable prior candidate manifest/,
   );
   assert.equal(f.uploads().length, 1);
+});
+
+test("rejected-stage recovery requires attestation and reuses original bytes and report provenance", async () => {
+  const f = await fixture("0.1.0", ["@sqlbraid/core", "@sqlbraid/template", "@sqlbraid/sqlite"]);
+  f.behavior.failPackage = "@sqlbraid/template";
+  await assert.rejects(f.run(), /outcome unresolved/);
+  const saved = await f.evidence();
+  const prior = {
+    ...saved,
+    packages: saved.packages.map((record) =>
+      record.state === "pending" ? Object.assign({}, record, { stageId: uuid(99) }) : record,
+    ),
+  };
+  const original = structuredClone(prior);
+  const manifest = structuredClone(f.manifest);
+  assert.deepEqual(
+    prior.packages.map(({ state }) => state),
+    ["staged", "pending", "absent"],
+  );
+  await rm(join(f.directory, "staged-publication.json"));
+  f.behavior.failPackage = "";
+  const options = {
+    directory: f.directory,
+    priorEvidence: prior,
+    priorRunId: "123",
+    currentRunId: "456",
+    currentRunAttempt: "2",
+  };
+  const before = f.uploads().length;
+  await assert.rejects(stageCandidates(f.manifest, options), /Uncertain prior stage/);
+  assert.equal(f.uploads().length, before);
+  await rm(join(f.directory, "staged-publication.json"));
+  const report = await stageCandidates(f.manifest, { ...options, rejectedStagesConfirmed: true });
+  assert.ok(report?.complete);
+  assert.deepEqual(
+    f
+      .uploads()
+      .slice(before)
+      .map((args) => args[2]),
+    f.manifest.packages.map(({ file }) => join(f.directory, file)),
+  );
+  assert.deepEqual(
+    report.packages.map(({ state }) => state),
+    ["staged", "staged", "staged"],
+  );
+  assert.notEqual(report.packages[0].stageId, prior.packages[0].stageId);
+  assert.notEqual(report.packages[1].stageId, uuid(99));
+  assert.equal(report.runId, "456");
+  assert.equal(report.runAttempt, "2");
+  assert.equal(report.candidateRunId, "123");
+  assert.equal(report.candidateRunAttempt, "1");
+  assert.equal(report.manifestSha256, prior.manifestSha256);
+  assert.equal(report.candidateIdentitySha256, prior.candidateIdentitySha256);
+  assert.deepEqual(report.reconciledFrom, {
+    runId: prior.runId,
+    runAttempt: prior.runAttempt,
+    manifestSha256: prior.manifestSha256,
+    candidateIdentitySha256: prior.candidateIdentitySha256,
+  });
+  assert.equal(report.rejectedStagesConfirmation?.confirmed, true);
+  assert.equal(report.rejectedStagesConfirmation?.runId, "456");
+  assert.equal(report.rejectedStagesConfirmation?.priorRunId, "123");
+  assert.match(
+    report.rejectedStagesConfirmation?.statement ?? "",
+    /uncertain upload was checked absent from npm staging/u,
+  );
+  assert.deepEqual(report.rejectedStagesConfirmation?.priorPackages, original.packages);
+  assert.deepEqual(prior, original);
+  assert.deepEqual(f.manifest, manifest);
+});
+
+test("rejected-stage confirmation rejects missing evidence, missing identity and dry-run before commands", async () => {
+  const f = await fixture();
+  await f.run();
+  const prior = await f.evidence();
+  const before = f.calls.length;
+  for (const invalid of [
+    {},
+    { priorRunId: "123" },
+    { priorEvidence: prior },
+    { priorEvidence: prior, priorRunId: "not-a-run" },
+    { priorEvidence: prior, priorRunId: "123", dryRun: true },
+    { priorEvidence: prior, priorRunId: "999" },
+    { priorEvidence: { ...prior, manifestSha256: "f".repeat(64) }, priorRunId: "123" },
+  ]) {
+    await assert.rejects(
+      stageCandidates(f.manifest, {
+        directory: f.directory,
+        rejectedStagesConfirmed: true,
+        ...invalid,
+      }),
+    );
+  }
+  assert.equal(f.calls.length, before);
+  assert.deepEqual(await f.evidence(), prior);
+});
+
+test("rejected-stage recovery keeps prior states when preflight or public integrity fails", async () => {
+  const f = await fixture("0.1.0", ["@sqlbraid/core", "@sqlbraid/template"]);
+  f.behavior.failPackage = "@sqlbraid/template";
+  await assert.rejects(f.run(), /outcome unresolved/);
+  const prior = await f.evidence();
+  const before = f.uploads().length;
+  const options = {
+    directory: f.directory,
+    priorEvidence: prior,
+    priorRunId: "123",
+    currentRunId: "456",
+    rejectedStagesConfirmed: true,
+  };
+  await rm(join(f.directory, "staged-publication.json"));
+  f.tags.get("@sqlbraid/template")!.latest = "0.0.8";
+  await assert.rejects(stageCandidates(f.manifest, options), /latest tag changed/);
+  assert.deepEqual((await f.evidence()).packages, prior.packages);
+  assert.equal((await f.evidence()).rejectedStagesConfirmation, undefined);
+  await rm(join(f.directory, "staged-publication.json"));
+  f.tags.get("@sqlbraid/template")!.latest = "0.0.9";
+  f.publicIntegrity.set("@sqlbraid/template", "sha512-wrong");
+  await assert.rejects(stageCandidates(f.manifest, options), /integrity mismatch/);
+  assert.deepEqual((await f.evidence()).packages, prior.packages);
+  assert.equal(f.uploads().length, before);
+});
+
+test("rejected-stage recovery leaves exact public packages public without another upload", async () => {
+  const f = await fixture();
+  f.publicIntegrity.set("@sqlbraid/core", f.manifest.packages[0].integrity);
+  f.tags.get("@sqlbraid/core")!.next = f.manifest.version;
+  await f.run();
+  const prior = await f.evidence();
+  await rm(join(f.directory, "staged-publication.json"));
+  const report = await stageCandidates(f.manifest, {
+    directory: f.directory,
+    priorEvidence: prior,
+    priorRunId: "123",
+    currentRunId: "456",
+    rejectedStagesConfirmed: true,
+  });
+  assert.deepEqual(report?.packages, prior.packages);
+  assert.equal(f.uploads().length, 0);
+});
+
+test("CLI rejects rejected-stage confirmation outside explicit recovery before authorization", async () => {
+  for (const args of [
+    ["--mode", "stage"],
+    ["--mode", "stage-preflight"],
+    ["--mode", "stage", "--prior-candidate-run-id", "123"],
+    ["--mode", "stage-preflight", "--prior-staged-publication", "missing.json"],
+    ["--mode", "stage-dry-run", "--prior-candidate-run-id", "123", "--prior-staged-publication", "missing.json"],
+  ]) {
+    await assert.rejects(
+      execFileAsync(process.execPath, ["scripts/release.mjs", ...args, "--rejected-stages-confirmed"]),
+      /Rejected-stage confirmation requires/u,
+    );
+  }
 });
 
 test("post-approval verification needs no tarballs and rejects missing packages, provenance, tags or changed latest", async () => {

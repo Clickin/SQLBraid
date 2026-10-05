@@ -41,6 +41,15 @@ export interface StagedPublication {
     readonly manifestSha256: string;
     readonly candidateIdentitySha256?: string;
   }>;
+  readonly rejectedStagesConfirmation?: Readonly<{
+    readonly confirmed: true;
+    readonly statement: string;
+    readonly runId?: string | null;
+    readonly runAttempt?: string | null;
+    readonly priorRunId?: string | null;
+    readonly priorRunAttempt?: string | null;
+    readonly priorPackages: StagedPublication["packages"];
+  }>;
   readonly latestBefore: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly complete: boolean;
   readonly packages: readonly {
@@ -102,6 +111,11 @@ export declare function assertManifestOrder(
 ): void;
 export declare function assertMutationAuthorization(mode: string, env?: Record<string, string | undefined>): void;
 export declare function assertPublicationCredentials(mode: string, env?: Record<string, string | undefined>): void;
+export declare function assertPriorStagingEvidence(
+  manifest: ReleaseManifest,
+  priorEvidence: StagedPublication,
+  priorRunId?: string,
+): void;
 export declare function assertTaggedSha(): Promise<string>;
 export declare function createReleaseEvidence(
   manifest: ReleaseManifest,
@@ -120,6 +134,7 @@ export declare function stageCandidates(
     directory?: string;
     priorEvidence?: StagedPublication;
     priorRunId?: string;
+    rejectedStagesConfirmed?: boolean;
     currentRunId?: string | null;
     currentRunAttempt?: string | null;
   },

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import type { SpawnSyncReturns } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "vitest";
 import { parse } from "yaml";
@@ -115,15 +117,22 @@ function graph(
   return { results, stepRuns: (step: Step) => evaluate(step.if, github, inputs, results, env, true) };
 }
 
-const mutationJobs = ["release-stage", "release-draft"];
+const mutationJobs = ["release-stage", "release-recover", "release-draft"];
 
 test("dispatch defaults to certification and version tags trigger all three validation workflows", () => {
-  assert.deepEqual(release.on.workflow_dispatch?.inputs?.release_mode.options, ["certify", "pack-only", "stage"]);
+  assert.deepEqual(release.on.workflow_dispatch?.inputs?.release_mode.options, [
+    "certify",
+    "pack-only",
+    "stage",
+    "recover",
+  ]);
   assert.equal(release.on.workflow_dispatch?.inputs?.release_mode.default, "certify");
   assert.equal(release.on.workflow_dispatch?.inputs?.release_package?.default, "all");
   assert.equal(release.on.workflow_dispatch?.inputs?.release_package?.type, "string");
   assert.equal(release.on.workflow_dispatch?.inputs?.prior_run_id?.default, "");
   assert.equal(release.on.workflow_dispatch?.inputs?.prior_run_id?.type, "string");
+  assert.equal(release.on.workflow_dispatch?.inputs?.candidate_tag?.default, "");
+  assert.equal(release.on.workflow_dispatch?.inputs?.candidate_tag?.type, "string");
   for (const workflow of [release, runtime, docs]) assert.ok(workflow.on.push?.tags?.includes("v*"));
   for (const workflow of [release, runtime]) assert.ok(workflow.on.push?.tags?.includes("*-v*"));
   assert.ok(!docs.on.push?.tags?.includes("*-v*"));
@@ -167,6 +176,122 @@ test("explicit staging reaches only the staging job and a successful stage autho
     assert.equal(failed["release-stage"].result, "skipped", `staging escaped failed ${lane}`);
     assert.equal(failed["release-draft"].result, "skipped");
   }
+});
+
+test("recovery bypasses the build and certification DAG without authorizing a draft", () => {
+  const { results } = graph(release, "workflow_dispatch", "recover");
+  assert.equal(results["release-recover"].result, "success");
+  for (const [name, result] of Object.entries(results)) {
+    if (name !== "release-recover") assert.equal(result.result, "skipped", `recovery reached ${name}`);
+  }
+  const failed = graph(release, "workflow_dispatch", "recover", "refs/heads/main", "release-recover").results;
+  assert.equal(failed["release-draft"].result, "skipped");
+  assert.deepEqual(dependencies(release.jobs["release-recover"]), []);
+});
+
+test("recovery rejects unauthorized inputs before checking out tools or downloading artifacts", () => {
+  const recovery = release.jobs["release-recover"];
+  const authorization = recovery.steps[0];
+  assert.ok(authorization.run);
+  const valid = {
+    ...process.env,
+    GITHUB_REF: "refs/heads/main",
+    SQLBRAID_RECOVERY_RUN_ID: "37109603570",
+    SQLBRAID_RECOVERY_TAG: "v1.0.2",
+    SQLBRAID_REJECTED_STAGES_CONFIRMED: "true",
+  };
+  for (const patch of [
+    { GITHUB_REF: "refs/tags/v1.0.2" },
+    { GITHUB_REF: "refs/heads/recovery" },
+    { SQLBRAID_RECOVERY_RUN_ID: "" },
+    { SQLBRAID_RECOVERY_RUN_ID: "37109603570; echo unsafe" },
+    { SQLBRAID_RECOVERY_TAG: "" },
+    { SQLBRAID_RECOVERY_TAG: "refs/tags/v1.0.2" },
+    { SQLBRAID_RECOVERY_TAG: "../v1.0.2" },
+    { SQLBRAID_REJECTED_STAGES_CONFIRMED: "false" },
+    { SQLBRAID_REJECTED_STAGES_CONFIRMED: "" },
+  ]) {
+    const result: SpawnSyncReturns<string> = spawnSync("bash", ["-e", "-c", authorization.run], {
+      env: { ...valid, ...patch },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 1, JSON.stringify(patch));
+  }
+  for (const tag of ["v1.0.2", "v1.0.2-rc.1", "postgres-v1.0.2"]) {
+    const result: SpawnSyncReturns<string> = spawnSync("bash", ["-e", "-c", authorization.run], {
+      env: { ...valid, SQLBRAID_RECOVERY_TAG: tag },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+  }
+});
+
+test("recovery uses main tools and restores only original artifacts without repacking", () => {
+  const recovery = release.jobs["release-recover"];
+  assert.deepEqual(recovery.concurrency, {
+    group: "npm-stage-refs/tags/${{ inputs.candidate_tag }}",
+    "cancel-in-progress": false,
+  });
+  assert.deepEqual(recovery.env, {
+    SQLBRAID_RECOVERY_TAG: "${{ inputs.candidate_tag }}",
+    SQLBRAID_RECOVERY_RUN_ID: "${{ inputs.prior_run_id }}",
+    SQLBRAID_REJECTED_STAGES_CONFIRMED: "${{ inputs.rejected_stages_confirmed }}",
+  });
+  const checkout = recovery.steps.find((step) => step.uses?.startsWith("actions/checkout@"));
+  assert.deepEqual(checkout?.with, { ref: "${{ github.sha }}", "fetch-depth": 0 });
+  assert.ok(recovery.steps.some((step) => step.run === "pnpm install --frozen-lockfile"));
+  const downloads = recovery.steps.filter((step) => step.uses?.startsWith("actions/download-artifact@"));
+  assert.deepEqual(
+    downloads.map((step) => step.with?.name),
+    ["release-candidate-validated", "release-staged-publication"],
+  );
+  for (const download of downloads) {
+    assert.equal(download.with?.["run-id"], "${{ inputs.prior_run_id }}");
+    assert.equal(download.with?.["github-token"], "${{ github.token }}");
+    assert.equal(download.with?.repository, "${{ github.repository }}");
+    assert.ok(String(download.with?.path).startsWith("${{ runner.temp }}/"));
+  }
+  const invocations = recovery.steps.filter((step) => step.run?.includes("node scripts/release-recovery.mjs"));
+  assert.equal(invocations.length, 2);
+  assert.match(invocations[0].run ?? "", /--mode preflight\b/u);
+  assert.match(invocations[1].run ?? "", /--mode stage\b/u);
+  assert.equal(invocations[0].env?.SQLBRAID_STAGE_PREFLIGHT_VERIFIED, undefined);
+  assert.equal(invocations[1].env?.SQLBRAID_STAGE_PREFLIGHT_VERIFIED, "true");
+  for (const step of invocations) {
+    assert.match(step.run ?? "", /--artifact-dir "\$RUNNER_TEMP\/sqlbraid-release-artifacts"/u);
+    assert.match(
+      step.run ?? "",
+      /--prior-staged-publication "\$RUNNER_TEMP\/prior-staged-evidence\/staged-publication\.json"/u,
+    );
+    assert.equal(step.env?.GITHUB_TOKEN, "${{ github.token }}");
+  }
+  const existingActions = new Set(release.jobs["release-stage"].steps.map((step) => step.uses).filter(Boolean));
+  for (const step of recovery.steps) {
+    if (step.uses) assert.ok(existingActions.has(step.uses), `unrecognized action pin: ${step.uses}`);
+    assert.equal(step.with?.["registry-url"], undefined);
+    assert.doesNotMatch(step.run ?? "", /\b(?:build|pack|publish|approve|promote)\b|tar\s+-[a-z]*c|gh\s+release/u);
+    assert.doesNotMatch(step.run ?? "", /(?:export\s+)?GITHUB_(?:SHA|REF(?:_NAME|_TYPE)?)=/u);
+    for (const key of Object.keys(step.env ?? {})) assert.doesNotMatch(key, /^GITHUB_(?:SHA|REF)/u);
+  }
+  const uploads = recovery.steps.filter((step) => step.uses?.startsWith("actions/upload-artifact@"));
+  assert.deepEqual(
+    uploads.map((step) => step.with?.name),
+    ["release-staged-publication", "release-candidate-validated"],
+  );
+  for (const upload of uploads) {
+    assert.equal(evaluate(upload.if, {}, {}, {}, {}, false), true, "failure must retain original bytes and evidence");
+    assert.equal(upload.with?.["if-no-files-found"], "ignore");
+  }
+  assert.deepEqual(String(uploads[0].with?.path).trim().split("\n"), [
+    "${{ runner.temp }}/sqlbraid-release-artifacts/staged-publication.json",
+    "${{ runner.temp }}/sqlbraid-release-artifacts/release-manifest.json",
+    "${{ runner.temp }}/sqlbraid-release-artifacts/recovery-evidence.json",
+  ]);
+  assert.equal(
+    uploads[1].with?.path,
+    `${String(downloads[0].with?.path)}/release-candidate-validated.tar.gz`,
+    "retention must upload the original archive rather than re-archive mutated staging evidence",
+  );
 });
 
 test("missing semantic evidence blocks certification and staging even when database jobs pass", () => {
@@ -282,10 +407,11 @@ test("job capabilities isolate OIDC and release writes", () => {
     actions: "read",
     "id-token": "write",
   });
+  assert.deepEqual(release.jobs["release-recover"].permissions, release.jobs["release-stage"].permissions);
   assert.deepEqual(release.jobs["release-draft"].permissions, { contents: "write" });
   for (const [name, job] of Object.entries(release.jobs)) {
     const permissions: Record<string, string> = job.permissions ?? release.permissions;
-    if (name !== "release-stage") assert.notEqual(permissions["id-token"], "write");
+    if (!["release-stage", "release-recover"].includes(name)) assert.notEqual(permissions["id-token"], "write");
     if (name !== "release-draft") assert.notEqual(permissions.contents, "write");
     for (const env of [release.env, job.env, ...(job.steps ?? []).map((step) => step.env)]) {
       for (const [key, value] of Object.entries(env ?? {})) {
@@ -375,6 +501,17 @@ test("staging distinguishes fresh and explicit cross-run reconciliation", () => 
   assert.match(mutate?.run ?? "", /--prior-staged-publication/u);
   assert.match(mutate?.run ?? "", /--prior-candidate-run-id/u);
   assert.equal(mutate?.env?.SQLBRAID_STAGE_PREFLIGHT_VERIFIED, "true");
+  assert.equal(release.on.workflow_dispatch?.inputs?.rejected_stages_confirmed?.type, "boolean");
+  assert.equal(release.on.workflow_dispatch?.inputs?.rejected_stages_confirmed?.default, false);
+  const confirmation = prep.steps.find((step) => step.name === "Validate rejected-stage confirmation");
+  assert.match(confirmation?.run ?? "", /SQLBRAID_RELEASE_MODE.*stage.*PRIOR_RUN_ID/u);
+  for (const step of [preflight, mutate]) {
+    assert.equal(step?.env?.REJECTED_STAGES_CONFIRMED, "${{ inputs.rejected_stages_confirmed }}");
+    assert.match(
+      step?.run ?? "",
+      /if \[\[ -n "\$PRIOR_RUN_ID" \]\]; then.*if \[\[ "\$REJECTED_STAGES_CONFIRMED" == "true" \]\]; then\s+args\+=\(--rejected-stages-confirmed\)\s+fi\s+fi/su,
+    );
+  }
   const dryRun = release.jobs["release-final"].steps.find((step) => step.run?.includes("--mode stage-dry-run"));
   assert.match(dryRun?.run ?? "", /--prior-candidate-run-id/u);
   assert.match(String(release.env?.SQLBRAID_TAG_BEFORE), /github\.event\.before/u);

@@ -94,11 +94,12 @@ validates by default. It requires `deploy=true` to deploy.
 **A version tag identifies an immutable candidate. A tag push does not publish.**
 The normal modes of the Release workflow are:
 
-| Mode                | Purpose                                                                                       | External mutation           |
-| ------------------- | --------------------------------------------------------------------------------------------- | --------------------------- |
-| `certify` (default) | Complete release DAG, validation of the immutable candidate and a pnpm stage-publish dry-run  | None                        |
-| `pack-only`         | Pack and inspect a candidate without a publication rehearsal. This is not full certification. | None                        |
-| `stage`             | Publish the validated immutable `.tgz` files to the npm staging area                          | Staged package records only |
+| Mode                | Purpose                                                                                                         | External mutation           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `certify` (default) | Complete release DAG, validation of the immutable candidate and a pnpm stage-publish dry-run                    | None                        |
+| `pack-only`         | Pack and inspect a candidate without a publication rehearsal. This is not full certification.                   | None                        |
+| `stage`             | Publish the validated immutable `.tgz` files to the npm staging area                                            | Staged package records only |
+| `recover`           | Use current `main` tooling to stage an existing validated candidate again after explicit rejection confirmation | Staged package records only |
 
 The one-time RC0 bootstrap is complete. It is not a normal mode and it is not
 repeatable. The former direct `publish` mode is removed. Direct live publication
@@ -133,6 +134,12 @@ The `stage` mutation has these requirements:
 - the same identity for the tag target and the checkout;
 - a clean tree;
 - all certification jobs of the current run.
+
+The `recover` mode separates the tooling checkout from the package source.
+It requires a dispatch from `main`, an existing `candidate_tag`, a
+`prior_run_id`, and `rejected_stages_confirmed: true`. It restores the original
+validated archive instead of building or packing from `main`.
+The original candidate must have successful release certification.
 
 The selected package version must match the version in the tag. Unselected
 internal workspace dependencies must already exist publicly, at the exact
@@ -203,12 +210,12 @@ Each report has `mode: "fresh"` or `mode: "reconcile"`. It keeps the current run
 ID and attempt. A partial report is evidence of partial staging. It is not
 approval.
 
-The workflow always uploads that report with `release-manifest.json` as
-`release-staged-publication`. When staging is successful, the workflow also
-attaches these files and the compact `release-evidence.json` to the draft GitHub
-Release that waits for approval. Save the durable summary with them. The
-verification after approval needs neither the tarballs nor an Actions artifact
-that has not expired.
+The workflow uploads that report with `release-manifest.json` as
+`release-staged-publication`. A successful normal `stage` run also attaches
+these files and `release-evidence.json` to an approval-pending draft GitHub
+Release. Recovery preserves its evidence as artifacts; it does not create a
+draft Release. Save the reports. Verification after approval needs neither
+the tarballs nor an Actions artifact that has not expired.
 
 ### Registry checks and credentials
 
@@ -262,8 +269,8 @@ The original identity of the candidate run stays in the manifest. The new staged
 report records the current run. It keeps a digest of, and a link to, the prior
 report.
 
-- A prior state of `pending` or `staged` is uncertain. It fails closed without
-  another upload.
+- Without explicit rejection confirmation, a prior state of `pending` or
+  `staged` fails closed without another upload.
 - A prior state of `absent` can be staged after the normal registry checks.
 - An exact public state is reconciled without upload.
 - If the prior artifact is unavailable, corrupt or from another candidate, stop.
@@ -272,6 +279,50 @@ report.
 
 Actions never does authenticated staged-list reads, approval or tag promotion
 for a maintainer.
+
+To retry rejected stages, first inspect npm staging with maintainer credentials.
+Reject every prior staged candidate. Check that each uncertain upload has no
+remaining stage. Then supply `prior_run_id` and set
+`rejected_stages_confirmed` to `true` in the `stage` workflow.
+The CLI equivalent adds `--rejected-stages-confirmed` to `stage-preflight` and
+`stage`, with both prior-evidence arguments.
+
+This confirmation is a maintainer statement, not an automated registry check.
+The new report preserves the prior package states and stage IDs.
+Only copied `staged` and `pending` records become eligible for another upload.
+The original candidate manifest, hashes and tarballs do not change.
+Missing confirmation, mismatched evidence or conflicting public integrity still
+blocks the upload. Rejecting stages alone does not reset the Actions history.
+
+Staging errors include bounded, redacted causes and subprocess diagnostics.
+An invalid pnpm response includes its redacted output. These diagnostics do not
+authorize a retry or prove that an upload did not occur.
+
+If the original tag lacks a tooling fix, use `recover` from `main`.
+The candidate tag and package version do not change. Do not move the tag.
+
+### Recover with updated tooling from main
+
+First merge the tooling fix into `main`. Inspect npm staging with maintainer
+credentials. Reject all prior staged candidates and confirm that no uncertain
+upload has a remaining stage.
+
+Dispatch **Actions → Release → Run workflow** with these inputs:
+
+- ref: `main`;
+- `release_mode`: `recover`;
+- `candidate_tag`: the original tag, for example `v1.0.2`;
+- `prior_run_id`: the run that produced the partial staging report;
+- `rejected_stages_confirmed`: `true`.
+
+The selected prior run must retain `release-candidate-validated` and
+`release-staged-publication`. Recovery restores those artifacts. It checks the
+tag, source SHA, original certification and package hashes before staging.
+It does not use the package contents of the tooling checkout.
+
+Keep the candidate source SHA separate from the tooling SHA in recovery
+records. A successful recovery still requires human review and npm approval.
+Do not approve a partial recovery.
 
 ### npm and VSIX identities
 
@@ -496,9 +547,9 @@ These steps are maintainer actions. Certification does **not** do them.
 
 Freeze the exact source commit before you create a candidate tag. A `v*` tag is
 an immutable operational identity. Create it once. Do not move or delete it to
-add a fix. If a fix is necessary after tagging, select a new version: the next
-prerelease before GA, or a new patch version after GA. Create a new tag and run
-all exact-final gates again.
+add a fix. If the package contents must change after tagging, select a new
+version and run all exact-final gates again. A tooling-only fix can use
+`recover` with the original validated package bytes and unchanged tag.
 
 Configure a repository tag ruleset for `v*` manually. Enable both **restrict
 updates** and **restrict deletions**. Permit only the minimum maintainer or
@@ -508,8 +559,8 @@ checked-out candidate.
 
 Certification commands, docs updates, historical workflows and support-matrix
 prose do not authorize staging or approval. Only the explicitly dispatched
-`stage` mutation and the `pnpm stage approve` commands that a human reviewed
-authorize them. Never publish a tuple or a package that fresh exact-final
+`stage` or `recover` mutation and the `pnpm stage approve` commands that a human
+reviewed authorize them. Never publish a tuple or a package that exact-final
 evidence did not test. Use workflow run records and immutable artifacts. Do not
 put constants such as a "latest successful SHA" in this document.
 

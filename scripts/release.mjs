@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { compareSemVer, isSemVer } from "./docs-history.mjs";
 import { assertNoPriorStageAttempt, assertReleaseWorkflows } from "./assert-release-workflows.mjs";
+import { formatReleaseError } from "./release-diagnostics.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -594,6 +595,7 @@ async function createReleaseEvidence(
       runId: staged.runId ?? null,
       runAttempt: staged.runAttempt ?? null,
       reconciledFrom: staged.reconciledFrom ?? null,
+      rejectedStagesConfirmation: staged.rejectedStagesConfirmation ?? null,
       complete: staged.complete,
       approval: "human-interactive-after-staging",
       latestBefore: staged.latestBefore,
@@ -675,7 +677,7 @@ async function stagePackage(entry, record, persist, directory) {
     await persist();
     return;
   }
-  if (record.state === "pending" || record.stageId) {
+  if (record.state === "staged" || record.state === "pending" || record.stageId) {
     throw new Error(
       `Uncertain prior stage for ${entry.name}; refusing another upload. Maintainer must reconcile the staged publication before retrying.`,
     );
@@ -706,7 +708,7 @@ async function stagePackage(entry, record, persist, directory) {
     );
   } catch (error) {
     throw new Error(
-      `Staging outcome unresolved for ${entry.name}; retained pending evidence, refusing another upload.`,
+      `Staging outcome unresolved for ${entry.name} during pnpm stage publish; retained pending evidence, refusing another upload.`,
       { cause: error },
     );
   }
@@ -716,9 +718,12 @@ async function stagePackage(entry, record, persist, directory) {
     record.stageId = assertStageId(summary?.stageId);
     await persist(); // keep the returned ID if later validation fails
   } catch (error) {
-    throw new Error(
-      `Staging outcome unresolved for ${entry.name}; retained pending evidence, refusing another upload.`,
-      { cause: error },
+    throw Object.assign(
+      new Error(
+        `Staging outcome unresolved for ${entry.name} while reading the pnpm stage response; retained pending evidence, refusing another upload.`,
+        { cause: error },
+      ),
+      { stdout: output },
     );
   }
   if (summary.name !== entry.name || summary.version !== entry.version || summary.integrity !== entry.integrity) {
@@ -779,6 +784,16 @@ function assertNoTagDowngrade(name, tag, found, targetVersion) {
   }
 }
 
+function assertPriorStagingEvidence(manifest, priorEvidence, priorRunId) {
+  if (priorRunId !== undefined && String(priorEvidence.runId) !== String(priorRunId)) {
+    throw new Error("Prior staged evidence does not belong to the requested prior candidate run.");
+  }
+  if (priorEvidence.manifestSha256 !== manifestDigest(manifest)) {
+    throw new Error("Prior staged evidence does not match the immutable prior candidate manifest.");
+  }
+  assertStagingEvidence(manifest, priorEvidence, { allowPriorIdentity: true });
+}
+
 async function stageCandidates(
   manifest,
   {
@@ -786,11 +801,21 @@ async function stageCandidates(
     directory = artifactDir,
     priorEvidence,
     priorRunId,
+    rejectedStagesConfirmed = false,
     currentRunId = manifest.runId,
     currentRunAttempt = manifest.runAttempt,
   } = {},
 ) {
   assertManifestIdentity(manifest);
+  if (
+    typeof rejectedStagesConfirmed !== "boolean" ||
+    (rejectedStagesConfirmed && (dryRun || !priorEvidence || !/^\d+$/u.test(priorRunId ?? "")))
+  ) {
+    throw new Error(
+      "Rejected-stage confirmation requires explicit prior staged evidence and a numeric prior run ID for staging.",
+    );
+  }
+  if (priorEvidence) assertPriorStagingEvidence(manifest, priorEvidence, priorRunId);
   const releaseEntries = manifest.packages.filter(({ name }) => manifest.releasePackages.includes(name));
   await assertPnpmVersion();
   if (dryRun) {
@@ -844,13 +869,6 @@ async function stageCandidates(
     evidence = existingEvidence;
     assertStagingEvidence(manifest, evidence);
   } else if (priorEvidence) {
-    if (priorRunId !== undefined && String(priorEvidence.runId) !== String(priorRunId)) {
-      throw new Error("Prior staged evidence does not belong to the requested prior candidate run.");
-    }
-    if (priorEvidence.manifestSha256 !== manifestDigest(manifest)) {
-      throw new Error("Prior staged evidence does not match the immutable prior candidate manifest.");
-    }
-    assertStagingEvidence(manifest, priorEvidence, { allowPriorIdentity: true });
     evidence = {
       ...priorEvidence,
       mode: "reconcile",
@@ -911,6 +929,29 @@ async function stageCandidates(
       assertNoTagDowngrade(entry.name, requestedTag, tags[requestedTag], entry.version);
       if (entrySemver.isPrerelease && tags.latest === entry.version)
         throw new Error(`Refusing prerelease ${entry.version} under latest for ${entry.name}.`);
+      if (rejectedStagesConfirmed) {
+        const existing = await registryIntegrity(entry.name, entry.version);
+        if (existing && existing !== entry.integrity)
+          throw new Error(`Registry integrity mismatch for ${entry.name}@${entry.version}.`);
+      }
+    }
+    if (rejectedStagesConfirmed) {
+      evidence.rejectedStagesConfirmation = {
+        confirmed: true,
+        statement:
+          "Maintainer confirms all prior staged candidates were rejected and every uncertain upload was checked absent from npm staging.",
+        runId: currentRunId,
+        runAttempt: currentRunAttempt,
+        priorRunId: priorEvidence.runId,
+        priorRunAttempt: priorEvidence.runAttempt,
+        priorPackages: priorEvidence.packages.map((record) => ({ ...record })),
+      };
+      for (const record of evidence.packages) {
+        if (record.state !== "staged" && record.state !== "pending") continue;
+        record.state = "absent";
+        delete record.stageId;
+      }
+      await persist();
     }
     for (const [index, entry] of releaseEntries.entries()) {
       // pnpm obtains its own short-lived OIDC credential for stage publish.
@@ -1036,6 +1077,16 @@ async function main() {
     throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
   const priorEvidencePath = option("--prior-staged-publication");
   const priorCandidateRunId = option("--prior-candidate-run-id");
+  const rejectedStagesConfirmed = process.argv.includes("--rejected-stages-confirmed");
+  if (process.argv.some((argument) => argument.startsWith("--rejected-stages-confirmed=")))
+    throw new Error("Use the bare --rejected-stages-confirmed flag only after maintainer confirmation.");
+  if (
+    rejectedStagesConfirmed &&
+    (!["stage-preflight", "stage"].includes(mode) || !priorEvidencePath || !/^\d+$/u.test(priorCandidateRunId ?? ""))
+  )
+    throw new Error(
+      "Rejected-stage confirmation requires stage or stage-preflight with explicit prior staged evidence and a numeric prior run ID.",
+    );
   if (priorEvidencePath && !["stage-preflight", "stage"].includes(mode))
     throw new Error("Prior staged evidence is accepted only for explicit staging reconciliation.");
   if (priorCandidateRunId && !["stage-preflight", "stage", "stage-dry-run"].includes(mode))
@@ -1107,6 +1158,7 @@ async function main() {
   if (JSON.stringify(manifest.releasePackages) !== JSON.stringify(releaseNames))
     throw new Error("Validated release artifacts do not match the selected release package.");
   const priorEvidence = priorEvidencePath ? await json(resolve(priorEvidencePath)) : undefined;
+  if (priorEvidence) assertPriorStagingEvidence(manifest, priorEvidence, priorCandidateRunId);
   if (mode === "stage-preflight") {
     await assertReleaseWorkflows();
     await assertNoPriorStageAttempt(process.env, fetch, { allowReconciliation: Boolean(priorEvidence) });
@@ -1119,6 +1171,7 @@ async function main() {
     dryRun: mode === "stage-dry-run",
     priorEvidence,
     priorRunId: priorCandidateRunId,
+    rejectedStagesConfirmed,
     currentRunId: process.env.GITHUB_RUN_ID ?? manifest.runId,
     currentRunAttempt: process.env.GITHUB_RUN_ATTEMPT ?? manifest.runAttempt,
   });
@@ -1152,7 +1205,7 @@ function assertPublicationCredentials(mode, env = process.env) {
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : undefined;
 if (invokedPath === fileURLToPath(import.meta.url)) {
   await main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(formatReleaseError(error));
     process.exitCode = 1;
   });
 }
@@ -1174,6 +1227,7 @@ function setReleasePackage(nextPackage) {
 export {
   assertManifestOrder,
   assertMutationAuthorization,
+  assertPriorStagingEvidence,
   assertPublicationCredentials,
   assertTaggedSha,
   createReleaseEvidence,

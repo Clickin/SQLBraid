@@ -111,6 +111,7 @@
         "scripts/merge-vitest-results.mjs",
         "scripts/package-vscode.mjs",
         "scripts/release.mjs",
+        "scripts/release-recovery.mjs",
         "scripts/support-evidence.mjs",
         "scripts/validate-contract-matrix.mjs",
         "scripts/validate-dependency-ownership.mjs",
