@@ -51,7 +51,7 @@
     "@sqlbraid/migrate": "workspace:^0.1.0"
   },
   "peerDependencies": {
-    "@sqlbraid/migrate": "^0.1.0"
+    "@sqlbraid/migrate": "workspace:^0.1.0"
   },
   "peerDependenciesMeta": {
     "@sqlbraid/migrate": {
