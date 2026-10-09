@@ -103,7 +103,8 @@ The normal modes of the Release workflow are:
 
 The one-time RC0 bootstrap is complete. It is not a normal mode and it is not
 repeatable. The former direct `publish` mode is removed. Direct live publication
-is disabled.
+is disabled in release automation. A new npm package needs the separate
+[human-first publication procedure](#first-publication-of-sqlbraidmigrate).
 
 SQLBraid does not require lockstep npm package versions.
 
@@ -383,10 +384,10 @@ package with these values:
   repository has no `environment:` setting);
 - Allowed publishing action: staged publishing only (`npm stage publish`).
 
-Do not enable direct `npm publish`. The stage job gets only the OIDC
-`id-token: write` permission that the staged exchange and provenance need. It
-gets no `NODE_AUTH_TOKEN`, `NPM_TOKEN` or bootstrap token. It cannot fall back to
-a static credential.
+Do not enable direct `npm publish` for the Trusted Publisher. The stage job gets
+only the OIDC `id-token: write` permission that staged exchange and provenance
+need. It gets no `NODE_AUTH_TOKEN`, `NPM_TOKEN` or bootstrap token. It cannot
+fall back to a static credential.
 
 Approval is a separate human action in an interactive terminal. Actions never
 runs it. Pages requires its own manual `deploy=true` authorization. Marketplace
@@ -446,18 +447,120 @@ checks.
 
 `bootstrap-rc0` is historical. RC0 was bootstrapped once. Do not repeat it.
 `publish` and `npm publish` are not aliases for `stage publish`. Direct live
-publication is disabled. There is no separate automated `dist-tag` mutation and
-no approval job in Actions. The only supported mutation is staged publication
-with its requested `next` or `latest` channel. Human `pnpm stage approve`
-commands and verification follow it.
+publication is disabled in Actions and the release scripts. There is no
+automated `dist-tag` mutation and no approval job in Actions. The only supported
+automated mutation is staged publication with its requested `next` or `latest`
+channel. Human `pnpm stage approve` commands and verification follow it.
+
+### First publication of @sqlbraid/migrate
+
+The first publication of `@sqlbraid/migrate@0.1.0` must be a human action.
+The existing RC0 prohibition does not prohibit this new package from being
+published manually. It still prohibits restoring automated bootstrap or direct
+publication modes. Do not publish an artificial lower version to bypass the
+missing-package guard.
+
+Certification can validate an absent package with a staged dry-run. That dry-run
+does not authorize publication or prove registry permissions. The real staging
+path rejects an absent package before any upload. Do not dispatch `stage` or
+`recover` to create the package.
+
+The migration release uses these dependency versions:
+
+| Package                     | Prepared version | Reason                                                            |
+| --------------------------- | ---------------- | ----------------------------------------------------------------- |
+| `@sqlbraid/core`            | `1.0.3`          | Migration errors and per-operation reuse types                    |
+| `@sqlbraid/runtime`         | `1.0.3`          | Per-operation simple execution                                    |
+| `@sqlbraid/mysql`           | `1.0.3`          | Parameter-free migration statements use the text protocol         |
+| `@sqlbraid/mssql`           | `1.0.3`          | Native batches preserve session state                             |
+| `@sqlbraid/metadata`        | `1.0.3`          | Optional drift supports Node 16.20.2                              |
+| `@sqlbraid/tooling`         | `1.0.3`          | Migration configuration and config path resolution                |
+| `@sqlbraid/cli`             | `1.0.3`          | Migration commands                                                |
+| `@sqlbraid/language-server` | `1.0.3`          | TypeScript config watching; matches the CLI bundled by the editor |
+| `@sqlbraid/migrate`         | `0.1.0`          | First publication, performed manually                             |
+
+Publish core before runtime, and runtime before the MySQL and SQL Server adapters.
+Publish metadata and tooling before the migration CLI rollout.
+Publish migrate manually before CLI. Existing packages use normal staged releases.
+Template, operations, compiler and codegen need no new version for this release.
+The language server is not a migration runtime prerequisite. The editor pins matching CLI and language-server versions.
+
+The repository prepares these versions. It does not prove that npm already contains them.
+
+1. Prepare a clean final revision and obtain separate publication authorization.
+   Run the release gates and packed-consumer checks for that exact revision.
+   Confirm that the packed dependencies, including `@sqlbraid/core` and
+   `@sqlbraid/template`, resolve from npm without workspace links.
+   Release those dependencies first if necessary. Do not release a dependent
+   CLI version until the migration package is public.
+2. For local inspection, build and pack without publication:
+
+   ```sh
+   pnpm install --frozen-lockfile
+   pnpm run build:packages
+   LOCAL_PACK_DIR="$(mktemp -d)"
+   pnpm --filter @sqlbraid/migrate pack --pack-destination "$LOCAL_PACK_DIR"
+   ```
+
+   Inspect the tarball exports, declarations, dependencies, README and license.
+   Test installation of that tarball in an isolated consumer.
+   This local pack is not final certification evidence.
+
+3. After separate authorization, create the immutable `migrate-v0.1.0`
+   candidate tag. Wait for successful Release certification and Runtime
+   portability for its exact SHA. The Release DAG includes documentation checks.
+   Do not substitute `pack-only` for certification.
+4. Download the certified bytes instead of publishing the local inspection pack:
+
+   ```sh
+   MIGRATE_RELEASE_DIR="$(mktemp -d)"
+   gh run download <certified-run-id> --name release-candidate-validated \
+     --dir "$MIGRATE_RELEASE_DIR/download"
+   tar -xzf "$MIGRATE_RELEASE_DIR/download/release-candidate-validated.tar.gz" \
+     -C "$MIGRATE_RELEASE_DIR"
+   ```
+
+   In `sqlbraid-release-artifacts/release-manifest.json`, identify the
+   `@sqlbraid/migrate@0.1.0` entry. Confirm its source SHA, producer run and
+   `releasePackages` selection. Compare its SHA-256 and SHA-512 integrity with
+   the tarball. Keep the manifest, pack-check stamp and certification evidence.
+   Set `MIGRATE_TARBALL` to the absolute path of that entry's `file`.
+   Do not rebuild or repack these bytes.
+
+5. In a human-controlled terminal, authenticate to npm as an authorized
+   maintainer with 2FA. Keep credentials outside the repository and Actions.
+   Confirm that the package is still absent. Stop if it already exists or the
+   registry read fails for another reason.
+6. The human performs this first publication of the validated tarball:
+
+   ```sh
+   pnpm whoami --registry https://registry.npmjs.org/
+   pnpm publish "$MIGRATE_TARBALL" --access public --tag latest \
+     --no-git-checks --ignore-scripts --registry https://registry.npmjs.org/
+   pnpm view @sqlbraid/migrate@0.1.0 dist.integrity --json \
+     --registry https://registry.npmjs.org/
+   pnpm view @sqlbraid/migrate dist-tags --json \
+     --registry https://registry.npmjs.org/
+   ```
+
+   Compare the public integrity with the saved manifest. Confirm `latest=0.1.0`.
+   Save the publication receipt and verify an isolated npm-only installation.
+   If the upload outcome is uncertain, inspect the registry before any retry.
+   This local publication does not claim GitHub OIDC provenance. Do not invent
+   staged evidence or use `verify-published` to claim staged-release provenance.
+
+7. Configure this package's Trusted Publisher with the values above and
+   **staged publishing only**. Subsequent new versions use the normal certified
+   candidate, OIDC staging and human approval sequence. Do not restage `0.1.0`
+   merely to create evidence. Do not add CI tokens or a first-publish fallback.
 
 ## Maintainer sequence: 1.0.0 and later releases
 
 These steps are maintainer actions. Certification does **not** do them.
 
-1. The RC0 bootstrap is historical and complete. Do not create a token. Do not
-   run a bootstrap again. Do not use older RC evidence as evidence for this
-   candidate.
+1. The RC0 bootstrap is historical and complete. Do not restore it or create
+   an automation token. For an absent new package, use the human-first procedure
+   above. Do not use older RC evidence as evidence for this candidate.
 2. Create the candidate tag.
    - Change only the version of the package that needs a release and the
      dependency ranges that must change.

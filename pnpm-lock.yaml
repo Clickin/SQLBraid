@@ -176,10 +176,10 @@ importers:
   extensions/vscode:
     dependencies:
       '@sqlbraid/cli':
-        specifier: workspace:1.0.2
+        specifier: workspace:1.0.3
         version: link:../../packages/cli
       '@sqlbraid/language-server':
-        specifier: workspace:1.0.2
+        specifier: workspace:1.0.3
         version: link:../../packages/language-server
       vscode-languageclient:
         specifier: 9.0.1
@@ -225,7 +225,7 @@ importers:
         specifier: workspace:^1.0.0
         version: link:../operations
       '@sqlbraid/tooling':
-        specifier: workspace:^1.0.0
+        specifier: workspace:^1.0.3
         version: link:../tooling
     devDependencies:
       '@sqlbraid/migrate':
@@ -274,7 +274,7 @@ importers:
         specifier: workspace:^1.0.0
         version: link:../metadata
       '@sqlbraid/tooling':
-        specifier: workspace:^1.0.0
+        specifier: workspace:^1.0.3
         version: link:../tooling
       vscode-languageserver:
         specifier: 9.0.1
@@ -322,10 +322,10 @@ importers:
   packages/mssql:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^1.0.0
+        specifier: workspace:^1.0.3
         version: link:../core
       '@sqlbraid/runtime':
-        specifier: workspace:^1.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
       '@sqlbraid/template':
         specifier: workspace:^1.0.0
@@ -341,10 +341,10 @@ importers:
   packages/mysql:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^1.0.0
+        specifier: workspace:^1.0.3
         version: link:../core
       '@sqlbraid/runtime':
-        specifier: workspace:^1.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
       '@sqlbraid/template':
         specifier: workspace:^1.0.0
@@ -417,7 +417,7 @@ importers:
   packages/runtime:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^1.0.0
+        specifier: workspace:^1.0.3
         version: link:../core
 
   packages/sqlbraid:

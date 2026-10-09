@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/mssql",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "SQLBraid Microsoft SQL Server dialect, Tedious adapter, and metadata inspector",
   "keywords": [
     "database",
@@ -42,8 +42,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:^1.0.0",
-    "@sqlbraid/runtime": "workspace:^1.0.0",
+    "@sqlbraid/core": "workspace:^1.0.3",
+    "@sqlbraid/runtime": "workspace:^1.0.3",
     "@sqlbraid/template": "workspace:^1.0.0"
   },
   "devDependencies": {

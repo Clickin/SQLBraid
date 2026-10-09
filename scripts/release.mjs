@@ -746,7 +746,7 @@ async function assertStageablePackages(manifest) {
     const versions = await pnpmView(entry.name, "versions");
     if (!Array.isArray(versions) || versions.length === 0) {
       throw new Error(
-        `${entry.name} does not exist on npm. npm staged publishing cannot create a new package; publish one lower bootstrap version manually, configure trusted publishing, then retry this exact candidate.`,
+        `${entry.name} does not exist on npm. Automated first publication is forbidden; a human must publish the validated first release manually, then configure staged-only trusted publishing for subsequent versions. See docs/SQLBraid_release_readiness.md.`,
       );
     }
   }

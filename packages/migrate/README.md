@@ -8,6 +8,13 @@ npm install @sqlbraid/migrate
 npm install --save-dev @sqlbraid/cli
 ```
 
+Use `@sqlbraid/core` and `@sqlbraid/runtime` version `1.0.3` or later.
+MySQL and SQL Server migrations also need `@sqlbraid/mysql` or `@sqlbraid/mssql` version `1.0.3` or later.
+Earlier runtimes ignore the migration runner's simple-execution request.
+Earlier MySQL and SQL Server adapters do not implement the required execution paths.
+The CLI commands need `@sqlbraid/cli` and `@sqlbraid/tooling` version `1.0.3` or later.
+Optional schema drift needs `@sqlbraid/metadata` version `1.0.3` or later.
+
 [SQLBraid documentation](https://clickin.github.io/SQLBraid/)
 
 ## Migration files

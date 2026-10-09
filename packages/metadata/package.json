@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/metadata",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "SQLBraid database metadata snapshot types, validation, and hashing",
   "keywords": [
     "database",

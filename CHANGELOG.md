@@ -28,6 +28,8 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 - Add per-operation `ExecutionOptions.reuse`; bound MySQL queries retain server-side prepared execution.
 - Keep PostgreSQL `BEGIN ATOMIC` routine bodies in one statement.
 - Record the inspected schema hash after `baseline` when a drift adapter is configured.
+- Prepare `1.0.3` releases of core, runtime, MySQL, SQL Server, metadata, tooling, CLI and language server for migration consumers.
+  Require the new core, runtime, tooling and metadata versions where their added APIs or compatibility are needed.
 
 ### Release tooling
 
@@ -35,6 +37,8 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   separately with `<package>-vX.Y.Z` tags.
 - Run staging tools from `main` against the original certified artifacts.
   Keep existing coordinated release records and their recovery path unchanged.
+- Keep the first `@sqlbraid/migrate@0.1.0` publication human-only. Reject automatic staging of an absent package
+  before upload, without suggesting an artificial bootstrap version.
 
 ## 1.0.2
 

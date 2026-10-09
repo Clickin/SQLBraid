@@ -179,11 +179,24 @@ test("pnpm missing exact-version errors are treated as a new version of an exist
   assert.equal(f.uploads().length, 1);
 });
 
-test("staging fails before upload when the npm package itself has never been bootstrapped", async () => {
-  const f = await fixture();
+test("an absent migration package can be certified but cannot be first-published automatically", async () => {
+  const f = await fixture("0.1.0", ["@sqlbraid/migrate"]);
   f.behavior.packageNotFound = true;
-  await assert.rejects(f.run(), /does not exist on npm.*bootstrap version/iu);
+  await f.run(true);
   assert.equal(f.uploads().length, 0);
+  assert.equal(
+    f.calls.some(([command]) => command === "view"),
+    false,
+  );
+  await assert.rejects(
+    f.run(),
+    /@sqlbraid\/migrate does not exist on npm.*Automated first publication is forbidden.*human/iu,
+  );
+  assert.equal(f.uploads().length, 0);
+  assert.equal(
+    f.calls.some(([command]) => ["publish", "dist-tag", "pack"].includes(command)),
+    false,
+  );
 });
 
 test("staging records exact candidate IDs, requests provenance and next, and never changes latest", async () => {
