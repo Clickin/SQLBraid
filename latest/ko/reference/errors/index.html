@@ -79,6 +79,7 @@
 <li>드라이버 오류는 감싸지 않습니다.</li>
 <li>이미 중단된 <code dir="auto">AbortSignal</code>은 원래 <code dir="auto">reason</code>으로 reject됩니다.</li>
 <li>어댑터의 입력·전송 실패가 고정된 코드를 가지면 <code dir="auto">AdapterError</code>(<code dir="auto">TypeError</code>) 클래스를 씁니다.</li>
+<li>선택 패키지 <code dir="auto">@sqlbraid/migrate</code>는 <code dir="auto">MigrationError</code>와 <code dir="auto">MigrationStartupError</code>를 export합니다. <code dir="auto">MigrationStartupError</code>에는 마이그레이션 보고서가 포함됩니다.</li>
 </ul>
 <table>
 <thead>
@@ -299,6 +300,42 @@
 <tr>
 <td><code dir="auto">BRAID_SQL_LIMIT</code> / <code dir="auto">BRAID_BIND_LIMIT</code></td>
 <td>렌더링 결과가 설정한 한도를 넘었습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_SOURCE</code></td>
+<td>마이그레이션 소스·manifest·SQL 구분자가 잘못되었거나 필요한 방언 파일이 없습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_UNINITIALIZED</code></td>
+<td>마이그레이션 이력 테이블이 없습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_PENDING</code></td>
+<td>검증 중 미적용 버전이나 변경된 반복 마이그레이션을 발견했습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_AHEAD</code></td>
+<td>데이터베이스에 더 새로운 마이그레이션이 있고 시작 정책이 이를 거부합니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_CHECKSUM</code></td>
+<td>적용한 버전의 소스 체크섬이 달라졌습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_ORDER</code></td>
+<td>소스가 없거나 버전 순서가 잘못되었거나 baseline 대상 이력이 비어 있지 않거나 승인한 스키마 해시를 저장할 성공한 마이그레이션이 없습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_DIRTY</code></td>
+<td>이력에 실패한 시도나 잘못된 상태가 있습니다. repair 전에 데이터베이스를 점검하세요.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_BUSY</code></td>
+<td>검증 중 실행 중인 시도를 발견했거나 적용 중 잠금·실행 권한 대기 시간이 초과되었습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_SCHEMA_DRIFT</code></td>
+<td>검사한 스키마 해시가 마이그레이션 이력에 저장된 해시와 다릅니다.</td>
 </tr>
 </tbody>
 </table>

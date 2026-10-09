@@ -90,6 +90,8 @@ identifies the capability. Its <code dir="auto">code</code> is stable.</li>
 <li>An already-aborted <code dir="auto">AbortSignal</code> rejects with its original <code dir="auto">reason</code>.</li>
 <li>Adapter input and transport failures use the <code dir="auto">AdapterError</code> (<code dir="auto">TypeError</code>)
 class when they expose a stable code.</li>
+<li>The optional <code dir="auto">@sqlbraid/migrate</code> package exports <code dir="auto">MigrationError</code> and
+<code dir="auto">MigrationStartupError</code>. The latter includes the migration report.</li>
 </ul>
 <table>
 <thead>
@@ -310,6 +312,42 @@ class when they expose a stable code.</li>
 <tr>
 <td><code dir="auto">BRAID_SQL_LIMIT</code> / <code dir="auto">BRAID_BIND_LIMIT</code></td>
 <td>Rendered output exceeds configured limits.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_SOURCE</code></td>
+<td>Migration sources, a manifest or SQL separators are invalid, or a required dialect variant is missing.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_UNINITIALIZED</code></td>
+<td>The migration history table does not exist.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_PENDING</code></td>
+<td>Verification found pending versions or changed repeatable migrations.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_AHEAD</code></td>
+<td>The database has newer migrations and the startup policy rejects them.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_CHECKSUM</code></td>
+<td>An applied version has a different source checksum.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_ORDER</code></td>
+<td>A source is missing, a version is out of order, a baseline has nonempty history, or no successful migration can store an accepted schema hash.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_DIRTY</code></td>
+<td>History contains a failed attempt or invalid state. Inspect the database before repair.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_BUSY</code></td>
+<td>Verification found a running attempt, or an apply exceeded its lock or claim timeout.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_MIGRATE_SCHEMA_DRIFT</code></td>
+<td>The inspected schema hash differs from the hash stored in migration history.</td>
 </tr>
 </tbody>
 </table>

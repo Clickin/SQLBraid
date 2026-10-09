@@ -13,6 +13,7 @@ SQLBraid의 런타임·컴파일러 오류는 오류 타입이 코드를 정의�
 - 드라이버 오류는 감싸지 않습니다.
 - 이미 중단된 `AbortSignal`은 원래 `reason`으로 reject됩니다.
 - 어댑터의 입력·전송 실패가 고정된 코드를 가지면 `AdapterError`(`TypeError`) 클래스를 씁니다.
+- 선택 패키지 `@sqlbraid/migrate`는 `MigrationError`와 `MigrationStartupError`를 export합니다. `MigrationStartupError`에는 마이그레이션 보고서가 포함됩니다.
 
 | 코드                                   | 의미                                                                                                                                                                               |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -69,6 +70,15 @@ SQLBraid의 런타임·컴파일러 오류는 오류 타입이 코드를 정의�
 | `BRAID_DEPTH`                          | 템플릿이나 렌더링된 조각의 중첩이 설정한 한도를 넘었습니다.                                                                                                                        |
 | `BRAID_STRUCTURE_LIMIT`                | 렌더링된 구조 항목 수가 `maxStructuralItems`를 넘었습니다.                                                                                                                         |
 | `BRAID_SQL_LIMIT` / `BRAID_BIND_LIMIT` | 렌더링 결과가 설정한 한도를 넘었습니다.                                                                                                                                            |
+| `BRAID_MIGRATE_SOURCE`                 | 마이그레이션 소스·manifest·SQL 구분자가 잘못되었거나 필요한 방언 파일이 없습니다.                                                                                                  |
+| `BRAID_MIGRATE_UNINITIALIZED`          | 마이그레이션 이력 테이블이 없습니다.                                                                                                                                               |
+| `BRAID_MIGRATE_PENDING`                | 검증 중 미적용 버전이나 변경된 반복 마이그레이션을 발견했습니다.                                                                                                                   |
+| `BRAID_MIGRATE_AHEAD`                  | 데이터베이스에 더 새로운 마이그레이션이 있고 시작 정책이 이를 거부합니다.                                                                                                          |
+| `BRAID_MIGRATE_CHECKSUM`               | 적용한 버전의 소스 체크섬이 달라졌습니다.                                                                                                                                          |
+| `BRAID_MIGRATE_ORDER`                  | 소스가 없거나 버전 순서가 잘못되었거나 baseline 대상 이력이 비어 있지 않거나 승인한 스키마 해시를 저장할 성공한 마이그레이션이 없습니다.                                           |
+| `BRAID_MIGRATE_DIRTY`                  | 이력에 실패한 시도나 잘못된 상태가 있습니다. repair 전에 데이터베이스를 점검하세요.                                                                                                |
+| `BRAID_MIGRATE_BUSY`                   | 검증 중 실행 중인 시도를 발견했거나 적용 중 잠금·실행 권한 대기 시간이 초과되었습니다.                                                                                             |
+| `BRAID_MIGRATE_SCHEMA_DRIFT`           | 검사한 스키마 해시가 마이그레이션 이력에 저장된 해시와 다릅니다.                                                                                                                   |
 
 `UnsupportedFeatureError`의 인자는 `(feature, code, message, options?)`이고, 코드는 `BRAID_${string}` 형식으로 제한됩니다. 이미 중단된 시그널은 `BRAID_CANCEL_UNSUPPORTED`가 아니라 원래 `reason`으로 reject됩니다. 지원하지 않는 기능 오류를 잡아서 버퍼링, 숨은 트랜잭션, 추측한 루틴 메타데이터, 힌트 무시로 대신하지 마세요.
 
