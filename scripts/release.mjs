@@ -805,6 +805,7 @@ async function stageCandidates(
     currentRunId = manifest.runId,
     currentRunAttempt = manifest.runAttempt,
     tool,
+    recovery,
   } = {},
 ) {
   assertManifestIdentity(manifest);
@@ -899,6 +900,7 @@ async function stageCandidates(
       commit: manifest.commit,
       runId: currentRunId,
       ...(tool ? { tool } : {}),
+      ...(recovery ? { recovery } : {}),
       runAttempt: currentRunAttempt,
       candidateRunId: manifest.runId,
       candidateRunAttempt: manifest.runAttempt,

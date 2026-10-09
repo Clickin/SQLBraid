@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test, vi } from "vitest";
@@ -603,3 +603,85 @@ test("recovery of a failed fresh main stage retains original producer and valida
   assert.equal(evidence.reconciledFrom?.runId, "456");
   assert.equal(evidence.rejectedStagesConfirmation?.confirmed, true);
 });
+
+test.each(["valid", "no confirmation", "wrong tag", "failed preservation", "changed manifest", "invalid journal"])(
+  "recovery without a staging journal verifies the failed run and preserved candidate: %s",
+  async (scenario) => {
+    const f = await fixture(["@sqlbraid/runtime"], "1.0.3");
+    f.env.SQLBRAID_RECOVERY_TAG = "runtime-v1.0.3";
+    f.env.SQLBRAID_RECOVERY_RUN_ID = "789";
+    f.run.head_branch = f.env.SQLBRAID_RECOVERY_TAG;
+    f.run.event = "push";
+    f.run.conclusion = "success";
+    f.behavior.gateBranch = f.env.SQLBRAID_RECOVERY_TAG;
+    const priorDirectory = join(f.directory, "prior-stage");
+    await mkdir(priorDirectory);
+    await writeFile(
+      join(priorDirectory, "release-manifest.json"),
+      JSON.stringify(scenario === "changed manifest" ? { ...f.manifest, commit: "d".repeat(40) } : f.manifest),
+    );
+    const priorPath = join(priorDirectory, "staged-publication.json");
+    if (scenario === "invalid journal") await writeFile(priorPath, "{");
+    if (scenario === "no confirmation") f.env.SQLBRAID_REJECTED_STAGES_CONFIRMED = "false";
+    const priorSha = "c".repeat(40);
+    const request: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/runs/789"))
+        return new Response(
+          JSON.stringify({
+            ...f.run,
+            id: 789,
+            head_sha: priorSha,
+            head_branch: "main",
+            display_title: `Release ${scenario === "wrong tag" ? "mysql-v1.0.3" : f.env.SQLBRAID_RECOVERY_TAG}`,
+            event: "workflow_dispatch",
+            conclusion: "failure",
+          }),
+        );
+      if (url.includes("/runs/789/attempts/1/jobs"))
+        return new Response(
+          JSON.stringify({
+            jobs: [
+              {
+                ...f.jobs[1],
+                run_id: 789,
+                head_sha: priorSha,
+                steps: [
+                  ...f.jobs[1].steps,
+                  {
+                    name: "Preserve recovery staged publication evidence",
+                    status: "completed",
+                    conclusion: scenario === "failed preservation" ? "failure" : "success",
+                  },
+                ],
+              },
+            ],
+          }),
+        );
+      return f.request(input, init);
+    };
+    const recover = () =>
+      recoverRelease({
+        mode: "stage",
+        artifactDir: f.directory,
+        priorStagedPublication: priorPath,
+        env: f.env,
+        command: f.command,
+        request,
+      });
+    if (scenario !== "valid") {
+      await assert.rejects(recover());
+      assert.equal(f.uploads().length, 0);
+      return;
+    }
+    const evidence = await recover();
+    assert.ok(evidence && "recovery" in evidence);
+    assert.equal(evidence.recovery.priorRunId, "789");
+    assert.equal(evidence.recovery.priorStagingJournal, "absent");
+    assert.equal(evidence.recovery.rejectedStagesConfirmed, true);
+    assert.equal(evidence.candidateRunId, "123");
+    assert.equal(evidence.packages[0].state, "staged");
+    assert.equal(f.uploads().length, 1);
+    assert.deepEqual(await readFile(join(f.directory, f.entry.file)), f.bytes);
+  },
+);

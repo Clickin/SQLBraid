@@ -40,6 +40,7 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 - Keep the first `@sqlbraid/migrate@0.1.0` publication human-only. Reject automatic staging of an absent package
   before upload, without suggesting an artificial bootstrap version.
 - Keep migration peers on the workspace protocol so packed dependencies match the release candidate evidence.
+- Recover a failed staging precheck with no journal only after explicit registry reconciliation and verification of preserved candidate evidence.
 
 ## 1.0.2
 

@@ -98,7 +98,19 @@ export async function recoverRelease({
     throw new Error("Recovery candidate tag does not match the selected release package.");
   if (!recovering && manifest.runId !== env.SQLBRAID_RECOVERY_RUN_ID)
     throw new Error("Fresh staging requires the original certified candidate producer run.");
-  const priorEvidence = recovering ? await json(resolve(priorStagedPublication)) : undefined;
+  let priorEvidence;
+  if (priorStagedPublication) {
+    try {
+      priorEvidence = await json(resolve(priorStagedPublication));
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      const preserved = await json(join(dirname(resolve(priorStagedPublication)), "release-manifest.json"));
+      if (JSON.stringify(preserved) !== JSON.stringify(manifest))
+        throw new Error("Recovery without a staging journal requires the same preserved candidate manifest.", {
+          cause: error,
+        });
+    }
+  }
   if (priorEvidence) {
     assertPriorStagingEvidence(manifest, priorEvidence, env.SQLBRAID_RECOVERY_RUN_ID);
     if (!positiveId(priorEvidence.runId) || !positiveId(priorEvidence.runAttempt))
@@ -181,7 +193,25 @@ export async function recoverRelease({
 
   let priorSha = candidateSha;
   let priorRef = candidateRef;
-  if (priorEvidence.recovery) {
+  const priorRunId = priorEvidence?.runId ?? env.SQLBRAID_RECOVERY_RUN_ID;
+  let priorRunAttempt = priorEvidence?.runAttempt;
+  if (!priorEvidence) {
+    const failedRun = await get(`runs/${priorRunId}`);
+    if (
+      manifest.releasePackages.length !== 1 ||
+      failedRun.head_branch !== "main" ||
+      failedRun.display_title !== `Release ${tag}` ||
+      failedRun.event !== "workflow_dispatch" ||
+      failedRun.conclusion !== "failure" ||
+      !shaPattern.test(failedRun.head_sha ?? "") ||
+      !positiveId(String(failedRun.run_attempt))
+    )
+      throw new Error("Recovery without a staging journal requires a failed main staging run for this candidate.");
+    priorSha = failedRun.head_sha;
+    priorRef = "refs/heads/main";
+    priorRunAttempt = String(failedRun.run_attempt);
+  }
+  if (priorEvidence?.recovery) {
     const { tool: priorTool, candidate, rejectedStagesConfirmed } = priorEvidence.recovery;
     if (
       priorTool?.repository !== env.GITHUB_REPOSITORY ||
@@ -198,7 +228,7 @@ export async function recoverRelease({
       throw new Error("Recovery prior report has mismatched tool or candidate provenance.");
     priorSha = priorTool.sha;
     priorRef = priorTool.ref;
-  } else if (priorEvidence.tool) {
+  } else if (priorEvidence?.tool) {
     const priorTool = priorEvidence.tool;
     if (
       priorTool.repository !== env.GITHUB_REPOSITORY ||
@@ -213,20 +243,20 @@ export async function recoverRelease({
     priorSha = priorTool.sha;
     priorRef = priorTool.ref;
   }
-  const priorRun = await verifyRun(priorEvidence.runId, priorEvidence.runAttempt, priorSha, priorRef);
+  const priorRun = await verifyRun(priorRunId, priorRunAttempt, priorSha, priorRef);
   if (priorRun.event !== "workflow_dispatch") throw new Error("Recovery requires a prior dispatched mutation attempt.");
   const priorJobs =
-    priorEvidence.runId === manifest.runId && priorEvidence.runAttempt === manifest.runAttempt
+    priorRunId === manifest.runId && priorRunAttempt === manifest.runAttempt
       ? candidateJobs
-      : await jobsFor(priorEvidence.runId, priorEvidence.runAttempt);
-  const priorJobName = priorEvidence.recovery
+      : await jobsFor(priorRunId, priorRunAttempt);
+  const priorJobName = priorEvidence?.recovery
     ? "Recover validated packages with pnpm OIDC"
     : "Stage validated packages with pnpm OIDC";
   if (
     !priorJobs.some(
       (job) =>
         job.name === priorJobName &&
-        String(job.run_id) === priorEvidence.runId &&
+        String(job.run_id) === priorRunId &&
         job.head_sha === priorSha &&
         job.status === "completed" &&
         Array.isArray(job.steps) &&
@@ -239,18 +269,44 @@ export async function recoverRelease({
     )
   )
     throw new Error("Recovery requires evidence of a previous npm mutation attempt.");
+  if (
+    !priorEvidence &&
+    !priorJobs.some(
+      (job) =>
+        job.name === priorJobName &&
+        String(job.run_id) === priorRunId &&
+        job.head_sha === priorSha &&
+        job.conclusion === "failure" &&
+        job.steps.some((step) => step.name === "Mutate npm staging with pnpm OIDC" && step.conclusion === "failure") &&
+        job.steps.some(
+          (step) => step.name === "Preserve recovery staged publication evidence" && step.conclusion === "success",
+        ),
+    )
+  )
+    throw new Error(
+      "Recovery without a staging journal requires successfully preserved evidence from the failed staging job.",
+    );
 
   const recovery = {
     tool,
     candidate: { sha: candidateSha, ref: candidateRef, runId: manifest.runId, runAttempt: manifest.runAttempt },
-    priorRunId: priorEvidence.runId,
-    priorRunAttempt: priorEvidence.runAttempt,
+    priorRunId,
+    priorRunAttempt,
+    ...(!priorEvidence ? { priorStagingJournal: "absent" } : {}),
     rejectedStagesConfirmed: true,
     workflows,
   };
   // Keep the attestation and both identities even if credentials/registry checks fail before staging persists.
   await writeFile(join(directory, "recovery-evidence.json"), `${JSON.stringify(recovery, null, 2)}\n`);
   if (mode === "preflight") return recovery;
+  if (!priorEvidence)
+    return stageCandidates(manifest, {
+      directory,
+      tool,
+      recovery,
+      currentRunId: env.GITHUB_RUN_ID,
+      currentRunAttempt: env.GITHUB_RUN_ATTEMPT,
+    });
   return stageCandidates(manifest, {
     directory,
     priorEvidence: { ...priorEvidence, recovery },

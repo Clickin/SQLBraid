@@ -329,6 +329,15 @@ The selected prior run must retain `release-candidate-validated` and
 tag, source SHA, original certification and package hashes before staging.
 It does not use the package contents of the tooling checkout.
 
+A failed dependency check can stop staging before `staged-publication.json` exists.
+For this case, use the failed staging run as `prior_run_id`.
+The preserved artifact must contain the unchanged candidate manifest.
+The failed run must identify this candidate and must have preserved its staging evidence successfully.
+Recovery still requires an authenticated maintainer to confirm that no prior or uncertain stage remains.
+It records `priorStagingJournal: "absent"` in `recovery-evidence.json` and the new staging report.
+It does not invent a prior package state or stage ID.
+A corrupt journal, changed manifest or failed artifact preservation blocks this recovery path.
+
 Keep the candidate source SHA separate from the tooling SHA in recovery
 records. A successful recovery still requires human review and npm approval.
 Do not approve a partial recovery.

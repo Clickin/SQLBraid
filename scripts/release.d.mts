@@ -144,6 +144,7 @@ export declare function stageCandidates(
     currentRunId?: string | null;
     currentRunAttempt?: string | null;
     tool?: StagedPublication["tool"];
+    recovery?: import("./release-recovery.mjs").RecoveryEvidence;
   },
 ): Promise<StagedPublication | undefined>;
 export declare function verifyPublished(manifest: ReleaseManifest, evidence: StagedPublication): Promise<void>;

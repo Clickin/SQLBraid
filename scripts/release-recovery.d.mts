@@ -16,6 +16,7 @@ export interface RecoveryEvidence {
   };
   readonly priorRunId: string;
   readonly priorRunAttempt: string;
+  readonly priorStagingJournal?: "absent";
   readonly rejectedStagesConfirmed: true;
   readonly workflows: readonly { workflow: string; runId: number; sha: string; ref: string }[];
 }
