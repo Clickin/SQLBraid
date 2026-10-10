@@ -2,7 +2,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { basename, dirname, extname, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import packageJson from "../package.json" with { type: "json" };
 import { generateModels, type CodegenDiagnostic } from "@sqlbraid/codegen";
@@ -299,7 +299,15 @@ function inspectionContext(
     const absoluteConfigPath = resolve(process.cwd(), configPath);
     return { rootPath: dirname(absoluteConfigPath), configPath: absoluteConfigPath };
   }
-  let current = fileName ? dirname(fileName) : process.cwd();
+  // A config is executable code, so discovery stays inside the current directory and never runs a config above it.
+  const boundary = physicalPath(process.cwd());
+  let current = fileName ? dirname(physicalPath(fileName)) : boundary;
+  if (!isWithin(boundary, current)) {
+    throw new CliError(
+      `${fileName} is outside the current directory. Run the command from its project, or pass --config.`,
+      2,
+    );
+  }
   let projectFallback: string | undefined;
   while (true) {
     const sqlBraidConfig = CONFIG_NAMES.map((name) => resolve(current, name)).find((path) => existsSync(path));
@@ -309,10 +317,22 @@ function inspectionContext(
       (existsSync(resolve(current, "tsconfig.json")) || existsSync(resolve(current, "package.json")))
     )
       projectFallback = current;
-    const parent = dirname(current);
-    if (parent === current) return { rootPath: projectFallback ?? current };
-    current = parent;
+    if (current === boundary) return { rootPath: projectFallback ?? current };
+    current = dirname(current);
   }
+}
+
+function physicalPath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+function isWithin(directory: string, path: string): boolean {
+  const child = relative(directory, path);
+  return child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child);
 }
 
 async function runInspect(argv: readonly string[], json: boolean): Promise<void> {

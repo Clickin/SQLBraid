@@ -7,7 +7,7 @@
       "source": "website/src/content/docs/agents/cli.md",
       "translation": "website/src/content/docs/ko/agents/cli.md",
       "translationOf": "website/src/content/docs/agents/cli.md",
-      "sourceDigest": "91af8767b48351e1626df5d569fd958c6fa27a1a4ff8f92ef0512d04ab2c548c"
+      "sourceDigest": "8c4452c7f9f1bf5e70d01a35bb14847c263a44b3847452f460132af82ff8b453"
     },
     {
       "source": "website/src/content/docs/agents/driver-author.md",
@@ -19,7 +19,7 @@
       "source": "website/src/content/docs/agents/lsp.md",
       "translation": "website/src/content/docs/ko/agents/lsp.md",
       "translationOf": "website/src/content/docs/agents/lsp.md",
-      "sourceDigest": "0a830e9cd1958f9a3ca423f02fa812e8b6d7ea7f3086800ca26476184066af4d"
+      "sourceDigest": "e3ba4b888d7dce3f95c8e399a60982fadd4bbd17718498c0af22c957d37a9b19"
     },
     {
       "source": "website/src/content/docs/agents/skill.md",
@@ -31,7 +31,7 @@
       "source": "website/src/content/docs/agents/vscode.md",
       "translation": "website/src/content/docs/ko/agents/vscode.md",
       "translationOf": "website/src/content/docs/agents/vscode.md",
-      "sourceDigest": "7545ae17a3427bbdb47a8c2fdea150c98d48da4a39e4a277fb72f78e44746b48"
+      "sourceDigest": "776c66a77ea8992e24c15f4298b3d1dce90e511952106b06ec7ff27b7fd8a063"
     },
     {
       "source": "website/src/content/docs/concepts/architecture.mdx",
@@ -97,7 +97,7 @@
       "source": "website/src/content/docs/getting-started/mariadb.md",
       "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
       "translationOf": "website/src/content/docs/getting-started/mariadb.md",
-      "sourceDigest": "b66bf77d94eeb1651be2b7518394c31640b4b999a0129ef38d056e1dc904ac6e"
+      "sourceDigest": "7a0528fc61ca941dc840b033745fa9db2d270524f36dfc355bbdbbecfddf91c0"
     },
     {
       "source": "website/src/content/docs/getting-started/mssql.md",

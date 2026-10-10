@@ -20,6 +20,8 @@ sqlbraid inspect symbol <name> --json
 sqlbraid inspect diagnostics --file <path> --json
 ```
 
+The config is executable code. Run these commands from the project directory of a trusted repository. Discovery stops at the current directory, and a `--file` outside the current directory fails.
+
 If the configuration discovery is ambiguous, pass `--config <path>`. These commands use the same semantic core as the LSP. `sqlbraid check` also reports ordinary TypeScript errors.
 
 ## Metadata is open-world

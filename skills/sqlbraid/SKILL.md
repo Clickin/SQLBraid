@@ -71,7 +71,7 @@ For transactions, sessions, streaming, batch and bulk, and changes that depend o
 In an existing SQLBraid project, use the semantic evidence of the project. Do not reconstruct database facts from text.
 
 1. If they are available, use the standard LSP diagnostics, hover, completion, definition, references, symbols and signature help.
-2. If not, use `sqlbraid inspect query --file <path> --line <1-based> --column <1-based> --json`, `sqlbraid inspect symbol <name> --json` or `sqlbraid inspect diagnostics --file <path> --json`.
+2. If not, run these commands from the project directory of a trusted repository, because they execute the SQLBraid config: `sqlbraid inspect query --file <path> --line <1-based> --column <1-based> --json`, `sqlbraid inspect symbol <name> --json` or `sqlbraid inspect diagnostics --file <path> --json`.
 3. Treat metadata as open-world positive evidence. Missing metadata does not prove that a relation, column, routine, extension object, UDF, temporary object or CTE is invalid.
 4. Generated models are derived artifacts. Change the configuration or the metadata. Run `sqlbraid codegen`, then `sqlbraid codegen --check`. Do not edit generated models manually.
 

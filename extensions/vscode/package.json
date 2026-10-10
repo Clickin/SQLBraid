@@ -73,5 +73,11 @@
   ],
   "engines": {
     "vscode": ">=1.121.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "SQLBraid executes the workspace sqlbraid.config file as Node code. It runs only in a trusted workspace."
+    }
   }
 }
