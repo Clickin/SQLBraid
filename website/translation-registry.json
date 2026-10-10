@@ -241,7 +241,7 @@
       "source": "website/src/content/docs/runtime/observers.md",
       "translation": "website/src/content/docs/ko/runtime/observers.md",
       "translationOf": "website/src/content/docs/runtime/observers.md",
-      "sourceDigest": "2ed31ddea9e5f69cdb97d24bcfcbb907d2dfdf77294b4aab3b9e2814f2b294b8"
+      "sourceDigest": "c8d9bec278f8fd297e2435ecb13f4413be1a76f7efe510e7c62d27278e62079e"
     },
     {
       "source": "website/src/content/docs/runtime/opentelemetry.md",

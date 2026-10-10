@@ -224,7 +224,13 @@ function inferType(value: unknown): { readonly type: DatabaseType; readonly valu
   throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "this value requires an explicit SQL Server parameter hint.");
 }
 
-function decimalInput(value: unknown, databaseType: DatabaseType, precision: number, scale: number): number | null {
+function decimalInput(
+  index: number,
+  value: unknown,
+  databaseType: DatabaseType,
+  precision: number,
+  scale: number,
+): number | null {
   if (value === null) return value;
   if (typeof value !== "number" || !Number.isFinite(value) || !/^-?\d+(?:\.\d+)?$/u.test(String(value))) {
     throw new TypeError(
@@ -241,7 +247,7 @@ function decimalInput(value: unknown, databaseType: DatabaseType, precision: num
   }
   if (fraction.length > scale || integer.replace(/^0+/u, "").length > precision - scale) {
     throw new TypeError(
-      `BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility input ${text} exceeds decimal(${precision}, ${scale}); use a character bind with user-authored CAST/CONVERT for exact text.`,
+      `BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility parameter ${index} exceeds decimal(${precision}, ${scale}); use a character bind with user-authored CAST/CONVERT for exact text.`,
     );
   }
   return value;
@@ -504,7 +510,7 @@ function materializeParameter(
         `BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${type} compatibility inputs require explicit precision and scale.`,
       );
     }
-    encoded = decimalInput(encoded, type, precision, scale);
+    encoded = decimalInput(index, encoded, type, precision, scale);
   }
   if (
     direction !== "out" &&
@@ -721,12 +727,13 @@ function createBinding(options: TediousStatementBindingOptions = {}): TediousSta
         transport: "typed-request",
         placeholder: (index) => `@p${index}`,
         reuse: { effective: "reuse", owner: "driver" },
-        formatLiteral: (_parameter, index, literalOptions) =>
-          tediousLiteralValue(
-            encodedRows[0]?.[index]?.value,
-            encodedRows[0]?.[index]?.databaseType ?? "nvarchar",
-            literalOptions.binary,
-          ),
+        // Each bulk item literalizes its own values; the parameter carries the item value.
+        formatLiteral: (parameter, index, literalOptions) => {
+          const canonical = canonicalParameters[index];
+          if (canonical === undefined) return undefined;
+          const encoded = materializeParameter(index + 1, parameter.value, parameter.hint, policy);
+          return tediousLiteralValue(encoded.value, canonical.databaseType, literalOptions.binary);
+        },
       });
       materializedBulks.set(description, { bulk, parameters: encodedRows });
       return description;

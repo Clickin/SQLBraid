@@ -177,6 +177,27 @@ test("literalizedSql supports custom redaction, truncation, binary summaries, an
   assert.match(description.literalizedSql({ values: "inline", binary: "full" }).text, /X'0001ff'/u);
 });
 
+test("literalizedSql escapes control characters and never splits a surrogate pair", () => {
+  const statement = logicalStatement(["a\nb\u001b[2J\u202e\ud800", "x😀y"], "postgres");
+  const description = createStatementBindingDescription(
+    statement,
+    { dialectId: "postgres", requestedReuse: "auto" },
+    {
+      adapterId: "diagnostic",
+      transport: "text-positional",
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: "simple", owner: "driver" },
+    },
+  );
+  assert.equal(
+    description.literalizedSql({ values: "inline" }).text,
+    "SELECT 'a\\u000Ab\\u001B[2J\\u202E\\uD800', 'x😀y'",
+  );
+  const truncated = description.literalizedSql({ values: "inline", maxValueLength: 3 });
+  assert.equal(truncated.text.endsWith(", 'x"), true);
+  assert.equal(truncated.complete, false);
+});
+
 test("literalizedSql snapshots mutable policies and does not cache stateful redactors", () => {
   const date = new Date("2026-01-02T03:04:05.000Z");
   Object.defineProperty(date, "toISOString", {

@@ -8,6 +8,21 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 ## Unreleased
 
+### Security
+
+- `@sqlbraid/mariadb`: `db.stream()` binds only scalar values. Arrays, objects, GeoJSON and non-finite numbers fail
+  with `BRAID_BIND_VALUE_UNSUPPORTED` before the connector expands them into SQL text.
+- `@sqlbraid/migrate`: the Vite development server blocks migration files through symbolic links and case variants of
+  the path on case-insensitive file systems.
+- `@sqlbraid/cli`: `inspect` looks for a configuration file only inside the current directory. A `--file` outside it
+  fails with exit code 2 unless `--config` names the file.
+- VS Code extension: declare that untrusted workspaces are not supported, because the extension executes the workspace
+  configuration.
+- `@sqlbraid/mssql`: a decimal bind error names the parameter number and not the value. Bulk diagnostic literals show
+  the values of the selected item.
+- `@sqlbraid/core`: inline `literalizedSql()` values escape control characters, line separators, bidirectional
+  controls and unpaired surrogates. Truncation never splits a surrogate pair.
+
 ### Migrations
 
 - Add optional `@sqlbraid/migrate` at its independent `0.1.0` version, with SQL-only migration files, dialect-specific

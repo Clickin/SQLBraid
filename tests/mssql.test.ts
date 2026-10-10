@@ -142,7 +142,25 @@ test("MSSQL native decimal helpers accept only bounded Number compatibility inpu
     async () => executor.query(sql`SELECT ${sql.bind(12.34567, mssqlParameter.smallmoney())}`.render()),
     /four fractional|exceeds decimal/u,
   );
+  await assert.rejects(
+    async () => executor.query(sql`SELECT ${sql.bind(98_765.4321, mssqlParameter.decimal(6, 2))}`.render()),
+    (error: Error) => /parameter 1 exceeds decimal\(6, 2\)/u.test(error.message) && !error.message.includes("98765"),
+  );
   assert.equal(executions, 1);
+});
+
+test("MSSQL bulk literalizes the values of each item", () => {
+  const statement = sql.command`UPDATE account SET name = ${"first"} WHERE id = ${1}`.render();
+  const bulk: RenderedBulk = {
+    statement,
+    parameterSets: [
+      ["first", 1],
+      ["second", 2],
+    ],
+  };
+  const executor = createTediousExecutor(mockConnection(() => {}));
+  const binding = executor.statementBinding.describeBulk!(bulk, { dialectId: "mssql", requestedReuse: "auto" });
+  assert.equal(binding.literalizedSql(1, { values: "inline" }).text, "UPDATE account SET name = 'second' WHERE id = 2");
 });
 
 test("MSSQL prepared bulk rejects an unsafe aggregate affected-row count", async () => {
