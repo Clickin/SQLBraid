@@ -16,6 +16,8 @@ sqlbraid inspect symbol UsersRow --json
 sqlbraid inspect diagnostics --file src/query.ts --json
 ```
 
+The config is executable Node code, and `inspect` runs the config that it finds. Thus, discovery starts at the directory of `--file` and stops at the current directory. It never runs a config above the current directory. If `--file` is outside the current directory, the command fails with exit code 2. Run inspect commands only in a repository that you trust.
+
 If the discovery of the repository is ambiguous, use `--config ./sqlbraid.config.mjs`. The JSON output is focused and bounded. Unresolved query evidence has the value `resolved: false`. This does not claim that the SQL is invalid.
 
 A normal workflow is:

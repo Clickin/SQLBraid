@@ -16,6 +16,8 @@ sqlbraid inspect symbol UsersRow --json
 sqlbraid inspect diagnostics --file src/query.ts --json
 ```
 
+설정 파일은 실행 가능한 Node 코드이고, `inspect`는 찾은 설정 파일을 실행합니다. 그래서 `--file`이 있는 디렉터리에서 찾기 시작하고 현재 디렉터리에서 멈춥니다. 현재 디렉터리보다 위에 있는 설정 파일은 실행하지 않습니다. `--file`이 현재 디렉터리 밖에 있으면 명령은 종료 코드 2로 실패합니다. inspect 명령은 신뢰하는 저장소에서만 실행하세요.
+
 설정 파일을 찾는 데 모호함이 있으면 `--config ./sqlbraid.config.mjs`를 붙이세요. JSON 출력은 필요한 내용만 담고 크기가 제한됩니다. 쿼리에 대한 근거를 찾지 못하면 `resolved: false`가 나옵니다. SQL이 잘못되었다는 뜻은 아닙니다.
 
 일반적인 작업 순서는 다음과 같습니다.

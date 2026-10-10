@@ -94,6 +94,10 @@ placeholders in materialized SQL. Never use it as execution input.
 - The result reports `complete`, `redactedParameters` and `truncatedParameters`.
 - Unsupported custom objects get a safe marker. This prevents an accidental
   `toString()` execution.
+- Inline values show control characters, line separators, bidirectional
+  controls and unpaired surrogates as `\uXXXX` escapes. A value cannot add a
+  log line or send terminal escape sequences.
+- Truncation never splits a surrogate pair.
 
 For MySQL and MariaDB, inline strings use non-executable `[string <JSON>]`
 diagnostic markers. They do not use SQL literals, because the interpretation of

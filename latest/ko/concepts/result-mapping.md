@@ -58,7 +58,7 @@ const Account = v.object({
 driver row -> dialect TypePolicy normalization -> plain row -> query schema -> execution schema -> application model
 ```
 
-`DatabaseResultValidationError`는 `BRAID_RESULT_VALIDATION` 코드를 씁니다. 실패한 단계(쿼리 또는 실행)와 행 번호를 알려 주지만, 원시 행이나 바인딩 값을 출력하지는 않습니다. 매핑은 행 하나를 행 하나로 바꿉니다. SQLBraid는 관계를 채우거나, 식별자 맵을 유지하거나, 객체 그래프를 조립하지 않습니다.
+`DatabaseResultValidationError`는 `BRAID_RESULT_VALIDATION` 코드를 씁니다. 실패한 단계(쿼리 또는 실행)와 행 번호를 알려 줍니다. 메시지에는 원시 행이나 바인딩 값이 들어가지 않습니다. `issues` 속성에는 스키마 라이브러리가 만든 issue가 그대로 들어 있습니다. 일부 라이브러리는 각 issue에 입력 값을 넣습니다. 행에 개인 정보가 있을 수 있으면 `issues`나 오류 객체 전체를 가리지 않고 로그에 남기지 마세요. 매핑은 행 하나를 행 하나로 바꿉니다. SQLBraid는 관계를 채우거나, 식별자 맵을 유지하거나, 객체 그래프를 조립하지 않습니다.
 
 1.0.0에서 입력 쪽 기능은 일부러 작게 두었습니다.
 

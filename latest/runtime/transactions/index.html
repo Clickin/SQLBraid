@@ -79,6 +79,13 @@ only statements that produce rows:</p>
 the commit or the rollback. For all work inside the transaction, use the
 callback handle. Do not use the outer <code dir="auto">db</code>. The callback handle closes after the
 callback returns.</p>
+<p>The runtime rejects the outer <code dir="auto">db</code> through the async context of the callback.
+Work that runs from a queue, a timer or a worker that started before <code dir="auto">db.tx</code>
+does not have that context. For example, a function that the callback puts in
+such a queue runs on a different connection, outside the transaction, and the
+runtime does not reject it. With a pool of one connection or a direct executor,
+that work waits for the transaction and can deadlock. Give the callback handle to
+such work, or finish the work before the callback returns.</p>
 <p>When the executor advertises <code dir="auto">transaction.savepoint</code>, nested <code dir="auto">tx</code> calls use
 savepoints:</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="ts"><code><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">await</span><span style="--0:#D6DEEB;--1:#403F53"> db</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">tx</span><span style="--0:#D6DEEB;--1:#403F53">(</span><span style="--0:#C792EA;--1:#8844AE">async</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#D9F5DD;--1:#111111">(</span><span style="--0:#D7DBE0;--1:#403F53">tx</span><span style="--0:#D9F5DD;--1:#111111">)</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#C792EA;--1:#8844AE">=&gt;</span><span style="--0:#D6DEEB;--1:#403F53"> {</span></div></div><div class="ec-line"><div class="code"><span class="indent">  </span><span style="--0:#C792EA;--1:#8844AE">await</span><span style="--0:#D6DEEB;--1:#403F53"> tx</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">execute</span><span style="--0:#D6DEEB;--1:#403F53">(first);</span></div></div><div class="ec-line"><div class="code"><span class="indent">  </span><span style="--0:#C792EA;--1:#8844AE">await</span><span style="--0:#D6DEEB;--1:#403F53"> tx</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">tx</span><span style="--0:#D6DEEB;--1:#403F53">(</span><span style="--0:#C792EA;--1:#8844AE">async</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#D9F5DD;--1:#111111">(</span><span style="--0:#D7DBE0;--1:#403F53">nested</span><span style="--0:#D9F5DD;--1:#111111">)</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#C792EA;--1:#8844AE">=&gt;</span><span style="--0:#D6DEEB;--1:#403F53"> {</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#C792EA;--1:#8844AE">await</span><span style="--0:#D6DEEB;--1:#403F53"> nested</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">execute</span><span style="--0:#D6DEEB;--1:#403F53">(second);</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#919F9F;--1:#5D6376">// Throwing here rolls back this savepoint.</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#D6DEEB;--1:#403F53">  </span></span><span style="--0:#D6DEEB;--1:#403F53">});</span></div></div><div class="ec-line"><div class="code"><span style="--0:#D6DEEB;--1:#403F53">});</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="await db.tx(async (tx) => {  await tx.execute(first);  await tx.tx(async (nested) => {    await nested.execute(second);    // Throwing here rolls back this savepoint.  });});"><div></div></button></div></figure></div>
@@ -99,6 +106,12 @@ pooled operations acquire, execute, release and then map materialized results.</
 <li>If the session primitive is unavailable, the call rejects with
 <code dir="auto">BRAID_SESSION_UNSUPPORTED</code>.</li>
 </ul>
+<p>SQLBraid does not reset the session state of a connection when it releases a
+pool lease. Session state includes a transaction that a <code dir="auto">BEGIN</code> outside <code dir="auto">db.tx</code>
+opened, <code dir="auto">SET ROLE</code>, <code dir="auto">SET search_path</code>, session variables and temporary tables.
+The next operation that gets the connection sees that state. Use <code dir="auto">db.tx</code> for
+transactions. Undo other session state before the session callback or the
+operation ends, so that it cannot reach a different request or tenant.</p>
 <p>Close the stream of a session before you call <code dir="auto">session.tx(...)</code>. An overlapping
 transaction rejects with <code dir="auto">BRAID_STREAM_SCOPE</code> before <code dir="auto">BEGIN</code>. It does not wait
 for the stream and does not acquire another lease. If you wrap a transaction in

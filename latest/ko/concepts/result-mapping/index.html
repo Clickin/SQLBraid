@@ -93,7 +93,7 @@
 <p>커서 출력은 스칼라 <code dir="auto">output</code>에서 빠집니다. 어댑터는 비동기 매핑이 시작되기 전에 리소스를 읽고 닫습니다. 결과 집합 개수가 맞지 않으면 <code dir="auto">BRAID_CALL_RESULT_SETS</code>입니다. 루틴 매핑이 실패하면 <code dir="auto">BRAID_CALL_MAP</code>이 실패 위치를 알려 줍니다.</p>
 <p>전체 흐름은 다음과 같습니다.</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">driver row -&gt; dialect TypePolicy normalization -&gt; plain row -&gt; query schema -&gt; execution schema -&gt; application model</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="클립보드로 복사" data-copied="복사 완료!" data-code="driver row -> dialect TypePolicy normalization -> plain row -> query schema -> execution schema -> application model"><div></div></button></div></figure></div>
-<p><code dir="auto">DatabaseResultValidationError</code>는 <code dir="auto">BRAID_RESULT_VALIDATION</code> 코드를 씁니다. 실패한 단계(쿼리 또는 실행)와 행 번호를 알려 주지만, 원시 행이나 바인딩 값을 출력하지는 않습니다. 매핑은 행 하나를 행 하나로 바꿉니다. SQLBraid는 관계를 채우거나, 식별자 맵을 유지하거나, 객체 그래프를 조립하지 않습니다.</p>
+<p><code dir="auto">DatabaseResultValidationError</code>는 <code dir="auto">BRAID_RESULT_VALIDATION</code> 코드를 씁니다. 실패한 단계(쿼리 또는 실행)와 행 번호를 알려 줍니다. 메시지에는 원시 행이나 바인딩 값이 들어가지 않습니다. <code dir="auto">issues</code> 속성에는 스키마 라이브러리가 만든 issue가 그대로 들어 있습니다. 일부 라이브러리는 각 issue에 입력 값을 넣습니다. 행에 개인 정보가 있을 수 있으면 <code dir="auto">issues</code>나 오류 객체 전체를 가리지 않고 로그에 남기지 마세요. 매핑은 행 하나를 행 하나로 바꿉니다. SQLBraid는 관계를 채우거나, 식별자 맵을 유지하거나, 객체 그래프를 조립하지 않습니다.</p>
 <p>1.0.0에서 입력 쪽 기능은 일부러 작게 두었습니다.</p>
 <ul>
 <li>일반 값 보간은 드라이버가 바인딩하는 값입니다. 애플리케이션용 범용 입력 코덱 프레임워크는 아직 없습니다.</li>

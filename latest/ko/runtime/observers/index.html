@@ -107,6 +107,8 @@
 <li>옵션으로 값 인라인 또는 가림, 값 최대 길이, 바이너리 요약 또는 전체 출력, 사용자 정의 가림 함수를 고를 수 있습니다.</li>
 <li>결과는 <code dir="auto">complete</code>, <code dir="auto">redactedParameters</code>, <code dir="auto">truncatedParameters</code>를 보고합니다.</li>
 <li>지원하지 않는 사용자 정의 객체에는 안전한 표시를 씁니다. 실수로 <code dir="auto">toString()</code>이 실행되는 것을 막기 위해서입니다.</li>
+<li>인라인 값의 제어 문자, 줄 구분 문자, 양방향 제어 문자, 짝이 없는 surrogate는 <code dir="auto">\uXXXX</code> escape로 표시합니다. 값이 로그 줄을 추가하거나 터미널 escape sequence를 보낼 수 없습니다.</li>
+<li>길이를 자를 때 surrogate pair를 나누지 않습니다.</li>
 </ul>
 <p>MySQL과 MariaDB에서는 인라인 문자열에 실행할 수 없는 <code dir="auto">[string &lt;JSON&gt;]</code> 진단 표시를 씁니다. 백슬래시 해석이 세션의 SQL 모드에 따라 달라지므로 SQL 리터럴을 쓰지 않습니다. Bun.SQL 어댑터도 마찬가지입니다. 바인딩 실행에는 영향이 없습니다. 진단 출력은 절대 실행 가능한 SQL이 아닙니다.</p>
 <p>바인딩이나 타입 지정 요청 구성의 실패는 드라이버 I/O 없이 <code dir="auto">"materialize"</code> 단계로 기록됩니다. 드라이버, 서버, 네트워크 실패는 <code dir="auto">"driver"</code> 단계입니다. 옵저버는 관찰하거나 실패시킬 수만 있습니다. 문장, 바인딩 값, 결과, 재시도 정책, 경로를 고쳐 쓸 수 없습니다.</p>

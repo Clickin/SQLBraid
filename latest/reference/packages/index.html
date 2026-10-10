@@ -183,6 +183,9 @@ narrower dependencies.</p>
 <code dir="auto">assertDirectiveCondition</code> helpers that the compiler generates. It is not an API
 for applications to write queries. It does not import the compiler. Use the same
 version for the compiler and the runtime.</p>
+<p>The string array that you give to <code dir="auto">capture</code> is SQL text, as with <code dir="auto">sql.raw()</code>.
+Never build it from input. <code dir="auto">capture</code> accepts only the template node kinds that
+the compiler emits. Other nodes fail with <code dir="auto">BRAID_STRUCTURE</code>.</p>
 <ul>
 <li><code dir="auto">@sqlbraid/bun-sql</code> has no static Bun import and requires an explicit
 <code dir="auto">dialect</code>. It does not detect SQL semantics automatically.</li>

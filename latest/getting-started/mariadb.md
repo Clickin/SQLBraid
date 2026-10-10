@@ -78,6 +78,11 @@ stay guarded declarations. They are not observations.
 
 - The adapter uses value-only execution, native `queryStream()` and one
   `connection.batch()` call for homogeneous bulk.
+- `queryStream()` sends values through the text protocol. Thus, `db.stream()`
+  accepts only `null`, strings, finite numbers, booleans, bigints, valid `Date`
+  values and binary data. It rejects arrays, objects and non-finite numbers
+  with `BRAID_BIND_VALUE_UNSUPPORTED` before the connector gets them. Encode
+  JSON values with `JSON.stringify()`.
 - Native `RETURNING` is a materialized row declaration only where the exact
   server form has evidence. `INSERT`, `DELETE` and `REPLACE` are separate
   capabilities. `UPDATE` is not claimed.

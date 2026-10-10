@@ -124,6 +124,10 @@ summary or full output, and a custom redactor.</li>
 <li>The result reports <code dir="auto">complete</code>, <code dir="auto">redactedParameters</code> and <code dir="auto">truncatedParameters</code>.</li>
 <li>Unsupported custom objects get a safe marker. This prevents an accidental
 <code dir="auto">toString()</code> execution.</li>
+<li>Inline values show control characters, line separators, bidirectional
+controls and unpaired surrogates as <code dir="auto">\uXXXX</code> escapes. A value cannot add a
+log line or send terminal escape sequences.</li>
+<li>Truncation never splits a surrogate pair.</li>
 </ul>
 <p>For MySQL and MariaDB, inline strings use non-executable <code dir="auto">[string &lt;JSON&gt;]</code>
 diagnostic markers. They do not use SQL literals, because the interpretation of

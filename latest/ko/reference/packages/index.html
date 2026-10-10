@@ -170,6 +170,7 @@
 <p><code dir="auto">node:sqlite</code> 어댑터는 Node에 들어 있는 모듈을 쓰므로 별도 드라이버 패키지가 필요 없습니다. 애플리케이션이 쓰는 나머지 외부 드라이버는 설치하세요.</p>
 <p>루트는 데이터베이스 중립적이며 암묵적인 <code dir="auto">sql</code> 태그를 export하지 않습니다. 방언 전용 하위 경로 <code dir="auto">sqlbraid/postgres</code>, <code dir="auto">sqlbraid/mysql</code>, <code dir="auto">sqlbraid/sqlite</code>, <code dir="auto">sqlbraid/oracle</code>, <code dir="auto">sqlbraid/mssql</code>은 어댑터를 직접 만드는 경우를 위한 것입니다. 세분화된 <code dir="auto">@sqlbraid/*</code> 패키지도 라이브러리 작성자나 의존성을 일부러 좁히려는 경우를 위해 계속 지원합니다.</p>
 <p><code dir="auto">sqlbraid/compiled</code>는 컴파일러가 생성하는 <code dir="auto">capture</code>, <code dir="auto">assertDirectiveCondition</code> 헬퍼를 위한 고급 진입점입니다. 애플리케이션이 쿼리를 작성하는 API가 아니며, 컴파일러를 import하지 않습니다. 컴파일러와 런타임은 같은 버전을 쓰세요.</p>
+<p><code dir="auto">capture</code>에 주는 문자열 배열은 <code dir="auto">sql.raw()</code>와 같이 SQL 텍스트입니다. 입력으로 이 배열을 만들지 마세요. <code dir="auto">capture</code>는 컴파일러가 만드는 템플릿 노드 종류만 받습니다. 다른 노드는 <code dir="auto">BRAID_STRUCTURE</code>로 실패합니다.</p>
 <ul>
 <li><code dir="auto">@sqlbraid/bun-sql</code>은 Bun을 정적으로 import하지 않으며 <code dir="auto">dialect</code>를 반드시 명시해야 합니다. SQL 의미를 자동으로 감지하지 않습니다.</li>
 <li>런타임 패키지에는 메타데이터, 코드 생성, 컴파일러, 에디터, Vite 의존성이 들어가지 않습니다. 도구 패키지는 개발·빌드 환경에만 설치하세요.</li>

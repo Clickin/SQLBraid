@@ -155,6 +155,11 @@ stay guarded declarations. They are not observations.</p>
 <ul>
 <li>The adapter uses value-only execution, native <code dir="auto">queryStream()</code> and one
 <code dir="auto">connection.batch()</code> call for homogeneous bulk.</li>
+<li><code dir="auto">queryStream()</code> sends values through the text protocol. Thus, <code dir="auto">db.stream()</code>
+accepts only <code dir="auto">null</code>, strings, finite numbers, booleans, bigints, valid <code dir="auto">Date</code>
+values and binary data. It rejects arrays, objects and non-finite numbers
+with <code dir="auto">BRAID_BIND_VALUE_UNSUPPORTED</code> before the connector gets them. Encode
+JSON values with <code dir="auto">JSON.stringify()</code>.</li>
 <li>Native <code dir="auto">RETURNING</code> is a materialized row declaration only where the exact
 server form has evidence. <code dir="auto">INSERT</code>, <code dir="auto">DELETE</code> and <code dir="auto">REPLACE</code> are separate
 capabilities. <code dir="auto">UPDATE</code> is not claimed.</li>
