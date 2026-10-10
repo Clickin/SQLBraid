@@ -159,6 +159,35 @@ function genericLiteral(parameter: RenderedParameter, dialectId: string, binary:
   return `[unsupported ${typeof value}]`;
 }
 
+/** Escape control, bidirectional and unpaired surrogate code units so that diagnostic text cannot drive a terminal or forge lines. */
+function escapeControls(text: string): string {
+  let result = "";
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    let escape = code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029;
+    escape ||= (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = text.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        index += 1;
+        continue;
+      }
+      escape = true;
+    } else if (code >= 0xdc00 && code <= 0xdfff) escape = true;
+    if (!escape) continue;
+    result += `${text.slice(start, index)}\\u${code.toString(16).toUpperCase().padStart(4, "0")}`;
+    start = index + 1;
+  }
+  return start === 0 ? text : result + text.slice(start);
+}
+
+/** Truncate without splitting a surrogate pair. */
+function truncate(text: string, maxLength: number): string {
+  const code = text.charCodeAt(maxLength - 1);
+  return text.slice(0, code >= 0xd800 && code <= 0xdbff ? maxLength - 1 : maxLength);
+}
+
 function literalized(
   statement: RenderedStatement,
   dialectId: string,
@@ -191,8 +220,9 @@ function literalized(
     } else {
       valueText = formatLiteral?.(parameter, index, resolved) ?? genericLiteral(parameter, dialectId, binary);
     }
+    valueText = escapeControls(valueText);
     if (maxLength !== undefined && valueText.length > maxLength) {
-      valueText = maxLength === 0 ? "" : valueText.slice(0, maxLength);
+      valueText = truncate(valueText, maxLength);
       truncatedParameters += 1;
     }
     parts.push(valueText, statement.segments[index + 1] ?? "");

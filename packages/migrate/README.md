@@ -45,6 +45,8 @@ Other whitespace remains significant. Do not change an applied versioned migrati
 
 Only `.sql` files are migrations. A file with a migration name prefix (`V<version>__` or `R__`) and a different extension,
 such as `V003__backfill.ts`, makes the loader fail with `BRAID_MIGRATE_SOURCE`. The loader does not skip it.
+A `.sql` file with a name that is almost a migration name also fails, so that a typo cannot skip a migration.
+Examples are `v2__users.sql`, `V2_users.sql`, `V2-users.sql`, `R_view.sql` and `r__view.sql`.
 The loader ignores other files, such as `README.md` or `schema.snapshot.json`.
 If a data change needs application logic, run it as application code or as a one-time script, not as a migration.
 
@@ -219,6 +221,10 @@ An explicit list rejects missing sources. `loadMigrations()` without a list chec
 The runtime root performs no filesystem access.
 
 The module does not update itself. Generate it again after you add or change a migration, for example in the build script.
+
+The migrator checks the format of each checksum. It does not calculate the checksums again from the SQL text.
+Treat the module as build output and do not edit it. If you edit a SQL string in it, the migrator runs the changed SQL
+and records the old checksum. The checksum comparison of `status` and the startup check cannot find that change.
 
 ### Vite SSR
 

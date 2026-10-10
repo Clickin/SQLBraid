@@ -260,6 +260,8 @@ export function renderNodes(
       continue;
     }
     if (node.kind === "fragment") {
+      if (!isFragment(node.fragment))
+        throw new SqlRenderError("BRAID_STRUCTURE", "A fragment node must hold a fragment that SQLBraid created.");
       renderFragment(node.fragment, state);
       continue;
     }

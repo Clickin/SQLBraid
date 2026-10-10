@@ -1,7 +1,7 @@
 {
   "name": "sqlbraid-vscode",
   "displayName": "SQLBraid",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SQLBraid language tooling for TypeScript projects",
   "categories": [
     "Programming Languages"
@@ -39,8 +39,8 @@
     "test:host": "pnpm run build && pnpm run compile-tests && node dist-test/test/runTest.js"
   },
   "dependencies": {
-    "@sqlbraid/cli": "workspace:1.0.3",
-    "@sqlbraid/language-server": "workspace:1.0.3",
+    "@sqlbraid/cli": "workspace:1.0.4",
+    "@sqlbraid/language-server": "workspace:1.0.4",
     "vscode-languageclient": "9.0.1"
   },
   "devDependencies": {
@@ -73,5 +73,11 @@
   ],
   "engines": {
     "vscode": ">=1.121.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "SQLBraid executes the workspace sqlbraid.config file as Node code. It runs only in a trusted workspace."
+    }
   }
 }

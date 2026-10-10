@@ -8,6 +8,34 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 ## Unreleased
 
+### Security
+
+- `@sqlbraid/mariadb`: `db.stream()` binds only scalar values. Arrays, objects, GeoJSON and non-finite numbers fail
+  with `BRAID_BIND_VALUE_UNSUPPORTED` before the connector expands them into SQL text.
+- `@sqlbraid/migrate`: the Vite development server blocks migration files through symbolic links and case variants of
+  the path on case-insensitive file systems.
+- `@sqlbraid/cli`: `inspect` looks for a configuration file only inside the current directory. A `--file` outside it
+  fails with exit code 2 unless `--config` names the file.
+- `@sqlbraid/template`: `capture()` accepts only the template node kinds that the compiler emits. A raw, identifier,
+  list or fragment node in the compiled IR fails with `BRAID_STRUCTURE`, and a fragment node must hold a SQLBraid
+  fragment. Documentation states that the `capture()` string array has the trust of `sql.raw()`.
+- `@sqlbraid/cli`: human-readable output escapes control characters, line separators and bidirectional controls in
+  names from a database, a snapshot or a migration history. A table name cannot clear the screen or add a forged line.
+- `@sqlbraid/language-server`: hover evidence is a plain-text code block. Names from metadata cannot add Markdown
+  links or remote images.
+- Document that pool leases keep session state, that work from a queue that started before `db.tx` is outside the
+  async context of the transaction, and that `DatabaseResultValidationError.issues` can contain row values.
+- VS Code extension: declare that untrusted workspaces are not supported, because the extension executes the workspace
+  configuration.
+- `@sqlbraid/migrate`: a `.sql` file with a mistyped migration name, such as `v2__users.sql` or `V2_users.sql`, fails
+  with `BRAID_MIGRATE_SOURCE`. Before, the loader skipped it and `status` reported the database as current.
+- `@sqlbraid/migrate`: document that the migrator does not calculate manifest checksums again. A generated manifest is
+  build output that must not be edited.
+- `@sqlbraid/mssql`: a decimal bind error names the parameter number and not the value. Bulk diagnostic literals show
+  the values of the selected item.
+- `@sqlbraid/core`: inline `literalizedSql()` values escape control characters, line separators, bidirectional
+  controls and unpaired surrogates. Truncation never splits a surrogate pair.
+
 ### Migrations
 
 - Add optional `@sqlbraid/migrate` at its independent `0.1.0` version, with SQL-only migration files, dialect-specific
@@ -33,6 +61,10 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 ### Release tooling
 
+- Prepare security patch versions: core `1.0.4`, template `1.0.3`, MariaDB `1.0.3`, SQL Server `1.0.4`, migrate `0.1.1`,
+  CLI `1.0.4`, language server `1.0.4` and the VS Code extension `0.1.1`.
+- Pin every third-party GitHub Action to a commit SHA and let Dependabot propose updates.
+- Dispatch the VS Code release only from `main`. Install the Open VSX publisher from a lockfile, without install scripts.
 - Reserve new `vX.Y.Z` tags for the `sqlbraid` facade. Release scoped packages
   separately with `<package>-vX.Y.Z` tags.
 - Run staging tools from `main` against the original certified artifacts.

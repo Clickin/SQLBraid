@@ -350,8 +350,8 @@ the package names and SHA-256 values, with the version and the source commit.
 The Release workflow sets `SQLBRAID_SKIP_VSIX=true`. Neither record sets a VSIX
 identity.
 
-The **VS Code Release** workflow is dispatched independently. It builds its own
-VSIX with `scripts/package-vscode.mjs`. That script validates these items:
+The **VS Code Release** workflow is dispatched independently, from `main` only.
+It builds its own VSIX with `scripts/package-vscode.mjs`. That script validates these items:
 
 - the name, publisher and version of the extension;
 - the bundled `@sqlbraid/cli` and `@sqlbraid/language-server` versions;
@@ -361,7 +361,8 @@ VSIX with `scripts/package-vscode.mjs`. That script validates these items:
 The script prints the SHA-256 and the identity of the VSIX. The workflow keeps
 `sqlbraid-vscode-<version>.vsix` as the `sqlbraid-vscode-<version>` artifact for
 14 days. Open VSX publication downloads that same artifact and uses trusted
-publishing. The Microsoft Marketplace upload is a separate manual handoff of
+publishing. It installs `ovsx` from the lockfile in `.github/tools/ovsx`, without
+install scripts. The Microsoft Marketplace upload is a separate manual handoff of
 those bytes. Neither path builds the VSIX again after validation. Keep that
 artifact and its workflow identity separately. npm prior-run recovery, the npm
 manifest and the npm pack-check stamp do not recover or attest the extension.
@@ -562,6 +563,26 @@ The repository prepares these versions. It does not prove that npm already conta
    **staged publishing only**. Subsequent new versions use the normal certified
    candidate, OIDC staging and human approval sequence. Do not restage `0.1.0`
    merely to create evidence. Do not add CI tokens or a first-publish fallback.
+
+### Security patch release
+
+The security fixes after the migration release use these versions:
+
+| Package                     | Prepared version | Reason                                                              |
+| --------------------------- | ---------------- | ------------------------------------------------------------------- |
+| `@sqlbraid/core`            | `1.0.4`          | Inline diagnostic literals escape control characters                |
+| `@sqlbraid/template`        | `1.0.3`          | `capture()` accepts only the template node kinds of the compiler    |
+| `@sqlbraid/mariadb`         | `1.0.3`          | `db.stream()` binds only scalar values                              |
+| `@sqlbraid/mssql`           | `1.0.4`          | Decimal bind errors omit the value; bulk diagnostics show each item |
+| `@sqlbraid/migrate`         | `0.1.1`          | Vite development guard and mistyped migration filenames             |
+| `@sqlbraid/cli`             | `1.0.4`          | `inspect` config discovery and terminal output escaping             |
+| `@sqlbraid/language-server` | `1.0.4`          | Hover text in a code block                                          |
+| VS Code extension           | `0.1.1`          | Untrusted workspaces; matching CLI and language-server versions     |
+
+No dependency range changes. Each fix is inside its own package.
+The `cli-v1.0.3` candidate tag does not contain the `inspect` fix. CLI `1.0.4` has the migration commands and the fix.
+Runtime, facade, adapters other than MariaDB and SQL Server, and the other tooling packages need no new version.
+Use the normal certified candidate, staging and approval sequence below for each package.
 
 ## Maintainer sequence: 1.0.0 and later releases
 

@@ -2,7 +2,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { basename, dirname, extname, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import packageJson from "../package.json" with { type: "json" };
 import { generateModels, type CodegenDiagnostic } from "@sqlbraid/codegen";
@@ -26,6 +26,7 @@ import {
 } from "@sqlbraid/tooling";
 import { codegenOutputCollisionKey } from "./codegen-path.js";
 import { runMigrate } from "./migrate.js";
+import { terminalText } from "./terminal.js";
 
 function usage(): never {
   console.error(
@@ -184,11 +185,14 @@ function reportCodegen(results: readonly CodegenCliTargetResult[], json: boolean
     process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
     return;
   }
-  for (const result of results) console.log(`${result.target.padEnd(12)} ${result.status.padEnd(9)} ${result.outFile}`);
+  for (const result of results)
+    console.log(`${terminalText(result.target).padEnd(12)} ${result.status.padEnd(9)} ${terminalText(result.outFile)}`);
   for (const result of results)
     for (const diagnostic of result.diagnostics) {
-      const location = [diagnostic.relation, diagnostic.column].filter(Boolean).join(".");
-      console.error(`${result.target} ${diagnostic.code}${location ? ` ${location}` : ""}: ${diagnostic.message}`);
+      const location = terminalText([diagnostic.relation, diagnostic.column].filter(Boolean).join("."));
+      console.error(
+        `${terminalText(result.target)} ${diagnostic.code}${location ? ` ${location}` : ""}: ${terminalText(diagnostic.message, true)}`,
+      );
     }
 }
 
@@ -261,7 +265,7 @@ async function runCodegen(argv: readonly string[], json: boolean): Promise<void>
 }
 
 function diagnosticText(diagnostic: { readonly code: string; readonly message: string }): string {
-  return `${diagnostic.code}: ${diagnostic.message}`;
+  return `${terminalText(diagnostic.code)}: ${terminalText(diagnostic.message, true)}`;
 }
 
 function reportDiagnostics(
@@ -299,7 +303,15 @@ function inspectionContext(
     const absoluteConfigPath = resolve(process.cwd(), configPath);
     return { rootPath: dirname(absoluteConfigPath), configPath: absoluteConfigPath };
   }
-  let current = fileName ? dirname(fileName) : process.cwd();
+  // A config is executable code, so discovery stays inside the current directory and never runs a config above it.
+  const boundary = physicalPath(process.cwd());
+  let current = fileName ? dirname(physicalPath(fileName)) : boundary;
+  if (!isWithin(boundary, current)) {
+    throw new CliError(
+      `${fileName} is outside the current directory. Run the command from its project, or pass --config.`,
+      2,
+    );
+  }
   let projectFallback: string | undefined;
   while (true) {
     const sqlBraidConfig = CONFIG_NAMES.map((name) => resolve(current, name)).find((path) => existsSync(path));
@@ -309,10 +321,22 @@ function inspectionContext(
       (existsSync(resolve(current, "tsconfig.json")) || existsSync(resolve(current, "package.json")))
     )
       projectFallback = current;
-    const parent = dirname(current);
-    if (parent === current) return { rootPath: projectFallback ?? current };
-    current = parent;
+    if (current === boundary) return { rootPath: projectFallback ?? current };
+    current = dirname(current);
   }
+}
+
+function physicalPath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+function isWithin(directory: string, path: string): boolean {
+  const child = relative(directory, path);
+  return child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child);
 }
 
 async function runInspect(argv: readonly string[], json: boolean): Promise<void> {
@@ -334,7 +358,9 @@ async function runInspect(argv: readonly string[], json: boolean): Promise<void>
       const symbols = service.workspaceSymbols(symbolName as string);
       const result = { operation, query: symbolName, symbols };
       if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
-      else for (const symbol of symbols) console.log(`${symbol.name} ${symbol.kind} ${symbol.location.uri}`);
+      else
+        for (const symbol of symbols)
+          console.log(`${terminalText(symbol.name)} ${symbol.kind} ${terminalText(symbol.location.uri)}`);
       return;
     }
     const source = await readFile(fileName as string, "utf8");
@@ -370,7 +396,7 @@ async function runInspect(argv: readonly string[], json: boolean): Promise<void>
         }
       : { operation, file: fileName, resolved: false, evidence: "unresolved" };
     if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
-    else console.log(result.resolved ? `${result.contents}` : "unresolved");
+    else console.log(result.resolved ? terminalText(`${result.contents}`, true) : "unresolved");
   } finally {
     workspace.dispose();
   }
@@ -516,7 +542,7 @@ async function main(argv: readonly string[]): Promise<void> {
 /** Run the `sqlbraid` CLI with argv excluding the Node executable/script path. */
 export function runCli(argv: readonly string[]): void {
   void main(argv).catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(terminalText(error instanceof Error ? error.message : String(error), true));
     process.exitCode = error instanceof CliError || error instanceof ConfigurationError ? error.exitCode : 1;
   });
 }

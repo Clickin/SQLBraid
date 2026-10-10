@@ -24,7 +24,13 @@ import {
   knownFragments,
   postgresDialect,
 } from "./lexical.js";
-import { cachedTemplate, freezeNode, freezeTemplateIr, validateNativeTemplate } from "./parser.js";
+import {
+  assertSourceTemplateIr,
+  cachedTemplate,
+  freezeNode,
+  freezeTemplateIr,
+  validateNativeTemplate,
+} from "./parser.js";
 import { renderIr, renderPlainTemplate, validateLimits } from "./render.js";
 
 export function makeFragment(
@@ -145,7 +151,10 @@ export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
     preparsedIr?: TemplateIr,
   ): Query<Row, Kind> => {
     const captured = Object.freeze([...values]);
-    let ir = preparsedIr === undefined ? undefined : freezeTemplateIr(preparsedIr);
+    let ir =
+      preparsedIr === undefined
+        ? undefined
+        : freezeTemplateIr(assertSourceTemplateIr(preparsedIr, Math.max(0, strings.length - 1)));
     const getIr = (): TemplateIr => {
       if (ir === undefined) ir = cachedTemplate(strings, dialect.lexicalProfile, limits.maxNestingDepth);
       return ir;

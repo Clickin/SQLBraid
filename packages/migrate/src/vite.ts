@@ -1,4 +1,5 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Database } from "@sqlbraid/core";
 import type { Plugin, ViteDevServer } from "vite";
 import { createMigrator } from "./index.js";
@@ -18,8 +19,33 @@ export interface MigrationViteOptions extends LoadMigrationsOptions {
   };
 }
 
+// The default macOS and Windows file systems ignore case, so Vite serves `/Migrations/V1__a.sql` from `migrations/`.
+const caseInsensitive = process.platform === "darwin" || process.platform === "win32";
+
+/** Resolves symlinks in the longest existing ancestor, so a link to the directory cannot pass as an outside path. */
+function physicalPath(path: string): string {
+  const missing: string[] = [];
+  let current = resolve(path);
+  while (true) {
+    try {
+      return join(realpathSync.native(current), ...missing);
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return resolve(path);
+      missing.unshift(basename(current));
+      current = parent;
+    }
+  }
+}
+
 function within(directory: string, file: string): boolean {
-  const path = relative(directory, file);
+  let base = physicalPath(directory);
+  let target = physicalPath(file);
+  if (caseInsensitive) {
+    base = base.toLowerCase();
+    target = target.toLowerCase();
+  }
+  const path = relative(base, target);
   return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
 }
 

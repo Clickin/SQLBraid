@@ -35,6 +35,14 @@ the commit or the rollback. For all work inside the transaction, use the
 callback handle. Do not use the outer `db`. The callback handle closes after the
 callback returns.
 
+The runtime rejects the outer `db` through the async context of the callback.
+Work that runs from a queue, a timer or a worker that started before `db.tx`
+does not have that context. For example, a function that the callback puts in
+such a queue runs on a different connection, outside the transaction, and the
+runtime does not reject it. With a pool of one connection or a direct executor,
+that work waits for the transaction and can deadlock. Give the callback handle to
+such work, or finish the work before the callback returns.
+
 When the executor advertises `transaction.savepoint`, nested `tx` calls use
 savepoints:
 
@@ -66,6 +74,13 @@ callback.
 - A stream keeps its lease until the cursor or request cleanup.
 - If the session primitive is unavailable, the call rejects with
   `BRAID_SESSION_UNSUPPORTED`.
+
+SQLBraid does not reset the session state of a connection when it releases a
+pool lease. Session state includes a transaction that a `BEGIN` outside `db.tx`
+opened, `SET ROLE`, `SET search_path`, session variables and temporary tables.
+The next operation that gets the connection sees that state. Use `db.tx` for
+transactions. Undo other session state before the session callback or the
+operation ends, so that it cannot reach a different request or tenant.
 
 Close the stream of a session before you call `session.tx(...)`. An overlapping
 transaction rejects with `BRAID_STREAM_SCOPE` before `BEGIN`. It does not wait

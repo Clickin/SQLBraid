@@ -7,7 +7,7 @@
       "source": "website/src/content/docs/agents/cli.md",
       "translation": "website/src/content/docs/ko/agents/cli.md",
       "translationOf": "website/src/content/docs/agents/cli.md",
-      "sourceDigest": "91af8767b48351e1626df5d569fd958c6fa27a1a4ff8f92ef0512d04ab2c548c"
+      "sourceDigest": "8c4452c7f9f1bf5e70d01a35bb14847c263a44b3847452f460132af82ff8b453"
     },
     {
       "source": "website/src/content/docs/agents/driver-author.md",
@@ -19,7 +19,7 @@
       "source": "website/src/content/docs/agents/lsp.md",
       "translation": "website/src/content/docs/ko/agents/lsp.md",
       "translationOf": "website/src/content/docs/agents/lsp.md",
-      "sourceDigest": "0a830e9cd1958f9a3ca423f02fa812e8b6d7ea7f3086800ca26476184066af4d"
+      "sourceDigest": "e3ba4b888d7dce3f95c8e399a60982fadd4bbd17718498c0af22c957d37a9b19"
     },
     {
       "source": "website/src/content/docs/agents/skill.md",
@@ -31,7 +31,7 @@
       "source": "website/src/content/docs/agents/vscode.md",
       "translation": "website/src/content/docs/ko/agents/vscode.md",
       "translationOf": "website/src/content/docs/agents/vscode.md",
-      "sourceDigest": "7545ae17a3427bbdb47a8c2fdea150c98d48da4a39e4a277fb72f78e44746b48"
+      "sourceDigest": "776c66a77ea8992e24c15f4298b3d1dce90e511952106b06ec7ff27b7fd8a063"
     },
     {
       "source": "website/src/content/docs/concepts/architecture.mdx",
@@ -67,7 +67,7 @@
       "source": "website/src/content/docs/concepts/result-mapping.md",
       "translation": "website/src/content/docs/ko/concepts/result-mapping.md",
       "translationOf": "website/src/content/docs/concepts/result-mapping.md",
-      "sourceDigest": "227bfac8c5ee1548facab9b9fe2df038083d809f1e16363f3129c2833dc10331"
+      "sourceDigest": "c3d06acf68312d05bec9d4d2591551f7b125704ae9ec9167fbc23f1197f2e00b"
     },
     {
       "source": "website/src/content/docs/concepts/routines.md",
@@ -97,7 +97,7 @@
       "source": "website/src/content/docs/getting-started/mariadb.md",
       "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
       "translationOf": "website/src/content/docs/getting-started/mariadb.md",
-      "sourceDigest": "b66bf77d94eeb1651be2b7518394c31640b4b999a0129ef38d056e1dc904ac6e"
+      "sourceDigest": "7a0528fc61ca941dc840b033745fa9db2d270524f36dfc355bbdbbecfddf91c0"
     },
     {
       "source": "website/src/content/docs/getting-started/mssql.md",
@@ -199,7 +199,7 @@
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "2c2b18c18dab28fb65cc37c7118e7327659d963459c9250c8eaa6bd60fa3ff70"
+      "sourceDigest": "7a800635391beaa86bfddc2ce371f8ae002faaedcea091616cd3fc4caf2ec9fb"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
@@ -241,7 +241,7 @@
       "source": "website/src/content/docs/runtime/observers.md",
       "translation": "website/src/content/docs/ko/runtime/observers.md",
       "translationOf": "website/src/content/docs/runtime/observers.md",
-      "sourceDigest": "2ed31ddea9e5f69cdb97d24bcfcbb907d2dfdf77294b4aab3b9e2814f2b294b8"
+      "sourceDigest": "c8d9bec278f8fd297e2435ecb13f4413be1a76f7efe510e7c62d27278e62079e"
     },
     {
       "source": "website/src/content/docs/runtime/opentelemetry.md",
@@ -271,7 +271,7 @@
       "source": "website/src/content/docs/runtime/transactions.md",
       "translation": "website/src/content/docs/ko/runtime/transactions.md",
       "translationOf": "website/src/content/docs/runtime/transactions.md",
-      "sourceDigest": "3eb00013a0ac25eb0d6134ed9561bde8748f81dfc4f474e43f4aac2b129577b4"
+      "sourceDigest": "c9275bdc010fde12cffd836f213289b1a3ffb156c9f790c19cefb804252b3b35"
     }
   ]
 }

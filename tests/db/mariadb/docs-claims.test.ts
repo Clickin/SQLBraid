@@ -77,6 +77,24 @@ docsClaim(GS, "emitted CALL result sets are supported and prepared CALL OUT is r
   }),
 );
 
+docsClaim(GS, "db.stream() rejects arrays, objects and non-finite numbers and streams scalar values", () =>
+  withDb(async (db) => {
+    const drain = async (statement: Parameters<Database["stream"]>[0]): Promise<unknown[]> => {
+      const rows: unknown[] = [];
+      for await (const row of db.stream(statement)) rows.push(row);
+      return rows;
+    };
+    for (const value of [[1, 5], { admin: 1 }, Infinity]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- One connection runs the streams one at a time.
+      await assertCode(
+        () => drain(sql.rows<Record<string, unknown>>`SELECT 1 AS a LIMIT ${value}`),
+        "BRAID_BIND_VALUE_UNSUPPORTED",
+      );
+    }
+    assert.deepEqual(await drain(sql.rows<Record<string, unknown>>`SELECT ${"x"} AS a LIMIT ${1}`), [{ a: "x" }]);
+  }),
+);
+
 docsClaim("concepts/bulk.md", "MariaDB bulk reports native-bulk", async () => {
   const bulk = bulkModeObserver();
   await withDb(

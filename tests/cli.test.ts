@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -470,6 +471,37 @@ test("CLI inspect JSON discovers an ancestor SQLBraid config past nested project
     const diagnosticResult = JSON.parse(diagnostics.stdout) as { operation: string; diagnostics: readonly unknown[] };
     assert.equal(diagnosticResult.operation, "diagnostics");
     assert.deepEqual(diagnosticResult.diagnostics, []);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test("CLI inspect never runs a config above the current directory", async () => {
+  const directory = await mkdtemp(join(testRoot, ".sqlbraid-cli-"));
+  try {
+    const project = join(directory, "project");
+    const outside = join(directory, "outside");
+    const marker = join(directory, "config-ran");
+    await mkdir(join(project, "src"), { recursive: true });
+    await mkdir(outside);
+    const config = `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(marker)}, "ran"); export default {};\n`;
+    await writeFile(join(directory, "sqlbraid.config.mjs"), config);
+    await writeFile(join(project, "package.json"), JSON.stringify({ private: true }));
+    const file = join(project, "src", "query.ts");
+    await writeFile(file, 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT 1`;\n');
+
+    const inside = await exec(process.execPath, [cliEntry, "inspect", "diagnostics", "--file", file, "--json"], {
+      cwd: project,
+    });
+    assert.equal((JSON.parse(inside.stdout) as { operation: string }).operation, "diagnostics");
+    await exec(process.execPath, [cliEntry, "inspect", "symbol", "users", "--json"], { cwd: project });
+
+    await assert.rejects(
+      exec(process.execPath, [cliEntry, "inspect", "diagnostics", "--file", file, "--json"], { cwd: outside }),
+      (error: { readonly code?: number; readonly stderr?: string }) =>
+        error.code === 2 && /outside the current directory/u.test(error.stderr ?? ""),
+    );
+    assert.equal(existsSync(marker), false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

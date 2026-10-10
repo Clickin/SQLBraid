@@ -22,6 +22,8 @@ export interface Source {
 const DIALECTS = ["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"];
 /** A file with a migration name prefix. Only `.sql` files are migrations; other extensions fail, not skip. */
 const MIGRATION_NAME = /^(?:V\d[\d._]*__|R__)/u;
+/** A `.sql` name that looks like a mistyped migration name fails, so that a typo cannot skip a migration silently. */
+const NEAR_MIGRATION_NAME = /^(?:[Vv]\d|R_|r__)/u;
 
 /** Source identity deliberately preserves all whitespace other than BOM and CRLF. */
 export function normalizeSource(source: string): string {
@@ -52,7 +54,15 @@ export async function readSources(directory: string): Promise<readonly Source[]>
         await visit(source);
         continue;
       }
-      if (!kind.isFile() || !MIGRATION_NAME.test(entry.name)) continue;
+      if (!kind.isFile()) continue;
+      if (!MIGRATION_NAME.test(entry.name)) {
+        if (entry.name.endsWith(".sql") && NEAR_MIGRATION_NAME.test(entry.name)) {
+          throw sourceError(
+            `Invalid migration filename: ${source}. Use V<version>__<description>.sql or R__<description>.sql, with an uppercase prefix and two underscores.`,
+          );
+        }
+        continue;
+      }
       if (!entry.name.endsWith(".sql"))
         throw sourceError(`Migration ${source} is not a .sql file. SQLBraid migrations are SQL files only.`);
       const match = /^(?:V(\d+(?:[._]\d+)*)__|R__)(.+)\.sql$/u.exec(entry.name);

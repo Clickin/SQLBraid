@@ -18,7 +18,7 @@ The server starts for TypeScript and TSX documents only in a project that has on
 - a `sqlbraid.config.mjs`, `.js` or `.cjs` file;
 - a SQLBraid dependency in `package.json`.
 
-The config is trusted Node code that the extension executes. It is not sandboxed data. Do not open an untrusted SQLBraid config and expect isolation.
+The config is trusted Node code that the extension executes. It is not sandboxed data. Thus, the extension declares that it does not support untrusted workspaces. VS Code disables it in Restricted Mode, and it starts only after you trust the workspace. Do not trust a workspace that has an unknown SQLBraid config.
 
 ## Commands
 

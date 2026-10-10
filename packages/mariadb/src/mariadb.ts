@@ -15,6 +15,7 @@ import type {
   TypePolicy,
 } from "@sqlbraid/core";
 import {
+  AdapterError,
   createBulkBindingDescription,
   createRenderedStatement,
   createStatementBindingDescription,
@@ -469,6 +470,29 @@ export const mariaDbStatementBinding: StatementBindingAdapter = Object.freeze({
   },
 });
 
+// queryStream() binds through the text protocol, where the connector expands arrays and objects into SQL
+// text and writes non-finite numbers as bare words. Accept only values that stay one SQL literal there.
+function streamValue(value: unknown, index: number): unknown {
+  const location = `MariaDB stream parameter ${index + 1}`;
+  if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "bigint") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (Number.isFinite(value)) return value;
+    throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `${location} must be a finite number.`);
+  }
+  if (value instanceof Date) {
+    if (Number.isFinite(value.getTime())) return value;
+    throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `${location} must be a valid Date.`);
+  }
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  throw new AdapterError(
+    "BRAID_BIND_VALUE_UNSUPPORTED",
+    `${location} must be null, a string, a finite number, a boolean, a bigint, a valid Date or binary data; encode JSON values with JSON.stringify().`,
+  );
+}
+
 const defaultBindingContext: StatementBindingContext = Object.freeze({
   dialectId: "mariadb",
   requestedReuse: "auto",
@@ -641,10 +665,8 @@ export function createMariaDbExecutor(
         );
       }
       const prepared = materialize(rendered, binding);
-      const stream = connection.queryStream(
-        { sql: prepared.text, rowsAsArray: true, metaAsArray: true },
-        prepared.values,
-      );
+      const values = prepared.values.map(streamValue);
+      const stream = connection.queryStream({ sql: prepared.text, rowsAsArray: true, metaAsArray: true }, values);
       const cleanup = createCleanupScope();
       const noPrimary = Symbol("mariadb.stream.no-primary");
       let primary: unknown = noPrimary;

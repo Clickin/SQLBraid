@@ -52,11 +52,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -81,7 +81,7 @@ jobs:
           node -e 'const fs=require("node:fs"); const [sha,out]=process.argv.slice(1); fs.writeFileSync(out, `${JSON.stringify({kind:"prepared",sourceSha:process.env.GITHUB_SHA,producerRunId:process.env.GITHUB_RUN_ID,producerRunAttempt:process.env.GITHUB_RUN_ATTEMPT,artifactName:"prepared-build",preparedBuildSha256:sha})}\n`);' "$prepared_sha" "$RUNNER_TEMP/candidate.json"
       - name: Download supplied prepared build
         if: ${{ inputs.prepared_run_id != '' }}
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ inputs.prepared_artifact_name }}
           path: ${{ runner.temp }}/supplied
@@ -89,7 +89,7 @@ jobs:
           github-token: ${{ github.token }}
       - name: Download supplied candidate identity
         if: ${{ inputs.prepared_run_id != '' && inputs.candidate_artifact_name != '' }}
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ inputs.candidate_artifact_name }}
           path: ${{ runner.temp }}/supplied-candidate
@@ -97,9 +97,11 @@ jobs:
           github-token: ${{ github.token }}
       - name: Normalize supplied candidate
         if: ${{ inputs.prepared_run_id != '' }}
+        env:
+          CANDIDATE_ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
         run: |
           cp "$RUNNER_TEMP/supplied/prepared-build.tar.gz" "$RUNNER_TEMP/prepared-build.tar.gz"
-          if [ -n "${{ inputs.candidate_artifact_name }}" ]; then
+          if [ -n "$CANDIDATE_ARTIFACT_NAME" ]; then
             cp "$RUNNER_TEMP/supplied-candidate/candidate.json" "$RUNNER_TEMP/candidate.json"
             cp "$RUNNER_TEMP/supplied-candidate/candidate.json" "$RUNNER_TEMP/expected-candidate.json"
           else
@@ -113,7 +115,7 @@ jobs:
           SQLBRAID_CERT_EXPECTED_RUN_ID: ${{ inputs.prepared_run_id }}
           SQLBRAID_CERT_EXPECTED_CANDIDATE: ${{ runner.temp }}/expected-candidate.json
         run: node scripts/certification.mjs --verify-candidate --source-sha "$GITHUB_SHA" --candidate-dir "$RUNNER_TEMP/supplied" --expected-candidate "$SQLBRAID_CERT_EXPECTED_CANDIDATE" --output "$RUNNER_TEMP/candidate.json"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: certification-prepared
           path: |
@@ -128,15 +130,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -155,7 +157,7 @@ jobs:
           SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
           SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
         run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target postgres-current --artifact-dir "$RUNNER_TEMP/certification"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: certification-target-postgres
@@ -169,15 +171,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -191,7 +193,7 @@ jobs:
           SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
           SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
         run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target mysql-mysql2-node-8-4-2 --artifact-dir "$RUNNER_TEMP/certification"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: certification-target-mysql
@@ -205,15 +207,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -227,7 +229,7 @@ jobs:
           SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
           SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
         run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target mariadb-connector-node-11-8-9 --artifact-dir "$RUNNER_TEMP/certification"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: certification-target-mariadb
@@ -241,15 +243,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -263,7 +265,7 @@ jobs:
           SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
           SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
         run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target oracle-oracledb-thin-node-23-9 --artifact-dir "$RUNNER_TEMP/certification"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: certification-target-oracle
@@ -277,15 +279,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -299,7 +301,7 @@ jobs:
           SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
           SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
         run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target mssql-tedious-developer-node-2022-cu18 --artifact-dir "$RUNNER_TEMP/certification"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: certification-target-mssql
@@ -313,15 +315,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -335,7 +337,7 @@ jobs:
           SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
           SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
         run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target sqlite-node-sqlite-node-22-18-0 --artifact-dir "$RUNNER_TEMP/certification"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: certification-target-sqlite
@@ -373,18 +375,18 @@ jobs:
           --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot-sqlbraid"
           --health-interval 10s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-      - uses: denoland/setup-deno@v2.0.5
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: ${{ env.DENO_VERSION }}
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -403,7 +405,7 @@ jobs:
           node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target postgres-pg-deno-2-9-3 --artifact-dir "$RUNNER_TEMP/certification"
           node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target mysql-mysql2-deno-2-9-3 --artifact-dir "$RUNNER_TEMP/certification"
           node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target sqlite-node-sqlite-deno-2-9-3 --artifact-dir "$RUNNER_TEMP/certification"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: certification-target-deno
@@ -449,18 +451,18 @@ jobs:
           --health-cmd "healthcheck.sh --connect --innodb_initialized"
           --health-interval 10s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: oven-sh/setup-bun@v2.2.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -481,7 +483,7 @@ jobs:
           node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target bun-sql-mysql --artifact-dir "$RUNNER_TEMP/certification"
           node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target bun-sql-mariadb --artifact-dir "$RUNNER_TEMP/certification"
           node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target bun-sql-sqlite --artifact-dir "$RUNNER_TEMP/certification"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: certification-target-bun-sql
@@ -495,15 +497,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -520,7 +522,7 @@ jobs:
         run: |
           node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target d1-cloudflare-workerd-2026-07-30 --artifact-dir "$RUNNER_TEMP/certification"
           node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target sqlite-wasm-browser-3-53-4 --artifact-dir "$RUNNER_TEMP/certification"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: certification-target-web
@@ -534,15 +536,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
@@ -572,7 +574,7 @@ jobs:
           dist_sha=$(node -p "require(process.env.RUNNER_TEMP + '/global-prepared-before.json').distSha256")
           node scripts/certification.mjs --verify-prepared --source-sha "$GITHUB_SHA" --expected-dist-sha "$dist_sha"
           node scripts/verify-global-evidence.mjs --source-sha "$GITHUB_SHA" --report "$RUNNER_TEMP/global-evidence/vitest.json" --prepared-evidence "$RUNNER_TEMP/global-prepared-before.json" --output "$RUNNER_TEMP/global-evidence/global.json"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: certification-global
           path: ${{ runner.temp }}/global-evidence/global.json
@@ -597,24 +599,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: certification-target-*
           path: ${{ runner.temp }}/certification
           merge-multiple: true
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: certification-global
           path: ${{ runner.temp }}/global
@@ -632,7 +634,7 @@ jobs:
         env:
           SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
         run: node scripts/certification.mjs --aggregate --source-sha "$GITHUB_SHA" --input-dir "$RUNNER_TEMP/certification" --output "$RUNNER_TEMP/certification/aggregate.json"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: certification-final
           path: ${{ runner.temp }}/certification/aggregate.json

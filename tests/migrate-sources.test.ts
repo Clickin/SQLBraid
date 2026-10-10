@@ -174,6 +174,31 @@ test("migration-named files other than .sql fail instead of being skipped; other
   }
 });
 
+test("mistyped migration names fail instead of being skipped", async () => {
+  for (const file of ["v2__lower.sql", "V3_single.sql", "V4-dash.sql", "R_view.sql", "r__view.sql"]) {
+    const path = await directory({ "V1__init.sql": "", [file]: "SELECT 1;" });
+    try {
+      await assert.rejects(loadMigrations(path), (error: Error & { code?: string }) => {
+        assert.equal(error.code, "BRAID_MIGRATE_SOURCE");
+        assert.match(error.message, /Invalid migration filename/u);
+        return true;
+      });
+    } finally {
+      await rm(path, { recursive: true, force: true });
+    }
+  }
+  const path = await directory({ "V1__init.sql": "", "views.sql": "", "Release_notes.sql": "", "schema.sql": "" });
+  try {
+    const manifest = await loadMigrations(path, { dialects: ["sqlite"] });
+    assert.deepEqual(
+      manifest.dialects.sqlite!.versioned.map((entry) => entry.source),
+      ["V1__init.sql"],
+    );
+  } finally {
+    await rm(path, { recursive: true, force: true });
+  }
+});
+
 test("generated manifest without a dialect list accepts dialect-only versions", async () => {
   const path = await directory({ "V1__init.postgres.sql": "CREATE TABLE t (id integer);" });
   try {

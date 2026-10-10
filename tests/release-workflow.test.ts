@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
@@ -398,15 +398,35 @@ test("VS Code release packages one artifact and publishes the same VSIX to Open 
   assert.deepEqual(openVsx.permissions, { contents: "read", "id-token": "write" });
   const download = openVsx.steps.find((step) => step.uses?.startsWith("actions/download-artifact@"));
   assert.equal(download?.with?.name, "${{ needs.package.outputs.artifact }}");
+  assert.match(pack.steps[0]?.run ?? "", /"\$GITHUB_REF" == "refs\/heads\/main"/u);
+  assert.equal(openVsx.if, "github.ref == 'refs/heads/main'");
+  const install = openVsx.steps.find((step) => step.name === "Install the locked Open VSX publisher");
+  assert.match(install?.run ?? "", /install --frozen-lockfile --ignore-scripts/u);
+  const tool = JSON.parse(readFileSync(new URL("../.github/tools/ovsx/package.json", import.meta.url), "utf8"));
+  assert.deepEqual(tool.dependencies, { ovsx: "1.2.0" });
+  assert.match(
+    readFileSync(new URL("../.github/tools/ovsx/pnpm-lock.yaml", import.meta.url), "utf8"),
+    /^ {2}ovsx@1\.2\.0:$/mu,
+  );
   const publish = openVsx.steps.find((step) => step.name?.includes("trusted publishing"));
-  assert.match(publish?.run ?? "", /ovsx@\$\{OVSX_VERSION\}/u);
-  assert.match(publish?.run ?? "", /--trusted-publishing/u);
+  assert.equal(publish?.env?.OVSX, "${{ runner.temp }}/ovsx/node_modules/.bin/ovsx");
+  assert.match(publish?.run ?? "", /^"\$OVSX" publish "\$VSIX" --trusted-publishing$/u);
   assert.doesNotMatch(publish?.run ?? "", /--pre-release/u);
   assert.equal(publish?.env?.PRE_RELEASE, undefined);
   assert.equal(publish?.env?.VSIX, "${{ runner.temp }}/vsix/${{ needs.package.outputs.filename }}");
   const workflowText = readFileSync(new URL("../.github/workflows/vscode-release.yml", import.meta.url), "utf8");
   assert.doesNotMatch(workflowText, /secrets\.|VSCE_PAT|ovsx\s+publish\s+.*(?:--pat|-p\s)/u);
   assert.doesNotMatch(workflowText, /\bvsce\s+publish\b/u);
+});
+
+test("workflows pin every third-party action to a commit SHA", () => {
+  for (const file of readdirSync(new URL("../.github/workflows/", import.meta.url))) {
+    const text = readFileSync(new URL(`../.github/workflows/${file}`, import.meta.url), "utf8");
+    for (const [, action] of text.matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gmu)) {
+      if (action!.startsWith("./")) continue;
+      assert.match(action!, /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/u, `${file}: ${action}`);
+    }
+  }
 });
 
 test("runtime workflows execute every exact packed compatibility cell", () => {

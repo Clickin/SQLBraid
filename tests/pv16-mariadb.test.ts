@@ -201,6 +201,45 @@ test("MariaDB adapter closes queryStream on consumer break", async () => {
   assert.equal(source?.closeCount, 1);
 });
 
+test("MariaDB stream rejects values that the text protocol expands into SQL", async () => {
+  let streamCalls = 0;
+  const connection = connectionFor(undefined);
+  connection.queryStream = () => {
+    streamCalls += 1;
+    return new FakeStream([], [{ name: "id", type: "LONG" }]);
+  };
+  const executor = createMariaDbExecutor(connection);
+  await Promise.all(
+    [[1, 5], { admin: 1 }, { type: "Point", coordinates: [1, 1] }, Infinity, Number.NaN].map((value) =>
+      assert.rejects(
+        async () => {
+          for await (const row of executor.stream(sql.rows`SELECT id FROM t LIMIT ${value}`.render())) void row;
+        },
+        (error: unknown) => (error as { readonly code?: string }).code === "BRAID_BIND_VALUE_UNSUPPORTED",
+      ),
+    ),
+  );
+  assert.equal(streamCalls, 0);
+});
+
+test("MariaDB stream passes scalar values and binary data as one value each", async () => {
+  let received: readonly unknown[] | undefined;
+  const connection = connectionFor(undefined);
+  connection.queryStream = (_request, values) => {
+    received = values as readonly unknown[];
+    return new FakeStream([], [{ name: "id", type: "LONG" }]);
+  };
+  const executor = createMariaDbExecutor(connection);
+  const bytes = new Uint8Array([0, 1, 2, 3]).subarray(1, 3);
+  const when = new Date(0);
+  const statement = sql.rows`SELECT id FROM t WHERE a = ${"x"} AND b = ${1} AND c = ${true} AND d = ${2n} AND e = ${null} AND f = ${when} AND g = ${bytes}`;
+  for await (const row of executor.stream(statement.render())) void row;
+  assert.ok(received !== undefined);
+  assert.deepEqual(received.slice(0, 6), ["x", 1, true, 2n, null, when]);
+  assert.ok(Buffer.isBuffer(received[6]));
+  assert.deepEqual([...(received[6] as Buffer)], [1, 2]);
+});
+
 test("MariaDB stream cleanup closes exactly once after iterator initialization failure", async () => {
   const iteratorError = new Error("iterator initialization failed");
   const closeError = new Error("stream close failed");

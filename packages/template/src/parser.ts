@@ -157,6 +157,66 @@ export function freezeNode(node: TemplateNode): TemplateNode {
   return Object.freeze(node);
 }
 
+function invalidSourceIr(): never {
+  throw new SqlRenderError("BRAID_STRUCTURE", "Compiled template IR contains a node that the compiler does not emit.");
+}
+
+/**
+ * Accept only the node kinds that the template parser and the compiler emit for source templates.
+ * Structural nodes (raw, identifier, fragment, list) come only from SQL helpers, never from a compiled module.
+ */
+export function assertSourceTemplateIr(ir: TemplateIr, holeCount: number): TemplateIr {
+  const hole = (value: unknown): void => {
+    if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) >= holeCount) invalidSourceIr();
+  };
+  const strings = (value: unknown): void => {
+    if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) invalidSourceIr();
+  };
+  const nodes = (value: unknown, depth: number): void => {
+    if (!Array.isArray(value) || depth > DEFAULT_LIMITS.maxNestingDepth) invalidSourceIr();
+    for (const node of value as readonly unknown[]) {
+      if (node === null || typeof node !== "object") invalidSourceIr();
+      const candidate = node as TemplateNode;
+      switch (candidate.kind) {
+        case "text":
+          if (typeof candidate.text !== "string") invalidSourceIr();
+          break;
+        case "bind":
+          hole(candidate.interpolation);
+          break;
+        case "if":
+          hole(candidate.condition);
+          nodes(candidate.children, depth + 1);
+          break;
+        case "choose":
+          if (!Array.isArray(candidate.whens)) invalidSourceIr();
+          for (const when of candidate.whens) {
+            if (when === null || typeof when !== "object") invalidSourceIr();
+            hole(when.condition);
+            nodes(when.children, depth + 1);
+          }
+          if (candidate.otherwise !== undefined) nodes(candidate.otherwise, depth + 1);
+          break;
+        case "trim": {
+          const attributes = candidate.attributes as unknown as Record<string, unknown> | null;
+          if (attributes === null || typeof attributes !== "object") invalidSourceIr();
+          if (typeof attributes!.prefix !== "string" || typeof attributes!.suffix !== "string") invalidSourceIr();
+          strings(attributes!.prefixOverrides);
+          strings(attributes!.suffixOverrides);
+          nodes(candidate.children, depth + 1);
+          break;
+        }
+        default:
+          invalidSourceIr();
+      }
+    }
+  };
+  if (ir === null || typeof ir !== "object" || ir.version !== 1) invalidSourceIr();
+  nodes(ir.nodes, 0);
+  if (ir.rawNodes !== undefined) nodes(ir.rawNodes, 0);
+  return ir;
+}
+
 export function freezeTemplateIr(ir: TemplateIr): TemplateIr {
   return Object.freeze({
     version: ir.version,

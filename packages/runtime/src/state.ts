@@ -161,7 +161,8 @@ export function nextTransactionId(): string {
   return `braid_tx_${transactionSequence}`;
 }
 
-// Share lifecycle state by physical ownership, not by wrapper identity; pooled providers create fresh state per lease.
+// Share lifecycle state by physical ownership, not by wrapper identity. First-party pool leases use the physical client
+// as the ownership key, so a later lease of the same client shares its state.
 export function scopeStateFor(executor: QueryExecutor): ScopeState {
   const key = executor.ownershipKey ?? executor;
   let state = scopeStates.get(key);

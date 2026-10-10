@@ -239,7 +239,9 @@ tooling, compiler, editor or Vite.
 `assertDirectiveCondition` from `@sqlbraid/template` for lowering that the
 compiler generates. It is a public entry point for generated code. It is not an
 API for applications to write queries. It does not load the compiler. Use the
-same version for the compiler and the runtime.
+same version for the compiler and the runtime. Its string array is SQL text with
+the same trust as `sql.raw()`. It accepts only the template node kinds that the
+compiler emits, and other nodes fail with `BRAID_STRUCTURE`.
 
 The marked inventory below classifies each key in the export map of the
 `sqlbraid` package. `tests/public-api-audit.test.ts` requires that a change which

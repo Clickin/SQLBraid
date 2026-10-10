@@ -5,6 +5,8 @@ description: Use the thin TypeScript client of SQLBraid. Built-in TypeScript sup
 
 The `extensions/vscode` package is a thin client for the standard SQLBraid language server. It targets VS Code `>=1.121.0`. It starts only in projects that a config or a dependency identifies as SQLBraid projects. Built-in TypeScript support stays enabled.
 
+The extension executes the SQLBraid config as Node code. Thus, it does not support untrusted workspaces. VS Code disables it in Restricted Mode, and it starts after you trust the workspace.
+
 The extension adds:
 
 - SQLBraid diagnostics and semantic navigation;
