@@ -306,10 +306,10 @@ importers:
   packages/migrate:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^
+        specifier: workspace:^1.0.3
         version: link:../core
       '@sqlbraid/template':
-        specifier: workspace:^
+        specifier: workspace:^1.0.2
         version: link:../template
     devDependencies:
       '@sqlbraid/metadata':
