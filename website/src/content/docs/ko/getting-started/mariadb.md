@@ -57,6 +57,7 @@ Connector/Node.js는 실제 적용된 옵션을 노출하지 않습니다. 설�
 | BLOB                        | 바이트/Buffer                              | 바이트를 그대로 유지하거나 명시적으로 인코딩하세요.                                          |
 
 - 어댑터는 값 전용 실행, 네이티브 `queryStream()`, 그리고 같은 형태의 벌크를 위한 `connection.batch()` 호출 한 번을 씁니다.
+- `queryStream()`은 텍스트 프로토콜로 값을 보냅니다. 그래서 `db.stream()`은 `null`, 문자열, 유한한 숫자, boolean, bigint, 유효한 `Date`, 바이너리 데이터만 받습니다. 배열, 객체, 유한하지 않은 숫자는 connector에 넘기기 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 거부합니다. JSON 값은 `JSON.stringify()`로 인코딩하세요.
 - 네이티브 `RETURNING`은 해당 서버 형태에 근거가 있을 때만 메모리로 읽는 행 선언으로 씁니다. `INSERT`, `DELETE`, `REPLACE`는 각각 별도의 기능입니다. `UPDATE`는 지원한다고 주장하지 않습니다.
 - SQL은 바뀌지 않고 그대로 전달됩니다. MariaDB 문법을 지원한다는 뜻은 아닙니다.
 - `db.call()`은 준비된 문장 `CALL`이 출력하는 서로 다른 결과 집합을 메모리로 읽습니다. OUT, INOUT, 커서 설명은 지원하지 않습니다.

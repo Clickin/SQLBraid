@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -115,10 +115,17 @@ test("the development server never returns migration SQL over HTTP and still ser
     optimizeDeps: { noDiscovery: true },
   });
   try {
+    await symlink(join(p.root, "migrations"), join(p.root, "linked"), "dir");
     await server.listen();
     const { port } = server.httpServer!.address() as AddressInfo;
     const file = join(p.root, "migrations/V1__create.sql");
     const requests = [
+      "/Migrations/V1__create.sql",
+      "/MIGRATIONS/V1__create.sql?raw",
+      `/@fs${join(p.root, "MIGRATIONS/V1__create.sql")}`,
+      "/linked/V1__create.sql",
+      "/linked/V1__create.sql?raw",
+      `/@fs${join(p.root, "linked/V1__create.sql")}`,
       "/migrations/V1__create.sql",
       "/migrations/V1__create.sql?raw",
       "/migrations/V1__create.sql?url",
