@@ -173,3 +173,81 @@ test("a migrations directory inside publicDir is rejected before it can be copie
     await p.remove();
   }
 }, 60_000);
+
+test.each(["migrations", "migrations/V1__create.sql", "."])(
+  "publicDir alias of %s is rejected before serving or building",
+  async (target) => {
+    const p = await project();
+    try {
+      await mkdir(join(p.root, "public/assets"), { recursive: true });
+      await writeFile(join(p.root, "src/client.mjs"), 'console.log("client");');
+      await symlink(join(p.root, target), join(p.root, "public/assets/leak"));
+      await assert.rejects(async () => {
+        const server = await createServer({
+          configFile: false,
+          root: p.root,
+          logLevel: "silent",
+          plugins: [migrations({ dialects: ["sqlite"] })],
+        });
+        await server.close();
+      }, /publicDir/u);
+      await assert.rejects(
+        build({
+          configFile: false,
+          root: p.root,
+          logLevel: "silent",
+          plugins: [migrations({ dialects: ["sqlite"] })],
+          build: { outDir: join(p.root, "dist/client"), rollupOptions: { input: join(p.root, "src/client.mjs") } },
+        }),
+        /publicDir/u,
+      );
+    } finally {
+      await p.remove();
+    }
+  },
+  60_000,
+);
+
+test("the development server blocks publicDir aliases added after startup", async () => {
+  const p = await project();
+  await mkdir(join(p.root, "static/leak"), { recursive: true });
+  await writeFile(join(p.root, "static/ok.txt"), "public asset");
+  await symlink(join(p.root, "static/ok.txt"), join(p.root, "static/ok-link.txt"));
+  await writeFile(join(p.root, "static/leak/V1__create.sql"), "public placeholder");
+  await writeFile(join(p.root, "static/leak.sql"), "public placeholder");
+  const server = await createServer({
+    configFile: false,
+    root: p.root,
+    publicDir: "static",
+    base: "/app/",
+    logLevel: "silent",
+    plugins: [migrations({ dialects: ["sqlite"] })],
+    server: { port: 0, host: "127.0.0.1" },
+    optimizeDeps: { noDiscovery: true },
+  });
+  try {
+    await server.listen();
+    await rm(join(p.root, "static/leak"), { recursive: true });
+    await rm(join(p.root, "static/leak.sql"));
+    await symlink(join(p.root, "migrations"), join(p.root, "static/leak"), "dir");
+    await symlink(join(p.root, "migrations/V1__create.sql"), join(p.root, "static/leak.sql"));
+    const { port } = server.httpServer!.address() as AddressInfo;
+    await Promise.all(
+      ["leak/V1__create.sql", "leak/V1__create.sql?raw", "leak.sql"].map(async (path) => {
+        const response = await fetch(`http://127.0.0.1:${port}/app/${path}`);
+        const body = await response.text();
+        assert.ok(!body.includes(MARKER), `${path} returned migration SQL with status ${response.status}`);
+        assert.equal(response.status, 404, path);
+      }),
+    );
+    await Promise.all(
+      ["ok.txt", "ok-link.txt"].map(async (path) => {
+        const asset = await fetch(`http://127.0.0.1:${port}/app/${path}`);
+        assert.equal(await asset.text(), "public asset");
+      }),
+    );
+  } finally {
+    await server.close();
+    await p.remove();
+  }
+}, 60_000);

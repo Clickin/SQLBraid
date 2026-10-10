@@ -257,7 +257,8 @@ The plugin keeps the SQL away from browsers:
 - A client module cannot import `virtual:sqlbraid-migrations`. The build or the request fails.
 - A client module cannot import a file in the migrations directory, for example with `?raw` or `?url`.
 - The development server returns `404` for HTTP requests to files in the migrations directory, including `/@fs/` paths.
-- The plugin rejects a migrations directory inside `publicDir`.
+- The plugin rejects a migrations directory inside `publicDir`, including symbolic links to migration directories or files.
+- The development server also checks public asset paths, including symbolic links added after startup.
 
 The server output contains the SQL. Do not serve the server output directory as static files.
 The plugin does not own a database connection.

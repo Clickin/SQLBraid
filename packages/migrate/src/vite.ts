@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Database } from "@sqlbraid/core";
 import type { Plugin, ViteDevServer } from "vite";
@@ -47,6 +47,28 @@ function within(directory: string, file: string): boolean {
   }
   const path = relative(base, target);
   return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+}
+
+function assertPublicDirectory(publicDir: string, directory: string): void {
+  const visited = new Set<string>();
+  function visit(path: string): void {
+    if (within(directory, path) || within(path, directory))
+      throw new Error(
+        `[sqlbraid-migrations] Migration SQL is reachable inside publicDir through ${path}; move it out of ${publicDir}.`,
+      );
+    const physical = physicalPath(path);
+    if (visited.has(physical)) return;
+    visited.add(physical);
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      const file = join(path, entry.name);
+      if (entry.isDirectory() || entry.isSymbolicLink()) {
+        if (entry.isDirectory() || statSync(file).isDirectory()) visit(file);
+        else if (within(directory, file))
+          throw new Error(`[sqlbraid-migrations] Migration SQL is reachable inside publicDir through ${file}.`);
+      }
+    }
+  }
+  if (existsSync(publicDir)) visit(publicDir);
 }
 
 /**
@@ -104,10 +126,7 @@ export default function migrations(options: MigrationViteOptions = {}): Plugin {
       directory = resolve(config.root, options.directory ?? "migrations");
       serverBuild = Boolean(config.build.ssr);
       // Vite copies publicDir into the client output and serves it as-is.
-      if (config.publicDir && within(resolve(config.publicDir), directory))
-        throw new Error(
-          `[sqlbraid-migrations] The migrations directory ${directory} is inside publicDir; move it out of ${config.publicDir}.`,
-        );
+      if (config.publicDir) assertPublicDirectory(resolve(config.publicDir), directory);
     },
     resolveId(id) {
       return id === VIRTUAL_ID ? RESOLVED_ID : null;
@@ -146,7 +165,8 @@ export default function migrations(options: MigrationViteOptions = {}): Plugin {
         const file = pathname.startsWith("/@fs/")
           ? pathname.slice(4).replace(/^\/(?=[A-Za-z]:)/u, "")
           : resolve(devServer.config.root, `.${pathname}`);
-        if (!within(directory, resolve(file))) {
+        const publicFile = devServer.config.publicDir && resolve(devServer.config.publicDir, `.${pathname}`);
+        if (!within(directory, resolve(file)) && !(publicFile && within(directory, publicFile))) {
           next();
           return;
         }

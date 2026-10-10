@@ -14,6 +14,9 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   with `BRAID_BIND_VALUE_UNSUPPORTED` before the connector expands them into SQL text.
 - `@sqlbraid/migrate`: the Vite development server blocks migration files through symbolic links and case variants of
   the path on case-insensitive file systems.
+- `@sqlbraid/migrate`: reject `publicDir` links that expose migration files or directories before serving or building.
+  Check public asset paths on each development request, including links added after startup. Previously, these links
+  could expose SQL over HTTP and copy it into the client build. Rebuild affected client output and remove exposed SQL.
 - `@sqlbraid/cli`: `inspect` looks for a configuration file only inside the current directory. A `--file` outside it
   fails with exit code 2 unless `--config` names the file.
 - `@sqlbraid/template`: `capture()` accepts only the template node kinds that the compiler emits. A raw, identifier,
@@ -63,6 +66,8 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 - Prepare security patch versions: core `1.0.4`, template `1.0.3`, MariaDB `1.0.3`, SQL Server `1.0.4`, migrate `0.1.1`,
   CLI `1.0.4`, language server `1.0.4` and the VS Code extension `0.1.1`.
+- Include the public asset exposure fix in the untagged `@sqlbraid/migrate@0.1.1` candidate. Keep its dependency ranges
+  and other package versions unchanged. See the [candidate notes](docs/SQLBraid_migrate_0.1.1_release_notes.md).
 - Pin every third-party GitHub Action to a commit SHA and let Dependabot propose updates.
 - Dispatch the VS Code release only from `main`. Install the Open VSX publisher from a lockfile, without install scripts.
 - Reserve new `vX.Y.Z` tags for the `sqlbraid` facade. Release scoped packages

@@ -574,7 +574,7 @@ The security fixes after the migration release use these versions:
 | `@sqlbraid/template`        | `1.0.3`          | `capture()` accepts only the template node kinds of the compiler    |
 | `@sqlbraid/mariadb`         | `1.0.3`          | `db.stream()` binds only scalar values                              |
 | `@sqlbraid/mssql`           | `1.0.4`          | Decimal bind errors omit the value; bulk diagnostics show each item |
-| `@sqlbraid/migrate`         | `0.1.1`          | Vite development guard and mistyped migration filenames             |
+| `@sqlbraid/migrate`         | `0.1.1`          | Vite public asset and development guards; mistyped migration names  |
 | `@sqlbraid/cli`             | `1.0.4`          | `inspect` config discovery and terminal output escaping             |
 | `@sqlbraid/language-server` | `1.0.4`          | Hover text in a code block                                          |
 | VS Code extension           | `0.1.1`          | Untrusted workspaces; matching CLI and language-server versions     |
@@ -583,6 +583,13 @@ No dependency range changes. Each fix is inside its own package.
 The `cli-v1.0.3` candidate tag does not contain the `inspect` fix. CLI `1.0.4` has the migration commands and the fix.
 Runtime, facade, adapters other than MariaDB and SQL Server, and the other tooling packages need no new version.
 Use the normal certified candidate, staging and approval sequence below for each package.
+
+The `migrate-v0.1.1` candidate also rejects public asset links to migration files and directories.
+The development guard checks `publicDir` paths on each request, including links added after startup.
+See the [candidate notes](SQLBraid_migrate_0.1.1_release_notes.md) for impact and verification.
+This uses the prepared `0.1.1` version. It does not change another package version or dependency range.
+Staging still requires the exact workspace dependency versions in the candidate manifest to be public.
+For this checkout, those versions include core `1.0.4`, template `1.0.3` and metadata `1.0.3`.
 
 ## Maintainer sequence: 1.0.0 and later releases
 
