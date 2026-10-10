@@ -350,8 +350,8 @@ the package names and SHA-256 values, with the version and the source commit.
 The Release workflow sets `SQLBRAID_SKIP_VSIX=true`. Neither record sets a VSIX
 identity.
 
-The **VS Code Release** workflow is dispatched independently. It builds its own
-VSIX with `scripts/package-vscode.mjs`. That script validates these items:
+The **VS Code Release** workflow is dispatched independently, from `main` only.
+It builds its own VSIX with `scripts/package-vscode.mjs`. That script validates these items:
 
 - the name, publisher and version of the extension;
 - the bundled `@sqlbraid/cli` and `@sqlbraid/language-server` versions;
@@ -361,7 +361,8 @@ VSIX with `scripts/package-vscode.mjs`. That script validates these items:
 The script prints the SHA-256 and the identity of the VSIX. The workflow keeps
 `sqlbraid-vscode-<version>.vsix` as the `sqlbraid-vscode-<version>` artifact for
 14 days. Open VSX publication downloads that same artifact and uses trusted
-publishing. The Microsoft Marketplace upload is a separate manual handoff of
+publishing. It installs `ovsx` from the lockfile in `.github/tools/ovsx`, without
+install scripts. The Microsoft Marketplace upload is a separate manual handoff of
 those bytes. Neither path builds the VSIX again after validation. Keep that
 artifact and its workflow identity separately. npm prior-run recovery, the npm
 manifest and the npm pack-check stamp do not recover or attest the extension.

@@ -1,0 +1,8 @@
+{
+  "name": "sqlbraid-ovsx-publisher",
+  "private": true,
+  "description": "Pins the Open VSX publisher and its dependencies for the VS Code release workflow.",
+  "dependencies": {
+    "ovsx": "1.2.0"
+  }
+}

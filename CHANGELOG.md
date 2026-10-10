@@ -61,6 +61,8 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 ### Release tooling
 
+- Pin every third-party GitHub Action to a commit SHA and let Dependabot propose updates.
+- Dispatch the VS Code release only from `main`. Install the Open VSX publisher from a lockfile, without install scripts.
 - Reserve new `vX.Y.Z` tags for the `sqlbraid` facade. Release scoped packages
   separately with `<package>-vX.Y.Z` tags.
 - Run staging tools from `main` against the original certified artifacts.
