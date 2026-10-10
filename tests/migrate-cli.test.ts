@@ -116,6 +116,27 @@ test("migration CLI baseline and repair preserve the database and clean up faile
   }
 }, 30_000);
 
+test("migration status escapes control characters from the history table", async () => {
+  const f = await fixture();
+  try {
+    await f.run("new", "existing");
+    await writeFile(join(f.directory, "migrations/V001__existing.sql"), "CREATE TABLE existing (id INTEGER);\n");
+    await f.run("up");
+    const history = new DatabaseSync(join(f.directory, "database.sqlite"));
+    history.prepare("UPDATE cli_migrations SET source = ?").run("V001\u001b[2J\nERROR forged\u202e.sql");
+    history.close();
+    await rm(join(f.directory, "migrations/V001__existing.sql"));
+    const output = await f.run("status").then(
+      (result) => result.stdout,
+      (error: Error & { stdout?: string }) => String(error.stdout),
+    );
+    assert.match(output, /\\u001B\[2J\\u000AERROR forged\\u202E/u);
+    assert.equal(output.includes("\u001b") || output.includes("\u202e") || output.includes("\nERROR forged"), false);
+  } finally {
+    await f.remove();
+  }
+}, 30_000);
+
 test("migration config remains executable only on the migration CLI path", async () => {
   const f = await fixture();
   try {

@@ -72,6 +72,14 @@ const FILE_WATCH_GLOBS = [
   "**/*.{ts,tsx,mts,cts,js,jsx}",
 ] as const;
 
+/** Show hover evidence as literal text: metadata and source names must not become Markdown links, images or HTML. */
+function codeBlock(text: string): string {
+  let longest = 0;
+  for (const run of text.match(/`+/gu) ?? []) longest = Math.max(longest, run.length);
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  return `${fence}text\n${text}\n${fence}`;
+}
+
 function uriPath(uri: string): string {
   try {
     return fileURLToPath(uri);
@@ -500,7 +508,7 @@ export function startStdioLanguageServer(
     const document = documents.get(params.textDocument.uri);
     return document
       ? {
-          contents: { kind: MarkupKind.Markdown, value: result.contents },
+          contents: { kind: MarkupKind.Markdown, value: codeBlock(result.contents) },
           range: rangeFor(document, result.range.start, result.range.end),
         }
       : null;

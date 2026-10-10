@@ -403,7 +403,11 @@ test("built stdio server discovers facade metadata with default configuration", 
       method: "textDocument/hover",
       params: { textDocument: { uri }, position: positionAt(relationOffset) },
     });
-    assert.match(JSON.stringify(resultOf<unknown>(await response(reader, 4))), /Relation main\.users/u);
+    const relationHover = resultOf<{ readonly contents: { readonly kind: string; readonly value: string } }>(
+      await response(reader, 4),
+    );
+    assert.equal(relationHover.contents.kind, "markdown");
+    assert.match(relationHover.contents.value, /^```text\nRelation main\.users\n[^]*\n```$/u);
     send(server, {
       jsonrpc: "2.0",
       id: 5,

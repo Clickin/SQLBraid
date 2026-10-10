@@ -11,6 +11,7 @@ import {
   type MigrationDatabaseResource,
   type MigrationsConfig,
 } from "@sqlbraid/tooling";
+import { terminalText } from "./terminal.js";
 
 /** The dialect suffixes that the migration loader accepts in file names. */
 const MIGRATION_DIALECTS = ["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"];
@@ -82,10 +83,12 @@ async function atomicWrite(path: string, source: string): Promise<void> {
 function printReport(report: MigrationReport, json: boolean): void {
   if (json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else {
-    console.log(report.summary);
+    console.log(terminalText(report.summary, true));
     for (const difference of report.differences)
       console.log(
-        `  ${difference.kind}${difference.version ? ` ${difference.version}` : ""}${difference.source ? ` ${difference.source}` : ""}${difference.path ? ` ${difference.path}` : ""}`,
+        terminalText(
+          `  ${difference.kind}${difference.version ? ` ${difference.version}` : ""}${difference.source ? ` ${difference.source}` : ""}${difference.path ? ` ${difference.path}` : ""}`,
+        ),
       );
   }
 }

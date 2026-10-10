@@ -26,6 +26,7 @@ import {
 } from "@sqlbraid/tooling";
 import { codegenOutputCollisionKey } from "./codegen-path.js";
 import { runMigrate } from "./migrate.js";
+import { terminalText } from "./terminal.js";
 
 function usage(): never {
   console.error(
@@ -184,11 +185,14 @@ function reportCodegen(results: readonly CodegenCliTargetResult[], json: boolean
     process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
     return;
   }
-  for (const result of results) console.log(`${result.target.padEnd(12)} ${result.status.padEnd(9)} ${result.outFile}`);
+  for (const result of results)
+    console.log(`${terminalText(result.target).padEnd(12)} ${result.status.padEnd(9)} ${terminalText(result.outFile)}`);
   for (const result of results)
     for (const diagnostic of result.diagnostics) {
-      const location = [diagnostic.relation, diagnostic.column].filter(Boolean).join(".");
-      console.error(`${result.target} ${diagnostic.code}${location ? ` ${location}` : ""}: ${diagnostic.message}`);
+      const location = terminalText([diagnostic.relation, diagnostic.column].filter(Boolean).join("."));
+      console.error(
+        `${terminalText(result.target)} ${diagnostic.code}${location ? ` ${location}` : ""}: ${terminalText(diagnostic.message, true)}`,
+      );
     }
 }
 
@@ -261,7 +265,7 @@ async function runCodegen(argv: readonly string[], json: boolean): Promise<void>
 }
 
 function diagnosticText(diagnostic: { readonly code: string; readonly message: string }): string {
-  return `${diagnostic.code}: ${diagnostic.message}`;
+  return `${terminalText(diagnostic.code)}: ${terminalText(diagnostic.message, true)}`;
 }
 
 function reportDiagnostics(
@@ -354,7 +358,9 @@ async function runInspect(argv: readonly string[], json: boolean): Promise<void>
       const symbols = service.workspaceSymbols(symbolName as string);
       const result = { operation, query: symbolName, symbols };
       if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
-      else for (const symbol of symbols) console.log(`${symbol.name} ${symbol.kind} ${symbol.location.uri}`);
+      else
+        for (const symbol of symbols)
+          console.log(`${terminalText(symbol.name)} ${symbol.kind} ${terminalText(symbol.location.uri)}`);
       return;
     }
     const source = await readFile(fileName as string, "utf8");
@@ -390,7 +396,7 @@ async function runInspect(argv: readonly string[], json: boolean): Promise<void>
         }
       : { operation, file: fileName, resolved: false, evidence: "unresolved" };
     if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
-    else console.log(result.resolved ? `${result.contents}` : "unresolved");
+    else console.log(result.resolved ? terminalText(`${result.contents}`, true) : "unresolved");
   } finally {
     workspace.dispose();
   }
@@ -536,7 +542,7 @@ async function main(argv: readonly string[]): Promise<void> {
 /** Run the `sqlbraid` CLI with argv excluding the Node executable/script path. */
 export function runCli(argv: readonly string[]): void {
   void main(argv).catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(terminalText(error instanceof Error ? error.message : String(error), true));
     process.exitCode = error instanceof CliError || error instanceof ConfigurationError ? error.exitCode : 1;
   });
 }

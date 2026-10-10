@@ -16,6 +16,10 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   the path on case-insensitive file systems.
 - `@sqlbraid/cli`: `inspect` looks for a configuration file only inside the current directory. A `--file` outside it
   fails with exit code 2 unless `--config` names the file.
+- `@sqlbraid/cli`: human-readable output escapes control characters, line separators and bidirectional controls in
+  names from a database, a snapshot or a migration history. A table name cannot clear the screen or add a forged line.
+- `@sqlbraid/language-server`: hover evidence is a plain-text code block. Names from metadata cannot add Markdown
+  links or remote images.
 - VS Code extension: declare that untrusted workspaces are not supported, because the extension executes the workspace
   configuration.
 - `@sqlbraid/migrate`: a `.sql` file with a mistyped migration name, such as `v2__users.sql` or `V2_users.sql`, fails
