@@ -61,6 +61,8 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 ### Release tooling
 
+- Prepare security patch versions: core `1.0.4`, template `1.0.3`, MariaDB `1.0.3`, SQL Server `1.0.4`, migrate `0.1.1`,
+  CLI `1.0.4`, language server `1.0.4` and the VS Code extension `0.1.1`.
 - Pin every third-party GitHub Action to a commit SHA and let Dependabot propose updates.
 - Dispatch the VS Code release only from `main`. Install the Open VSX publisher from a lockfile, without install scripts.
 - Reserve new `vX.Y.Z` tags for the `sqlbraid` facade. Release scoped packages

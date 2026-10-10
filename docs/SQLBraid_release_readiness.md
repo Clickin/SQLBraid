@@ -564,6 +564,26 @@ The repository prepares these versions. It does not prove that npm already conta
    candidate, OIDC staging and human approval sequence. Do not restage `0.1.0`
    merely to create evidence. Do not add CI tokens or a first-publish fallback.
 
+### Security patch release
+
+The security fixes after the migration release use these versions:
+
+| Package                     | Prepared version | Reason                                                              |
+| --------------------------- | ---------------- | ------------------------------------------------------------------- |
+| `@sqlbraid/core`            | `1.0.4`          | Inline diagnostic literals escape control characters                |
+| `@sqlbraid/template`        | `1.0.3`          | `capture()` accepts only the template node kinds of the compiler    |
+| `@sqlbraid/mariadb`         | `1.0.3`          | `db.stream()` binds only scalar values                              |
+| `@sqlbraid/mssql`           | `1.0.4`          | Decimal bind errors omit the value; bulk diagnostics show each item |
+| `@sqlbraid/migrate`         | `0.1.1`          | Vite development guard and mistyped migration filenames             |
+| `@sqlbraid/cli`             | `1.0.4`          | `inspect` config discovery and terminal output escaping             |
+| `@sqlbraid/language-server` | `1.0.4`          | Hover text in a code block                                          |
+| VS Code extension           | `0.1.1`          | Untrusted workspaces; matching CLI and language-server versions     |
+
+No dependency range changes. Each fix is inside its own package.
+The `cli-v1.0.3` candidate tag does not contain the `inspect` fix. CLI `1.0.4` has the migration commands and the fix.
+Runtime, facade, adapters other than MariaDB and SQL Server, and the other tooling packages need no new version.
+Use the normal certified candidate, staging and approval sequence below for each package.
+
 ## Maintainer sequence: 1.0.0 and later releases
 
 These steps are maintainer actions. Certification does **not** do them.

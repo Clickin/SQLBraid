@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/migrate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Versioned SQL migrations and explicit startup checks for SQLBraid",
   "keywords": [
     "database",
