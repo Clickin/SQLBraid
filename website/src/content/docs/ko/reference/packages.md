@@ -43,6 +43,8 @@ const db = createBunSqlDatabase(client, { dialect: "postgres" });
 
 `sqlbraid/compiled`는 컴파일러가 생성하는 `capture`, `assertDirectiveCondition` 헬퍼를 위한 고급 진입점입니다. 애플리케이션이 쿼리를 작성하는 API가 아니며, 컴파일러를 import하지 않습니다. 컴파일러와 런타임은 같은 버전을 쓰세요.
 
+`capture`에 주는 문자열 배열은 `sql.raw()`와 같이 SQL 텍스트입니다. 입력으로 이 배열을 만들지 마세요. `capture`는 컴파일러가 만드는 템플릿 노드 종류만 받습니다. 다른 노드는 `BRAID_STRUCTURE`로 실패합니다.
+
 - `@sqlbraid/bun-sql`은 Bun을 정적으로 import하지 않으며 `dialect`를 반드시 명시해야 합니다. SQL 의미를 자동으로 감지하지 않습니다.
 - 런타임 패키지에는 메타데이터, 코드 생성, 컴파일러, 에디터, Vite 의존성이 들어가지 않습니다. 도구 패키지는 개발·빌드 환경에만 설치하세요.
 - Oracle, SQL Server, MariaDB, Bun 의존성은 방언 루트에 들어가지 않습니다.

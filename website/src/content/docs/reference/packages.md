@@ -56,6 +56,10 @@ narrower dependencies.
 for applications to write queries. It does not import the compiler. Use the same
 version for the compiler and the runtime.
 
+The string array that you give to `capture` is SQL text, as with `sql.raw()`.
+Never build it from input. `capture` accepts only the template node kinds that
+the compiler emits. Other nodes fail with `BRAID_STRUCTURE`.
+
 - `@sqlbraid/bun-sql` has no static Bun import and requires an explicit
   `dialect`. It does not detect SQL semantics automatically.
 - Runtime packages do not get metadata, codegen, compiler, editor or Vite

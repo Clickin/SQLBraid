@@ -16,6 +16,9 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   the path on case-insensitive file systems.
 - `@sqlbraid/cli`: `inspect` looks for a configuration file only inside the current directory. A `--file` outside it
   fails with exit code 2 unless `--config` names the file.
+- `@sqlbraid/template`: `capture()` accepts only the template node kinds that the compiler emits. A raw, identifier,
+  list or fragment node in the compiled IR fails with `BRAID_STRUCTURE`, and a fragment node must hold a SQLBraid
+  fragment. Documentation states that the `capture()` string array has the trust of `sql.raw()`.
 - `@sqlbraid/cli`: human-readable output escapes control characters, line separators and bidirectional controls in
   names from a database, a snapshot or a migration history. A table name cannot clear the screen or add a forged line.
 - `@sqlbraid/language-server`: hover evidence is a plain-text code block. Names from metadata cannot add Markdown

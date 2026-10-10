@@ -221,3 +221,51 @@ test("renders MyBatis-scale logical statements without bind loss or reordering",
       .join(""),
   );
 });
+
+test("capture rejects compiled IR nodes that the compiler never emits", () => {
+  const range = { start: 0, end: 0 };
+  const forged = [
+    { kind: "raw", text: "; DROP TABLE users", range },
+    { kind: "identifier", value: "users", range },
+    { kind: "list", values: [1], range },
+    {
+      kind: "fragment",
+      fragment: { ir: { version: 1, nodes: [], sourceLength: 0 }, values: [], dialectId: "postgres" },
+      range,
+    },
+    { kind: "bind", interpolation: 3, range },
+    { kind: "if", condition: 0, children: [{ kind: "raw", text: "x", range }], range },
+  ];
+  for (const node of forged) {
+    const ir = JSON.parse(JSON.stringify({ version: 1, nodes: [node], sourceLength: 1 }));
+    assert.throws(
+      () =>
+        capture(
+          sql,
+          ["SELECT 1", ""],
+          (values) => {
+            values[0] = true;
+          },
+          ir,
+        ).render(),
+      { code: "BRAID_STRUCTURE" },
+    );
+  }
+  const valid = {
+    version: 1,
+    nodes: [
+      { kind: "text", text: "SELECT ", range },
+      { kind: "bind", interpolation: 0, range },
+    ],
+    sourceLength: 8,
+  } as const;
+  const rendered = capture(
+    sql,
+    ["SELECT ", ""],
+    (values) => {
+      values[0] = 1;
+    },
+    valid,
+  ).render();
+  assert.deepEqual(rendered.segments, ["SELECT ", ""]);
+});
