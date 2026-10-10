@@ -1,11 +1,11 @@
 ---
 title: VS Code 확장
 description: SQLBraid의 얇은 TypeScript 클라이언트를 씁니다. 기본 TypeScript 지원은 그대로 켜져 있습니다.
-
-확장은 SQLBraid 설정 파일을 Node 코드로 실행합니다. 그래서 신뢰하지 않는 워크스페이스를 지원하지 않습니다. VS Code는 제한 모드(Restricted Mode)에서 확장을 비활성화하고, 워크스페이스를 신뢰한 뒤에 시작합니다.
 ---
 
 `extensions/vscode` 패키지는 표준 SQLBraid 언어 서버를 쓰는 얇은 클라이언트입니다. VS Code `>=1.121.0`을 대상으로 합니다. 설정 파일이나 의존성으로 SQLBraid 프로젝트임이 확인될 때만 시작합니다. 기본 TypeScript 지원은 그대로 켜져 있습니다.
+
+확장은 SQLBraid 설정 파일을 Node 코드로 실행합니다. 그래서 신뢰하지 않는 워크스페이스를 지원하지 않습니다. VS Code는 제한 모드(Restricted Mode)에서 확장을 비활성화하고, 워크스페이스를 신뢰한 뒤에 시작합니다.
 
 확장이 추가하는 기능은 다음과 같습니다.
 
