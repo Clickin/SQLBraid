@@ -18,6 +18,10 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   fails with exit code 2 unless `--config` names the file.
 - VS Code extension: declare that untrusted workspaces are not supported, because the extension executes the workspace
   configuration.
+- `@sqlbraid/migrate`: a `.sql` file with a mistyped migration name, such as `v2__users.sql` or `V2_users.sql`, fails
+  with `BRAID_MIGRATE_SOURCE`. Before, the loader skipped it and `status` reported the database as current.
+- `@sqlbraid/migrate`: document that the migrator does not calculate manifest checksums again. A generated manifest is
+  build output that must not be edited.
 - `@sqlbraid/mssql`: a decimal bind error names the parameter number and not the value. Bulk diagnostic literals show
   the values of the selected item.
 - `@sqlbraid/core`: inline `literalizedSql()` values escape control characters, line separators, bidirectional
