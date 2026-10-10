@@ -75,7 +75,7 @@ The pipeline is:
 driver row -> dialect TypePolicy normalization -> plain row -> query schema -> execution schema -> application model
 ```
 
-`DatabaseResultValidationError` uses the code `BRAID_RESULT_VALIDATION`. It reports the stage (query or execution) and the row index. It does not dump raw rows or binds. Mapping is one row to one row. SQLBraid does not hydrate relations, keep identity maps or assemble object graphs.
+`DatabaseResultValidationError` uses the code `BRAID_RESULT_VALIDATION`. It reports the stage (query or execution) and the row index. Its message does not contain raw rows or binds. Its `issues` property holds the issues of the schema library without change. Some libraries put the input value in each issue. If rows can contain personal data, do not log `issues` or the complete error object without redaction. Mapping is one row to one row. SQLBraid does not hydrate relations, keep identity maps or assemble object graphs.
 
 The input side is smaller in 1.0.0. This is intentional.
 

@@ -171,6 +171,18 @@ docsClaim(TX, "fixed options work; malformed, nested and escaping uses are rejec
   }),
 );
 
+docsClaim(TX, "a released pool lease keeps the session state of the connection", async () => {
+  const pool = new Pool({ connectionString: uri(), max: 1 });
+  try {
+    const db = createPgPoolDatabase(pool);
+    await db.execute(sql.command`SET application_name = 'docs_session_state'`);
+    const row = await db.one(sql.rows<{ name: string }>`SELECT current_setting('application_name') AS name`);
+    assert.equal(row.name, "docs_session_state");
+  } finally {
+    await pool.end();
+  }
+});
+
 docsClaim(TX, "a nested tx is a savepoint: an inner failure keeps the outer work", () =>
   withDb(async (db) => {
     await db.execute(sql.command`CREATE TEMP TABLE docs_sp (v int)`);

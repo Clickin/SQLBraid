@@ -67,7 +67,7 @@
       "source": "website/src/content/docs/concepts/result-mapping.md",
       "translation": "website/src/content/docs/ko/concepts/result-mapping.md",
       "translationOf": "website/src/content/docs/concepts/result-mapping.md",
-      "sourceDigest": "227bfac8c5ee1548facab9b9fe2df038083d809f1e16363f3129c2833dc10331"
+      "sourceDigest": "c3d06acf68312d05bec9d4d2591551f7b125704ae9ec9167fbc23f1197f2e00b"
     },
     {
       "source": "website/src/content/docs/concepts/routines.md",
@@ -271,7 +271,7 @@
       "source": "website/src/content/docs/runtime/transactions.md",
       "translation": "website/src/content/docs/ko/runtime/transactions.md",
       "translationOf": "website/src/content/docs/runtime/transactions.md",
-      "sourceDigest": "3eb00013a0ac25eb0d6134ed9561bde8748f81dfc4f474e43f4aac2b129577b4"
+      "sourceDigest": "c9275bdc010fde12cffd836f213289b1a3ffb156c9f790c19cefb804252b3b35"
     }
   ]
 }

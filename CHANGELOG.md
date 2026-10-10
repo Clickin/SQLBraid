@@ -23,6 +23,8 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   names from a database, a snapshot or a migration history. A table name cannot clear the screen or add a forged line.
 - `@sqlbraid/language-server`: hover evidence is a plain-text code block. Names from metadata cannot add Markdown
   links or remote images.
+- Document that pool leases keep session state, that work from a queue that started before `db.tx` is outside the
+  async context of the transaction, and that `DatabaseResultValidationError.issues` can contain row values.
 - VS Code extension: declare that untrusted workspaces are not supported, because the extension executes the workspace
   configuration.
 - `@sqlbraid/migrate`: a `.sql` file with a mistyped migration name, such as `v2__users.sql` or `V2_users.sql`, fails
