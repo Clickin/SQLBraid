@@ -31,6 +31,7 @@ export const pgExecutionCapabilities: DriverEnvironment["capabilities"] = Object
 export function pgEnvironmentFor(
   profile: { readonly json: PgJsonProfile; readonly temporal: PgTemporalProfile },
   policy: TypePolicy = typePolicyForProfile(profile),
+  driver: { readonly id: string; readonly capabilities?: DriverEnvironment["capabilities"] } = { id: "pg" },
 ): DriverEnvironment {
   const profileId =
     profile.json === "text" && profile.temporal === "text"
@@ -42,10 +43,11 @@ export function pgEnvironmentFor(
           : "pg-json-text-temporal-native";
   return Object.freeze<DriverEnvironment>({
     database: { product: "postgres" },
-    driver: { id: "pg", profile: profileId },
+    driver: { id: driver.id, profile: profileId },
     typePolicy: { id: policy.id, hash: policy.hash },
     capabilities: {
       ...pgExecutionCapabilities,
+      ...driver.capabilities,
       "sql.native-transparency": { status: "guaranteed" },
       "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
       "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },

@@ -62,7 +62,7 @@
       "files": [
         "packages/sqlite/src/better-sqlite3.ts",
         "packages/sqlite/src/node-sqlite.ts",
-        "packages/postgres/src/pg.ts",
+        "packages/postgres/src/pg/executor.ts",
         "packages/mysql/src/mysql2.ts",
         "packages/mssql/src/tedious.ts",
         "packages/migrate/src/dialect.ts",
@@ -108,7 +108,7 @@
         "packages/migrate/src/index.ts",
         "packages/migrate/src/dialect.ts",
         "packages/migrate/src/sources.ts",
-        "packages/postgres/src/pg.ts",
+        "packages/postgres/src/pg/executor.ts",
         "packages/runtime/src/index.ts",
         "scripts/assert-release-workflows.mjs",
         "scripts/certification.mjs",

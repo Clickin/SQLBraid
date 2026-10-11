@@ -32,6 +32,10 @@
       "types": "./dist/pg.d.ts",
       "import": "./dist/pg.js"
     },
+    "./neon": {
+      "types": "./dist/neon.d.ts",
+      "import": "./dist/neon.js"
+    },
     "./inspector": {
       "types": "./dist/inspector.d.ts",
       "import": "./dist/inspector.js"

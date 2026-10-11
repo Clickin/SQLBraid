@@ -71,7 +71,12 @@ export default defineConfig([
     }),
     deps: { neverBundle: ["#async-context"] },
   },
-  packageBuild("packages/postgres", { index: "src/index.ts", pg: "src/pg.ts", inspector: "src/inspector.ts" }),
+  packageBuild("packages/postgres", {
+    index: "src/index.ts",
+    pg: "src/pg.ts",
+    neon: "src/neon.ts",
+    inspector: "src/inspector.ts",
+  }),
   packageBuild("packages/oracle", {
     index: "src/index.ts",
     oracledb: "src/oracledb.ts",
