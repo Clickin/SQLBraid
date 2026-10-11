@@ -274,7 +274,8 @@ jobs:
       - run: pnpm run build:vscode
       - run: pnpm exec vitest run --project consumer
       - run: pnpm run pack:check
-      - name: Run isolated facade and API-only consumer gates
+      - run: pnpm --dir tests exec playwright install --with-deps chromium
+      - name: Run isolated facade, bundler and API-only consumer gates
         env:
           SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/runtime-compatibility-packages
         run: pnpm run test:consumer:gates

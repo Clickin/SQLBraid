@@ -62,6 +62,13 @@ const forbiddenRootDependencies = new Set([
   "@sqlbraid/operations",
   "@sqlbraid/tooling",
   "@sqlbraid/vite",
+  "@sqlbraid/webpack",
+  "webpack",
+  "@rspack/core",
+  "next",
+  "ts-loader",
+  "react",
+  "react-dom",
 ]);
 const movedScripts = [
   "agent-tooling-consumer.mjs",

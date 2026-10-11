@@ -16,6 +16,7 @@
       "@sqlbraid/metadata": ["packages/metadata/src/index.ts"],
       "@sqlbraid/compiler": ["packages/compiler/src/index.ts"],
       "@sqlbraid/vite": ["packages/vite/src/index.ts"],
+      "@sqlbraid/webpack": ["packages/webpack/src/index.cts"],
       "@sqlbraid/migrate": ["packages/migrate/src/index.ts"],
       "@sqlbraid/migrate/node": ["packages/migrate/src/node.ts"],
       "@sqlbraid/migrate/vite": ["packages/migrate/src/vite.ts"],
@@ -53,6 +54,6 @@
       "@sqlbraid/sqlite/libsql": ["packages/sqlite/src/libsql.ts"]
     }
   },
-  "include": ["packages/**/*.ts"],
+  "include": ["packages/**/*.ts", "packages/**/*.cts"],
   "exclude": ["node_modules", "dist"]
 }

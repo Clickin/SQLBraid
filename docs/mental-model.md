@@ -33,7 +33,7 @@ flowchart TB
   METADATA["@sqlbraid/metadata"]
   CODEGEN["@sqlbraid/codegen"]
   TOOLING["@sqlbraid/tooling"]
-  LSP["LSP / CLI / VS Code / Vite"]
+  LSP["LSP / CLI / VS Code / Vite / Webpack"]
   COMPILER --> TOOLING --> LSP
   METADATA --> CODEGEN --> TOOLING
   CORE -. interfaces .-> COMPILER
@@ -367,11 +367,12 @@ The optional OpenTelemetry package connects through this observer surface. It do
 
 ## 17. The static tooling subsystem is separate
 
-The runtime core does not depend on metadata, compiler, codegen, CLI, editor or Vite packages. This is intentional.
+The runtime core does not depend on metadata, compiler, codegen, CLI, editor, Vite or Webpack packages. This is intentional.
 
 - `@sqlbraid/metadata` records database evidence.
 - `@sqlbraid/codegen` is a pure offline transform: metadata + TypePolicy → TypeScript models.
 - `@sqlbraid/compiler` owns source discovery and lowering.
+- `@sqlbraid/vite` and `@sqlbraid/webpack` call the compiler. Bundlers own TypeScript and JSX transpilation.
 - `@sqlbraid/tooling` combines positive evidence from the compiler, metadata and codegen for CLI, LSP and editor use.
 
 Missing metadata stays unresolved evidence. It does not prove that user SQL is invalid.

@@ -1,0 +1,42 @@
+{
+  "name": "@sqlbraid/webpack",
+  "version": "1.0.2",
+  "description": "Webpack loader for SQLBraid guarded-template lowering",
+  "keywords": [
+    "compiler",
+    "sql",
+    "sqlbraid",
+    "webpack"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/webpack"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.cts",
+      "default": "./dist/index.cjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@jridgewell/remapping": "2.3.5",
+    "@jridgewell/trace-mapping": "0.3.31",
+    "@sqlbraid/compiler": "workspace:^1.0.0"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

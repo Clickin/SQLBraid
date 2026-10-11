@@ -427,7 +427,8 @@ jobs:
           SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
           SQLBRAID_SKIP_VSIX: "true"
         run: pnpm run pack:check
-      - name: Run isolated facade and API-only consumer gates
+      - run: pnpm --dir tests exec playwright install --with-deps chromium
+      - name: Run isolated facade, bundler and API-only consumer gates
         env:
           SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
         run: pnpm run test:consumer:gates

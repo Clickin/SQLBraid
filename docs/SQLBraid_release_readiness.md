@@ -823,3 +823,18 @@ does not invent precision. It does not fail after a successful mutation. Its
 checked metadata exclusions apply only to that unavailable channel. Native tests
 still require exact `RETURNING` rows, successful mutations with large IDs and
 correct bulk counts.
+
+## Webpack loader candidate
+
+`@sqlbraid/webpack` adds guarded-template compilation through the compiler.
+It does not change runtime packages or migration tooling.
+The package uses a CommonJS loader entry and the tooling Node floor of 22.18.0.
+Release and packing scripts discover it from `packages/webpack/package.json`.
+The build configuration, engine inventory and required-package audit include it.
+Runtime-only audits exclude it.
+
+`test:consumer:gates` runs `tests/scripts/test-webpack.mjs` against packed artifacts.
+That gate covers Webpack, Rspack and both Next.js bundlers.
+See the [loader README](../packages/webpack/README.md) for configurations, tested versions and type-checking limitations.
+These local results are not release certification for a final revision.
+No publishing, tagging or support promotion is authorized by this change.

@@ -10,6 +10,7 @@ const sourceAliases = {
   "@sqlbraid/metadata": resolve("packages/metadata/src/index.ts"),
   "@sqlbraid/compiler": resolve("packages/compiler/src/index.ts"),
   "@sqlbraid/vite": resolve("packages/vite/src/index.ts"),
+  "@sqlbraid/webpack": resolve("packages/webpack/src/index.cts"),
   "@sqlbraid/migrate/node": resolve("packages/migrate/src/node.ts"),
   "@sqlbraid/migrate/vite": resolve("packages/migrate/src/vite.ts"),
   "@sqlbraid/migrate/drift": resolve("packages/migrate/src/drift.ts"),

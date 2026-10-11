@@ -74,6 +74,9 @@ const query = sql.rows<UserRow>`
 
 Without source transformation, JavaScript evaluates every interpolated expression when the tag runs. To skip the expressions in inactive `@braid` branches, use `@sqlbraid/compiler`.
 
+For Webpack, Rspack and Next.js, use the [`@sqlbraid/webpack` loader](packages/webpack/README.md).
+The loader reuses the compiler and leaves TypeScript and JSX transpilation to the bundler.
+
 Supported directives: `if`, `choose`, `when`, `otherwise`, `where`, `set`, `trim`.
 
 ### 3. Result Mapping

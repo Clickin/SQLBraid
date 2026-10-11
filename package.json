@@ -67,7 +67,7 @@
     "pack:consumer": "node scripts/prepare-consumer-packages.mjs",
     "test:consumer:isolated": "pnpm run pack:consumer && node tests/scripts/isolated-facade-consumer.mjs",
     "test:consumer:otel-api": "pnpm run pack:consumer && node tests/scripts/otel-api-consumer.mjs",
-    "test:consumer:gates": "pnpm run pack:consumer && node tests/scripts/isolated-facade-consumer.mjs && node tests/scripts/isolated-lsp-consumer.mjs && node tests/scripts/otel-api-consumer.mjs && pnpm run dependency:ownership",
+    "test:consumer:gates": "pnpm run pack:consumer && node tests/scripts/isolated-facade-consumer.mjs && node tests/scripts/isolated-lsp-consumer.mjs && node tests/scripts/otel-api-consumer.mjs && node tests/scripts/test-webpack.mjs && pnpm run dependency:ownership",
     "test:runtime": "node tests/scripts/runtime-portability.mjs node bun deno",
     "test:lsp": "pnpm run build && vitest run --project unit tests/lsp-protocol.test.ts",
     "test:agent-tooling": "pnpm run build && vitest run --project unit --project cli tests/tooling.test.ts tests/tooling-workspace.test.ts tests/language-server.test.ts tests/cli.test.ts",
@@ -87,7 +87,8 @@
     "prepare": "node scripts/install-git-hooks.mjs",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check .",
-    "dependency:ownership": "node scripts/validate-dependency-ownership.mjs"
+    "dependency:ownership": "node scripts/validate-dependency-ownership.mjs",
+    "test:webpack": "pnpm run build && pnpm run docs:snippets && pnpm run pack:consumer && node tests/scripts/test-webpack.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",

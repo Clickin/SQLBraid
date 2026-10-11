@@ -80,6 +80,7 @@ try {
       "tooling",
       "compiler",
       "vite",
+      "webpack",
       "cli",
       "language-server",
       "vscode",

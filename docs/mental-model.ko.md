@@ -33,7 +33,7 @@ flowchart TB
   METADATA["@sqlbraid/metadata"]
   CODEGEN["@sqlbraid/codegen"]
   TOOLING["@sqlbraid/tooling"]
-  LSP["LSP / CLI / VS Code / Vite"]
+  LSP["LSP / CLI / VS Code / Vite / Webpack"]
   COMPILER --> TOOLING --> LSP
   METADATA --> CODEGEN --> TOOLING
   CORE -. 인터페이스 .-> COMPILER
@@ -367,11 +367,12 @@ SQLBraid는 처음 발생한 실패를 보존합니다. 그러면서도 자신�
 
 ## 17. 정적 도구는 별도 영역입니다
 
-런타임 코어는 메타데이터, 컴파일러, 코드 생성, CLI, 에디터, Vite 패키지에 의존하지 않습니다. 의도한 설계입니다.
+런타임 코어는 메타데이터, 컴파일러, 코드 생성, CLI, 에디터, Vite, Webpack 패키지에 의존하지 않습니다. 의도한 설계입니다.
 
 - `@sqlbraid/metadata`는 데이터베이스에 대한 근거를 기록합니다.
 - `@sqlbraid/codegen`은 오프라인에서 동작하는 순수 변환입니다: 메타데이터 + TypePolicy → TypeScript 모델
 - `@sqlbraid/compiler`는 소스 탐색과 변환을 맡습니다.
+- `@sqlbraid/vite`와 `@sqlbraid/webpack`은 컴파일러를 호출합니다. TypeScript와 JSX 트랜스파일은 번들러가 맡습니다.
 - `@sqlbraid/tooling`은 컴파일러, 메타데이터, 코드 생성에서 나온 근거를 모아 CLI, LSP, 에디터에 제공합니다.
 
 메타데이터에 정보가 없다는 것은 아직 확인하지 못했다는 뜻일 뿐입니다. 사용자의 SQL이 잘못되었다는 증거가 아닙니다.

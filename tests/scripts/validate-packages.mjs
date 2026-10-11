@@ -59,6 +59,7 @@ const requiredPackageNames = new Set([
   "template",
   "tooling",
   "vite",
+  "webpack",
   "bun-sql",
 ]);
 const facadeRuntimeDependencies = [
@@ -355,10 +356,12 @@ try {
       "@sqlbraid/tooling",
       "@sqlbraid/compiler",
       "@sqlbraid/vite",
+      "@sqlbraid/webpack",
       "@sqlbraid/cli",
       "@sqlbraid/language-server",
       "@sqlbraid/vscode",
       "vite",
+      "webpack",
       "react",
       "@tanstack/react-start",
     ]) {
@@ -413,6 +416,7 @@ try {
       "tooling",
       "compiler",
       "vite",
+      "webpack",
       "cli",
       "language-server",
       "vscode",
@@ -666,6 +670,7 @@ try {
       "tooling",
       "compiler",
       "vite",
+      "webpack",
       "cli",
       "language-server",
       "operations",
@@ -847,7 +852,11 @@ try {
   const facadePackageDir = join(consumer, "node_modules/sqlbraid");
   for (const file of ["dist/index.js", "dist/sqlite-wasm.js", "dist/d1.js"]) {
     const text = await readFile(join(facadePackageDir, file), "utf8");
-    if (/(?:node:|@sqlbraid\/(?:cli|metadata|codegen|tooling|compiler|vite|language-server|operations))/u.test(text)) {
+    if (
+      /(?:node:|@sqlbraid\/(?:cli|metadata|codegen|tooling|compiler|vite|webpack|language-server|operations))/u.test(
+        text,
+      )
+    ) {
       throw new Error(`Browser/Worker-safe sqlbraid entrypoint imports Node/tooling code: ${file}`);
     }
   }

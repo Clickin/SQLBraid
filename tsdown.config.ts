@@ -49,6 +49,7 @@ export default defineConfig([
   packageBuild("packages/metadata", { index: "src/index.ts" }),
   packageBuild("packages/compiler", { index: "src/index.ts" }),
   packageBuild("packages/vite", { index: "src/index.ts" }),
+  { ...packageBuild("packages/webpack", { index: "src/index.cts" }), format: "cjs", fixedExtension: true },
   {
     ...packageBuild("packages/migrate", {
       index: "src/index.ts",

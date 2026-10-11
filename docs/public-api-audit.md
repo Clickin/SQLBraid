@@ -233,7 +233,7 @@ interfaces and runtime constructors. It does not select a dialect.
   `/mssql` support custom adapters.
 
 The facade has no dependency on the CLI, database drivers, metadata, codegen,
-tooling, compiler, editor or Vite.
+tooling, compiler, editor, Vite or Webpack.
 
 **Advanced:** `sqlbraid/compiled` exposes `capture` and
 `assertDirectiveCondition` from `@sqlbraid/template` for lowering that the
@@ -340,6 +340,9 @@ interchangeable:
   `transformSource` and checker contexts (`TypeScriptProjectContext`,
   `TypeScriptSourceContext`, `createProjectContext`, `createSourceContext`).
 - `@sqlbraid/vite`: a Vite pre-transform. Vite stays responsible for TS and JSX.
+- `@sqlbraid/webpack`: a CommonJS loader that calls `transformSource`. It validates
+  custom tag options and composes source maps. The bundler owns TS and JSX transpilation.
+  See the [loader compatibility checks](../packages/webpack/README.md#verification-and-compatibility).
 - `@sqlbraid/metadata`: snapshots, validation, hashing, drift and the model for inspectors.
 - `@sqlbraid/migrate`: optional `createMigrator`, manifest and report types,
   `MigrationError` and `MigrationStartupError`. Migrations are SQL files only.
@@ -355,7 +358,7 @@ interchangeable:
   The migrate commands load the optional `@sqlbraid/migrate` peer only when they run.
 - `@sqlbraid/language-server`: an embedded service and the standard stdio LSP transport.
 
-Runtime packages do not get metadata, compiler, codegen, tooling, editor or Vite
+Runtime packages do not get metadata, compiler, codegen, tooling, editor, Vite or Webpack
 dependencies. Metadata is open-world positive evidence. An absent object does
 not become an invalid-SQL diagnostic.
 
