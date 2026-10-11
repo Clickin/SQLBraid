@@ -19,6 +19,22 @@ import { createNeonPoolDatabase } from "@sqlbraid/postgres/neon";
 const db = createNeonPoolDatabase(new Pool({ connectionString: process.env.DATABASE_URL }));
 ```
 
+### postgres.js
+
+Use the `@sqlbraid/postgres/postgres-js` adapter with a [postgres.js](https://github.com/porsager/postgres) client. Spread `postgresJsOptions()` into the client options. The adapter checks them and rejects a client that does not use the lossless text parsers.
+
+```ts
+import postgres from "postgres";
+import { createPostgresJsDatabase, postgresJsOptions } from "@sqlbraid/postgres/postgres-js";
+
+const db = createPostgresJsDatabase(postgres(process.env.DATABASE_URL!, postgresJsOptions()));
+```
+
+- Each root operation and each transaction reserves one connection with `sql.reserve()`.
+- Array parameters are text literals such as `'{1,2}'`, because `fetch_types` is off.
+- `statement.cancel` and routine calls are unsupported. An active `AbortSignal` is rejected before I/O.
+- A discarded lease runs `ROLLBACK` and `DISCARD ALL` before it returns to the pool, because postgres.js does not expose the physical connection.
+
 ### Key Details
 
 - **Numerics**: Exact integers and numeric results are strings. Floating-point values are numbers.

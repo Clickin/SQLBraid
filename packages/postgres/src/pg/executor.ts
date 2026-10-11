@@ -27,6 +27,7 @@ import {
   resolvePgBinding,
 } from "../common/binding.js";
 import { cleanupAggregate, cleanupFailure, unsupported } from "../common/errors.js";
+import { arrayOids, exactNumericOids, jsonOids, temporalOids } from "../common/oids.js";
 import { resolveParserProfile } from "../common/parser-profile.js";
 import { assertUniqueFields, outputRow, projectPgRows, preparePgRowProjector, quotePortal } from "../common/results.js";
 import { postgresBeginSql, resolveStreamBatchSize } from "../common/transaction.js";
@@ -50,14 +51,6 @@ export interface PgDriverIdentity {
 }
 
 export const pgDriverIdentity: PgDriverIdentity = Object.freeze({ id: "pg" });
-
-const jsonOids = new Set([114, 3802]);
-const temporalOids = new Set([1082, 1083, 1114, 1184, 1186, 1266]);
-const exactNumericOids = new Set([20, 21, 23, 26, 790, 1700]);
-const arrayOids = new Set([
-  143, 199, 1000, 1001, 1002, 1003, 1005, 1007, 1009, 1014, 1015, 1016, 1021, 1022, 1028, 1115, 1182, 1183, 1185, 1187,
-  1231, 1270, 791, 2951, 3807,
-]);
 
 function textValue(value: unknown): unknown {
   if (typeof value === "string") return value;

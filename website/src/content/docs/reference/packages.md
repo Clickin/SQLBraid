@@ -9,7 +9,7 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/core`            | Public interfaces, Standard Schema-facing types, and rendered parameter metadata                                                                             |
 | `@sqlbraid/template`        | Tagged templates, directives, rendering, structural fragments, and `sql.bind`                                                                                |
 | `@sqlbraid/runtime`         | Execution, mapping, result-kind checks, transactions, streaming, and prepared shapes                                                                         |
-| `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg` and `/neon` adapters; `/inspector`                                                                                      |
+| `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg`, `/neon` and `/postgres-js` adapters; `/inspector`                                                                      |
 | `@sqlbraid/mysql`           | MySQL dialect/TypePolicy; `/mysql2` adapter; `/inspector`                                                                                                    |
 | `@sqlbraid/sqlite`          | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, and `/d1` adapters; `/inspector`                                                      |
 | `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` adapter; `/inspector`                                                                                                 |

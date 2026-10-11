@@ -285,7 +285,7 @@ const rows = await db.all(sql.rows`SELECT id FROM users`);
 
 | Package              | Application surface                            | SPI / advanced surface                                                                                      |
 | -------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@sqlbraid/postgres` | `sql`, `postgresParameter.refcursor()`         | dialect, TypePolicy, representation profiles, `/pg`, `/neon`, `/inspector`                                  |
+| `@sqlbraid/postgres` | `sql`, `postgresParameter.refcursor()`         | dialect, TypePolicy, representation profiles, `/pg`, `/neon`, `/postgres-js`, `/inspector`                  |
 | `@sqlbraid/mysql`    | `sql`                                          | dialect, TypePolicy, representation profiles, `/mysql2`, `/inspector`                                       |
 | `@sqlbraid/mariadb`  | `sql`                                          | dialect, TypePolicy, representation profiles, `/mariadb`, `/inspector`                                      |
 | `@sqlbraid/bun-sql`  | `createBunSqlDatabase`, `createBunSqlProvider` | Bun.SQL multi-dialect adapter; requires a user-selected `postgres`, `mysql`, `mariadb`, or `sqlite` dialect |
