@@ -9,36 +9,26 @@ import type {
   QueryExecutionResult,
   RenderedBulk,
   RenderedStatement,
-  TypePolicy,
-  StatementBindingAdapter,
-  StatementBindingContext,
   StatementBindingDescription,
-  TransactionIsolation,
-  TransactionOptions,
 } from "@sqlbraid/core";
-import {
-  assertSavepointName,
-  defineResultProperty,
-  identityResultValue,
-  preparePositionalResultProjector,
-} from "@sqlbraid/core/driver";
-import {
-  createBulkBindingDescription,
-  createRenderedStatement,
-  createStatementBindingDescription,
-  AdapterError,
-  ResultExactnessError,
-  safeDatabaseCount,
-  UnsupportedFeatureError,
-} from "@sqlbraid/core";
+import { assertSavepointName } from "@sqlbraid/core/driver";
+import { AdapterError, ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
+import { representationProfiles, typePolicyForProfile } from "./type-policy.js";
 import {
-  representationProfiles,
-  typePolicyForProfile,
-  type PgJsonProfile,
-  type PgRepresentationProfile,
-  type PgTemporalProfile,
-} from "./type-policy.js";
+  assertParameterHintsUnsupported,
+  assertPgBulkBinding,
+  assertPgRoutineDirections,
+  hasRefcursor,
+  isRefcursor,
+  isTransactionScoped,
+  pgStatementBinding,
+  resolvePgBinding,
+} from "./common/binding.js";
+import { cleanupAggregate, cleanupFailure, unsupported } from "./common/errors.js";
+import { resolveParserProfile } from "./common/parser-profile.js";
+import { assertUniqueFields, outputRow, projectPgRows, preparePgRowProjector, quotePortal } from "./common/results.js";
+import { postgresBeginSql, resolveStreamBatchSize } from "./common/transaction.js";
 import { pgEnvironmentFor, pgExecutionCapabilities } from "./pg/environment.js";
 import { pgOidTypes } from "./pg/types.js";
 import type {
@@ -47,14 +37,13 @@ import type {
   PgCursorLike,
   PgDatabaseOptions,
   PgExecutorOptions,
-  PgFieldLike,
   PgParserProfile,
   PgPoolLike,
   PgResultLike,
   PgTypeOverrides,
 } from "./pg/types.js";
 
-export { pgOidTypes };
+export { pgOidTypes, pgStatementBinding };
 export type {
   PgClientLike,
   PgCursorFactory,
@@ -68,53 +57,6 @@ export type {
   PgResultLike,
   PgTypeOverrides,
 } from "./pg/types.js";
-
-function unsupported(
-  feature: string,
-  code: `BRAID_${string}`,
-  message: string,
-  cause?: unknown,
-): UnsupportedFeatureError {
-  return new UnsupportedFeatureError(feature, code, message, cause === undefined ? undefined : { cause });
-}
-
-function invalidTransactionOptions(message: string): TypeError & { readonly code: string } {
-  const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: ${message}`) as TypeError & { readonly code: string };
-  Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
-  return error;
-}
-
-const defaultParserProfile: Required<Pick<PgParserProfile, "json" | "temporal">> = Object.freeze({
-  json: "text",
-  temporal: "text",
-});
-
-function resolveParserProfile(
-  options: PgParserProfile | undefined,
-  descriptor?: PgRepresentationProfile,
-): { readonly json: PgJsonProfile; readonly temporal: PgTemporalProfile } {
-  const requestedJson = options?.json;
-  const requestedTemporal = options?.temporal;
-  if (descriptor && requestedJson !== undefined && requestedJson !== descriptor.json) {
-    throw new ResultExactnessError(
-      "PostgreSQL parserProfile JSON setting contradicts the selected representation profile.",
-    );
-  }
-  if (descriptor && requestedTemporal !== undefined && requestedTemporal !== descriptor.temporal) {
-    throw new ResultExactnessError(
-      "PostgreSQL parserProfile temporal setting contradicts the selected representation profile.",
-    );
-  }
-  const profile = {
-    json: descriptor?.json ?? requestedJson ?? defaultParserProfile.json,
-    temporal: descriptor?.temporal ?? requestedTemporal ?? defaultParserProfile.temporal,
-  };
-  if (profile.json !== "text" && profile.json !== "native")
-    throw new RangeError(`Unsupported PostgreSQL JSON parser profile: ${String(profile.json)}`);
-  if (profile.temporal !== "text" && profile.temporal !== "native")
-    throw new RangeError(`Unsupported PostgreSQL temporal parser profile: ${String(profile.temporal)}`);
-  return profile;
-}
 
 const jsonOids = new Set([114, 3802]);
 const temporalOids = new Set([1082, 1083, 1114, 1184, 1186, 1266]);
@@ -205,24 +147,6 @@ function readCursor(cursor: PgCursorLike, rowCount: number, signal?: AbortSignal
   });
 }
 
-function cleanupFailure(message: string, cause?: unknown): Error & { readonly code: string } {
-  const error = new Error(message, cause === undefined ? undefined : { cause }) as Error & { readonly code: string };
-  Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
-  return error;
-}
-
-function cleanupAggregate(
-  errors: readonly unknown[],
-  message: string,
-  cause?: unknown,
-): AggregateError & { readonly code: string } {
-  const error = new AggregateError(errors, message, cause === undefined ? undefined : { cause }) as AggregateError & {
-    readonly code: string;
-  };
-  Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
-  return error;
-}
-
 async function withPgCancellation<T>(
   client: PgClientLike,
   signal: AbortSignal | undefined,
@@ -291,161 +215,6 @@ function queryArrayRows(client: PgClientLike, config: PgArrayQueryConfig): Promi
   return (client.query as unknown as (config: PgArrayQueryConfig) => Promise<PgResultLike>)(config);
 }
 
-function pgDatabaseType(field: PgFieldLike | undefined): string | undefined {
-  return field?.dataType ?? (field?.dataTypeID === undefined ? undefined : pgOidTypes[field.dataTypeID]);
-}
-
-function preparePgRowProjector(
-  fields: readonly PgFieldLike[],
-  policy: TypePolicy,
-  rowCountHint?: number,
-): (value: unknown) => Record<string, unknown> {
-  const columns = fields.map((field, index) => {
-    const databaseType = pgDatabaseType(field);
-    return {
-      name: field.name,
-      index,
-      decode: databaseType ? (entry: unknown) => policy.decode(databaseType, entry) : identityResultValue,
-    };
-  });
-  const arrayProjector = preparePositionalResultProjector(columns, rowCountHint);
-  let objectDecoders: Map<string, (entry: unknown) => unknown> | undefined;
-  return (value): Record<string, unknown> => {
-    if (Array.isArray(value)) return columns.length === 0 ? { value } : arrayProjector(value);
-    if (!value || typeof value !== "object") return { value };
-    objectDecoders ??= new Map(columns.map((column) => [column.name, column.decode] as const));
-    const row: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(value)) {
-      defineResultProperty(row, key, (objectDecoders.get(key) ?? identityResultValue)(entry));
-    }
-    return row;
-  };
-}
-
-function projectPgRows(
-  rows: readonly unknown[],
-  fields: readonly PgFieldLike[],
-  policy: TypePolicy,
-): readonly Record<string, unknown>[] {
-  if (rows.length === 0) return [];
-  const project = preparePgRowProjector(fields, policy, rows.length);
-  return rows.map(project);
-}
-
-function assertUniqueFields(fields: readonly PgFieldLike[]): void {
-  const names = new Set<string>();
-  for (const field of fields) {
-    if (names.has(field.name))
-      throw new Error(`BRAID_RESULT_COLUMNS: duplicate PostgreSQL result label ${field.name}.`);
-    names.add(field.name);
-  }
-}
-
-function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
-  if (
-    rendered.parameters.some(
-      (parameter) => parameter.hint !== undefined && !(rendered.resultKind === "call" && isRefcursor(parameter)),
-    )
-  ) {
-    throw new UnsupportedFeatureError(
-      "statement.bind-hint",
-      "BRAID_BIND_HINT_UNSUPPORTED",
-      "PostgreSQL adapter does not support explicit bind type hints.",
-    );
-  }
-}
-
-function assertPgRoutineDirections(rendered: RenderedStatement): void {
-  if (rendered.parameters.some((parameter) => parameter.direction === "inout")) {
-    throw unsupported(
-      "routine.inout",
-      "BRAID_CALL_OUT_UNSUPPORTED",
-      "The PostgreSQL adapter does not expose a verified INOUT carrier contract.",
-    );
-  }
-}
-
-function assertPgRoutineCallContext(rendered: RenderedStatement): void {
-  if (
-    rendered.resultKind !== "call" &&
-    rendered.parameters.some((parameter) => parameter.direction !== undefined && parameter.direction !== "in")
-  ) {
-    throw unsupported(
-      "routine.out",
-      "BRAID_CALL_OUT_UNSUPPORTED",
-      "PostgreSQL OUT parameters are only valid for routine calls.",
-    );
-  }
-}
-
-const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
-const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
-const bindingContexts = new WeakMap<StatementBindingDescription, StatementBindingContext>();
-
-function isRefcursor(parameter: RenderedStatement["parameters"][number]): boolean {
-  return (
-    parameter.direction !== undefined &&
-    parameter.direction !== "in" &&
-    parameter.hint?.databaseType.trim().toLowerCase() === "refcursor"
-  );
-}
-
-function hasRefcursor(rendered: RenderedStatement): boolean {
-  return rendered.parameters.some(isRefcursor);
-}
-
-export const pgStatementBinding: StatementBindingAdapter = Object.freeze({
-  id: "pg",
-  describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
-    statement = createRenderedStatement(statement);
-    if (hasRefcursor(statement) && context.transactionScoped !== true) {
-      throw unsupported(
-        "routine.out-cursor",
-        "BRAID_CALL_CURSOR_TX_REQUIRED",
-        "PostgreSQL refcursor calls require an existing transaction.",
-      );
-    }
-    assertPgRoutineCallContext(statement);
-    assertPgRoutineDirections(statement);
-    assertParameterHintsUnsupported(statement);
-    const description = createStatementBindingDescription(statement, context, {
-      adapterId: "pg",
-      transport: "text-positional",
-      placeholder: (index) => `$${index}`,
-      reuse: { effective: "simple", owner: "driver" },
-    });
-    describedStatements.set(description, statement);
-    bindingContexts.set(description, context);
-    return description;
-  },
-  describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
-    const statement = createRenderedStatement(bulk.statement);
-    if (statement.resultKind !== "command")
-      throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk requires command queries.");
-    if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
-      throw unsupported("routine.out", "BRAID_BULK_SHAPE", "PostgreSQL bulk does not support OUT or INOUT parameters.");
-    }
-    assertParameterHintsUnsupported(statement);
-    for (const values of bulk.parameterSets) {
-      if (values.length !== statement.parameters.length)
-        throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk parameter cardinality changed.");
-    }
-    const description = createBulkBindingDescription(bulk, context, {
-      adapterId: "pg",
-      transport: "text-positional",
-      placeholder: (index) => `$${index}`,
-      reuse: { effective: "reuse", owner: "driver" },
-    });
-    describedBulks.set(description, bulk);
-    return description;
-  },
-});
-
-const defaultBindingContext: StatementBindingContext = Object.freeze({
-  dialectId: "postgres",
-  requestedReuse: "auto",
-});
-
 function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
@@ -456,62 +225,7 @@ function materialize(
   readonly rowMode: "array";
   readonly types?: PgTypeOverrides;
 } {
-  statement = createRenderedStatement(statement);
-  const description =
-    binding ??
-    pgStatementBinding.describe(statement, {
-      dialectId: statement.dialectId,
-      requestedReuse: defaultBindingContext.requestedReuse,
-    });
-  if (describedStatements.get(description) !== statement)
-    throw new TypeError("BRAID_BINDING_IDENTITY: PostgreSQL description belongs to another statement or adapter.");
-  if (description.parameterizedSql === undefined) {
-    throw new Error("BRAID_BIND_TRANSPORT: PostgreSQL binding description did not provide parameterized SQL.");
-  }
-  return {
-    text: description.parameterizedSql,
-    values: statement.parameters.map((parameter) => parameter.value),
-    rowMode: "array",
-    ...(types === undefined ? {} : { types }),
-  };
-}
-
-function outputRow(
-  result: PgResultLike,
-  rendered: RenderedStatement,
-  policy: TypePolicy,
-): Readonly<Record<string, unknown>> {
-  const outputParameters = rendered.parameters.filter(
-    (parameter) => parameter.direction !== undefined && parameter.direction !== "in",
-  );
-  if (outputParameters.length === 0 || result.rows.length === 0) return {};
-  const row = result.rows[0];
-  if (!row || typeof row !== "object") return {};
-  const arrayRow = Array.isArray(row);
-  const fields = result.fields ?? [];
-  let values: unknown[] | undefined;
-  const output: Record<string, unknown> = {};
-  let positional = 0;
-  for (const parameter of outputParameters) {
-    const name = parameter.outputName;
-    if (!name) continue;
-    const field = fields[positional];
-    const source = arrayRow
-      ? (row as readonly unknown[])[positional]
-      : field === undefined
-        ? (values ??= Object.values(row))[positional]
-        : Object.hasOwn(row, field.name)
-          ? (row as Record<string, unknown>)[field.name]
-          : undefined;
-    positional += 1;
-    const databaseType = pgDatabaseType(field);
-    defineResultProperty(output, name, databaseType ? policy.decode(databaseType, source) : source);
-  }
-  return output;
-}
-
-function quotePortal(name: string): string {
-  return `"${name.replaceAll('"', '""')}"`;
+  return { ...resolvePgBinding(statement, binding), rowMode: "array", ...(types === undefined ? {} : { types }) };
 }
 
 type PgPreparedStatementMap = Record<string, string>;
@@ -646,46 +360,6 @@ function enqueuePgBulk<T>(cache: PgBulkCache, operation: () => Promise<T>): Prom
   return run;
 }
 
-function postgresIsolationLevel(isolation: TransactionIsolation): string {
-  switch (isolation) {
-    case "read-uncommitted":
-      return "READ UNCOMMITTED";
-    case "read-committed":
-      return "READ COMMITTED";
-    case "repeatable-read":
-      return "REPEATABLE READ";
-    case "serializable":
-      return "SERIALIZABLE";
-    default:
-      throw invalidTransactionOptions(`Unsupported PostgreSQL transaction isolation level: ${String(isolation)}.`);
-  }
-}
-
-function postgresBeginSql(options: TransactionOptions | undefined): string {
-  if (options === undefined) return "BEGIN";
-  if (options === null || typeof options !== "object" || Array.isArray(options)) {
-    throw invalidTransactionOptions("PostgreSQL transaction options must be an object.");
-  }
-  const unexpected = Object.keys(options).find((key) => key !== "isolation" && key !== "readOnly");
-  if (unexpected !== undefined)
-    throw invalidTransactionOptions(`Unknown PostgreSQL transaction option: ${unexpected}.`);
-  if (options.readOnly !== undefined && typeof options.readOnly !== "boolean") {
-    throw invalidTransactionOptions("PostgreSQL transaction readOnly must be a boolean.");
-  }
-  const clauses: string[] = [];
-  if (options.isolation !== undefined) clauses.push(`ISOLATION LEVEL ${postgresIsolationLevel(options.isolation)}`);
-  if (options.readOnly === true) clauses.push("READ ONLY");
-  else if (options.readOnly === false) clauses.push("READ WRITE");
-  return clauses.length === 0 ? "BEGIN" : `BEGIN ${clauses.join(" ")}`;
-}
-
-function resolveStreamBatchSize(value: number | undefined): number {
-  const size = value ?? 100;
-  if (!Number.isSafeInteger(size) || size < 1)
-    throw new RangeError("PostgreSQL streamBatchSize must be a positive safe integer.");
-  return size;
-}
-
 /** Wrap one connected `pg` client. SQLBraid owns query serialization but not client shutdown. */
 export function createPgExecutor(client: PgClientLike, options: PgExecutorOptions = {}): QueryExecutor {
   assertPgClient(client);
@@ -749,14 +423,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
           "PostgreSQL cancellation requires the physical client's documented end() method.",
         );
       }
-      const described = describedBulks.get(binding);
-      if (described !== bulk)
-        throw new TypeError("BRAID_BINDING_IDENTITY: PostgreSQL bulk description belongs to another bulk or adapter.");
-      if (binding.adapterId !== pgStatementBinding.id || binding.dialectId !== bulk.statement.dialectId) {
-        throw new TypeError("BRAID_BINDING_IDENTITY: PostgreSQL bulk description belongs to another adapter.");
-      }
-      if (binding.parameterizedSql === undefined)
-        throw new Error("BRAID_BIND_TRANSPORT: PostgreSQL bulk binding did not provide parameterized SQL.");
+      assertPgBulkBinding(bulk, binding);
       const cache = pgBulkCacheFor(client);
       return enqueuePgBulk(cache, async () => {
         let name: string | undefined;
@@ -896,8 +563,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       executionOptions?.signal?.throwIfAborted();
       assertPgRoutineDirections(rendered);
       assertParameterHintsUnsupported(rendered);
-      const transactionScoped =
-        binding === undefined ? false : bindingContexts.get(binding)?.transactionScoped === true;
+      const transactionScoped = isTransactionScoped(binding);
       if (hasRefcursor(rendered) && !transactionScoped) {
         throw unsupported(
           "routine.out-cursor",
