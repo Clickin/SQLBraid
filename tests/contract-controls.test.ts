@@ -3,6 +3,14 @@ import { test } from "vitest";
 import type { Database } from "@sqlbraid/core";
 import { sql as postgres } from "@sqlbraid/postgres";
 import { createPgDatabase, createPgPoolDatabase, type PgClientLike } from "@sqlbraid/postgres/pg";
+import { createNeonDatabase, createNeonPoolDatabase } from "@sqlbraid/postgres/neon";
+import { createPgliteDatabase, type PgliteLike } from "@sqlbraid/postgres/pglite";
+import {
+  createPostgresJsDatabase,
+  postgresJsOptions,
+  type PostgresJsLike,
+  type PostgresJsReservedLike,
+} from "@sqlbraid/postgres/postgres-js";
 import { sql as mysql } from "@sqlbraid/mysql";
 import { createMysql2Database, createMysql2PoolDatabase, type Mysql2ConnectionLike } from "@sqlbraid/mysql/mysql2";
 import { sql as maria } from "@sqlbraid/mariadb";
@@ -103,7 +111,7 @@ function fixture(
   return { ...state, db, pooled, write };
 }
 
-function pgFixture(pooled: boolean, state = nativeState()): TransactionFaultHarness {
+function pgFixture(pooled: boolean, state = nativeState(), kind: "pg" | "neon" = "pg"): TransactionFaultHarness {
   const client: PgClientLike & { release(discard?: boolean): void } = {
     async query(input) {
       const text = typeof input === "string" ? input : input.text;
@@ -117,9 +125,69 @@ function pgFixture(pooled: boolean, state = nativeState()): TransactionFaultHarn
   };
   return fixture(
     state,
-    pooled ? createPgPoolDatabase({ connect: async () => client }) : createPgDatabase(client),
+    kind === "pg"
+      ? pooled
+        ? createPgPoolDatabase({ connect: async () => client })
+        : createPgDatabase(client)
+      : pooled
+        ? createNeonPoolDatabase({ connect: async () => client })
+        : createNeonDatabase(client),
     pooled,
     (db) => db.execute(postgres.command`UPDATE contract_rows SET value = 1`),
+  );
+}
+
+/** postgres.js is pooled only. A discarded lease resets the session and then releases the reservation. */
+function postgresJsFixture(state = nativeState()): TransactionFaultHarness {
+  const options = postgresJsOptions();
+  const parsers: Record<number, (value: string) => unknown> = {};
+  for (const type of Object.values(options.types)) for (const oid of type.from) parsers[oid] = type.parse;
+  let discarding = false;
+  // The session reset after an injected control failure must not fail or count again.
+  let controlFailed = false;
+  const run = async (text: string) => {
+    if (text === "DISCARD ALL") {
+      discarding = true;
+      return Object.assign([], { columns: [], count: null, command: "DISCARD" });
+    }
+    if (controlFailed && text === "ROLLBACK")
+      return Object.assign([], { columns: [], count: null, command: "ROLLBACK" });
+    try {
+      return Object.assign([], { columns: [], count: 1, command: state.sql(text) });
+    } catch (error) {
+      if (error === state.failure) controlFailed = true;
+      throw error;
+    }
+  };
+  const query = (text: string) => ({
+    then: (onFulfilled: never, onRejected: never) => run(text).then(onFulfilled, onRejected),
+    values: () => ({ then: (onFulfilled: never, onRejected: never) => run(text).then(onFulfilled, onRejected) }),
+  });
+  const reserved = {
+    unsafe: query,
+    release() {
+      state.releases.push(discarding);
+      discarding = false;
+    },
+  } as unknown as PostgresJsReservedLike;
+  const client = {
+    options: { fetch_types: false, parsers },
+    reserve: async () => reserved,
+    unsafe: async () => [],
+  } as unknown as PostgresJsLike;
+  return fixture(state, createPostgresJsDatabase(client), true, (db) =>
+    db.execute(postgres.command`UPDATE contract_rows SET value = 1`),
+  );
+}
+
+function pgliteFixture(state = nativeState()): TransactionFaultHarness {
+  const pg = {
+    async query(text: string) {
+      return { rows: [], fields: [], affectedRows: 1, command: state.sql(text) };
+    },
+  } as unknown as PgliteLike;
+  return fixture(state, createPgliteDatabase(pg), false, (db) =>
+    db.execute(postgres.command`UPDATE contract_rows SET value = 1`),
   );
 }
 
@@ -396,30 +464,41 @@ function bunFixture(dialect: BunSqlDialect, state = nativeState()): TransactionF
 for (const pooled of [false, true]) {
   const ownership = pooled ? "pooled" : "direct";
   transactionFaultContracts("pg", ownership, () => pgFixture(pooled));
+  transactionFaultContracts("neon-serverless", ownership, () => pgFixture(pooled, nativeState(), "neon"));
   transactionFaultContracts("mysql2", ownership, () => mysqlFixture(pooled));
   transactionFaultContracts("mariadb", ownership, () => mariaFixture(pooled));
   transactionFaultContracts("node-oracledb", ownership, () => oracleFixture(pooled), false);
   transactionFaultContracts("tedious", ownership, () => tediousFixture(pooled), false);
 }
 
-for (const transport of ["pg", "mysql2", "mariadb"] as const) {
+transactionFaultContracts("postgres-js", "pooled", () => postgresJsFixture());
+transactionFaultContracts("pglite", "direct", () => pgliteFixture());
+
+for (const transport of ["pg", "neon-serverless", "postgres-js", "pglite", "mysql2", "mariadb"] as const) {
   for (const pooled of [false, true]) {
+    if ((transport === "postgres-js" && !pooled) || (transport === "pglite" && pooled)) continue;
     test(`[contract:${transport}:transaction.access-mode:boundary] [ownership:${pooled ? "pooled" : "direct"}] native transaction access mode distinguishes omitted true and false`, async () => {
       for (const readOnly of [undefined, true, false]) {
         const state = nativeState();
         const harness =
           transport === "pg"
             ? pgFixture(pooled, state)
-            : transport === "mysql2"
-              ? mysqlFixture(pooled, state)
-              : mariaFixture(pooled, state);
+            : transport === "neon-serverless"
+              ? pgFixture(pooled, state, "neon")
+              : transport === "postgres-js"
+                ? postgresJsFixture(state)
+                : transport === "pglite"
+                  ? pgliteFixture(state)
+                  : transport === "mysql2"
+                    ? mysqlFixture(pooled, state)
+                    : mariaFixture(pooled, state);
         const options = readOnly === undefined ? {} : { readOnly };
         // oxlint-disable-next-line no-await-in-loop -- Finish and inspect each access-mode transaction before starting the next case.
         assert.equal(await harness.db.tx(options, async () => "committed"), "committed");
         const mode = readOnly === true ? "READ ONLY" : readOnly === false ? "READ WRITE" : undefined;
         assert.deepEqual(
           state.statements,
-          transport === "pg"
+          transport === "pg" || transport === "neon-serverless" || transport === "postgres-js" || transport === "pglite"
             ? [mode === undefined ? "BEGIN" : `BEGIN ${mode}`, "COMMIT"]
             : mode === undefined
               ? []
@@ -445,11 +524,24 @@ for (const dialect of ["postgres", "mysql", "mariadb", "sqlite"] as const) {
 for (const [transport, pooled] of [
   ["pg", false],
   ["pg", true],
+  ["neon-serverless", false],
+  ["neon-serverless", true],
+  ["postgres-js", true],
+  ["pglite", false],
   ["bun-sql-postgres", true],
 ] as const) {
   test(`[contract:${transport}:transaction.commit-terminal-outcome:boundary] [ownership:${pooled ? "pooled" : "direct"}] caught statement error cannot turn native ROLLBACK into commit success`, async () => {
     const state = nativeState();
-    const harness = transport === "pg" ? pgFixture(pooled, state) : bunFixture("postgres", state);
+    const harness =
+      transport === "pg"
+        ? pgFixture(pooled, state)
+        : transport === "neon-serverless"
+          ? pgFixture(pooled, state, "neon")
+          : transport === "postgres-js"
+            ? postgresJsFixture(state)
+            : transport === "pglite"
+              ? pgliteFixture(state)
+              : bunFixture("postgres", state);
     await assert.rejects(
       () =>
         harness.db.tx(async (tx) => {

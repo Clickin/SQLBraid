@@ -6,6 +6,15 @@ import {
   type PgPoolClientLike,
   type PgCursorFactory,
 } from "@sqlbraid/postgres/pg";
+import { createNeonDatabase, createNeonPoolDatabase } from "@sqlbraid/postgres/neon";
+import { createNeonHttpDatabase, type NeonHttpLike } from "@sqlbraid/postgres/neon-http";
+import { createPgliteDatabase, type PgliteLike } from "@sqlbraid/postgres/pglite";
+import {
+  createPostgresJsDatabase,
+  postgresJsOptions,
+  type PostgresJsLike,
+  type PostgresJsReservedLike,
+} from "@sqlbraid/postgres/postgres-js";
 import { createMysql2Database, createMysql2PoolDatabase, type Mysql2PoolConnectionLike } from "@sqlbraid/mysql/mysql2";
 import { createMariaDbDatabase, createMariaDbPoolDatabase } from "@sqlbraid/mariadb/mariadb";
 import { createOracledbDatabase, createOracledbPoolDatabase } from "@sqlbraid/oracle/oracledb";
@@ -30,6 +39,8 @@ import { sql as sqlite } from "@sqlbraid/sqlite";
 
 export const poolTransports = [
   "pg",
+  "neon-serverless",
+  "postgres-js",
   "mysql2",
   "mariadb",
   "node-oracledb",
@@ -45,11 +56,15 @@ export const directTransports = [
   "sqlite-wasm",
   "cloudflare-d1",
   "bun-sql-sqlite",
+  "pglite",
+  "neon-http",
 ] as const;
 export const transports = [...poolTransports, ...directTransports] as const;
 export type ResourceTransport = (typeof transports)[number];
 export const streamTransports = [
   "pg",
+  "neon-serverless",
+  "postgres-js",
   "mysql2",
   "mariadb",
   "node-oracledb",
@@ -67,10 +82,14 @@ export const exactIdTransports = [
   "bun-sql-sqlite",
 ] as const;
 
+function postgresJsResult(command: string, count: number | null = null, batch: readonly unknown[] = []) {
+  return Object.assign([...batch], { columns: batch.length > 0 ? [{ name: "value", type: 25 }] : [], count, command });
+}
+
 export function resourceOwnerships(id: ResourceTransport): readonly ("direct" | "pooled")[] {
   return directTransports.some((transport) => transport === id)
     ? ["direct"]
-    : id.startsWith("bun-sql-")
+    : id.startsWith("bun-sql-") || id === "postgres-js"
       ? ["pooled"]
       : ["direct", "pooled"];
 }
@@ -121,7 +140,12 @@ export function resourceFixture(id: ResourceTransport, ownership: "direct" | "po
   const rows = [{ value: "one" }, { value: "two" }];
   let arrayRows = false;
   const sql =
-    id === "pg" || id === "bun-sql-postgres"
+    id === "pg" ||
+    id === "neon-serverless" ||
+    id === "postgres-js" ||
+    id === "pglite" ||
+    id === "neon-http" ||
+    id === "bun-sql-postgres"
       ? postgres
       : id === "mysql2" || id === "bun-sql-mysql"
         ? mysql
@@ -180,7 +204,7 @@ export function resourceFixture(id: ResourceTransport, ownership: "direct" | "po
       };
     }
   }
-  if (id === "pg") {
+  if (id === "pg" || id === "neon-serverless") {
     let activeCursor: Cursor | undefined;
     class Cursor {
       private index = 0;
@@ -231,10 +255,12 @@ export function resourceFixture(id: ResourceTransport, ownership: "direct" | "po
       },
     } as unknown as PgPoolClientLike;
     const options = { cursor: Cursor as unknown as PgCursorFactory, streamBatchSize: 1 };
+    const [createDirect, createPooled] =
+      id === "pg" ? [createPgDatabase, createPgPoolDatabase] : [createNeonDatabase, createNeonPoolDatabase];
     db =
       ownership === "direct"
-        ? createPgDatabase(client, options)
-        : createPgPoolDatabase(
+        ? createDirect(client, options)
+        : createPooled(
             {
               async connect() {
                 state.acquired++;
@@ -243,6 +269,112 @@ export function resourceFixture(id: ResourceTransport, ownership: "direct" | "po
             },
             options,
           );
+  } else if (id === "postgres-js") {
+    // postgres.js resets a discarded session and then releases the reservation; it never destroys the connection.
+    const options = postgresJsOptions();
+    const parsers: Record<number, (value: string) => unknown> = {};
+    for (const type of Object.values(options.types)) for (const oid of type.from) parsers[oid] = type.parse;
+    let terminalFailed = false;
+    let discarding = false;
+    const run = async (text: string) => {
+      if (text === "DISCARD ALL") {
+        discarding = true;
+        return postgresJsResult("DISCARD");
+      }
+      if (text === "COMMIT" || text === "ROLLBACK") {
+        // The session reset after a failed terminal control must not fail again.
+        if (!terminalFailed) {
+          try {
+            await control();
+          } catch (error) {
+            terminalFailed = true;
+            throw error;
+          }
+        }
+        return postgresJsResult(text);
+      }
+      await execute();
+      return postgresJsResult(text.split(" ")[0] ?? "", Number(state.count));
+    };
+    const thenable = (text: string): PromiseLike<ReturnType<typeof postgresJsResult>> => ({
+      then: (onFulfilled, onRejected) => run(text).then(onFulfilled, onRejected),
+    });
+    const reserved = {
+      unsafe: (text: string) => ({
+        ...thenable(text),
+        values: () => ({
+          ...thenable(text),
+          cursor() {
+            open();
+            return {
+              [Symbol.asyncIterator]() {
+                let index = 0;
+                let finished = false;
+                const finish = () => {
+                  if (finished) return;
+                  finished = true;
+                  close();
+                };
+                return {
+                  async next() {
+                    await state.onRead?.();
+                    if (state.readFailure) {
+                      // postgres.js closes its own cursor when a read fails.
+                      finish();
+                      throw state.readFailure;
+                    }
+                    if (index < rows.length)
+                      return { done: false as const, value: postgresJsResult("SELECT", 1, [[rows[index++]!.value]]) };
+                    finish();
+                    return { done: true as const, value: undefined };
+                  },
+                  async return() {
+                    finish();
+                    return { done: true as const, value: undefined };
+                  },
+                };
+              },
+            };
+          },
+        }),
+      }),
+      release() {
+        if (discarding) state.discarded++;
+        else state.released++;
+        discarding = false;
+      },
+    } as unknown as PostgresJsReservedLike;
+    const client = {
+      options: { fetch_types: false, parsers },
+      async reserve() {
+        state.acquired++;
+        return reserved;
+      },
+      async unsafe() {
+        return [];
+      },
+    } as unknown as PostgresJsLike;
+    db = createPostgresJsDatabase(client, { streamBatchSize: 1 });
+  } else if (id === "pglite") {
+    const pg = {
+      async query(text: string) {
+        if (text === "COMMIT" || text === "ROLLBACK") await control();
+        else await execute();
+        return { rows: [], fields: [], affectedRows: state.count, command: text.split(" ")[0] };
+      },
+    } as unknown as PgliteLike;
+    db = createPgliteDatabase(pg);
+  } else if (id === "neon-http") {
+    const neon = {
+      async query() {
+        await execute();
+        return { rows: [], fields: [], rowCount: state.count, command: "UPDATE" };
+      },
+      async transaction() {
+        return [];
+      },
+    } as unknown as NeonHttpLike;
+    db = createNeonHttpDatabase(neon);
   } else if (id === "mysql2") {
     let activeStream: NativeStream | undefined;
     const raw = {

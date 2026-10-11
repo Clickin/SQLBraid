@@ -26,7 +26,11 @@
       }
     },
     {
-      "files": ["tests/driver-foundation.test.ts"],
+      "files": [
+        "tests/driver-foundation.test.ts",
+        "tests/contract-controls.test.ts",
+        "tests/contracts/resources.faults.ts"
+      ],
       "rules": {
         "unicorn/no-thenable": "off"
       }

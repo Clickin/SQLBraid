@@ -65,3 +65,31 @@ export async function commandMetadataContract(
     { id: "9223372036854775807", name: "before" },
   ]);
 }
+
+export function affectedRowsTitle(transport: string): string {
+  return `[contract:${transport}:metadata.affected-rows:integration]`;
+}
+
+/** The caller creates braid_contract_affected (id, name) and reads the committed ids through its own connection. */
+export async function affectedRowsContract(
+  db: Database,
+  sql: SqlTag,
+  committedIds: () => Promise<readonly string[]>,
+): Promise<void> {
+  const insert = await db.execute(
+    sql.command`INSERT INTO braid_contract_affected (id, name) VALUES (${"a"}, ${"x"}), (${"b"}, ${"x"}), (${"c"}, ${"y"})`,
+  );
+  assert.equal(insert.command.affectedRows, 3);
+  const updated = await db.execute(sql.command`UPDATE braid_contract_affected SET name = ${"z"} WHERE name = ${"x"}`);
+  assert.equal(updated.command.affectedRows, 2);
+  const none = await db.execute(sql.command`DELETE FROM braid_contract_affected WHERE name = ${"missing"}`);
+  assert.equal(none.command.affectedRows, 0);
+  const deleted = await db.execute(sql.command`DELETE FROM braid_contract_affected WHERE name = ${"y"}`);
+  assert.equal(deleted.command.affectedRows, 1);
+  assert.deepEqual(await committedIds(), ["a", "b"]);
+  const bulk = await db.bulk(
+    ["a", "b"],
+    (id) => sql.command`UPDATE braid_contract_affected SET name = ${"bulk"} WHERE id = ${id}`,
+  );
+  assert.equal(bulk.affectedRows, 2);
+}

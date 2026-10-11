@@ -1,6 +1,6 @@
 # Driver expansion design: postgres.js, Neon, PGlite, PlanetScale HTTP
 
-Status: steps 0 to 4a are built. Step 4b is rejected (see section 7). This page is not a support claim and not a release claim. No `support/targets/` record exists yet for the new adapters, so they have no support label. Support labels come only from `support/targets/` after exact-revision CI evidence.
+Status: steps 0 to 4a are built. Step 4b is rejected (see section 7). This page is not a support claim and not a release claim. Four `support/targets/` records exist for the new adapters (`neon`, `postgres-js`, `pglite`, `neon-http`). Each has status `compatible` and evidence `pending`, because no CI run of the exact revision backs them. Support labels come only from `support/targets/` after exact-revision CI evidence.
 
 Rules that apply: `AGENTS.md` sections 8, 10, 11 and 14, and `docs/driver-author-guide.md`.
 
@@ -192,9 +192,19 @@ postgres.js findings that changed the design:
 
 Step 4b is rejected because `@planetscale/database` 2.0.0 does not bind parameters. Its README states that `execute` does not interpolate query parameters, and that a caller must escape values into the SQL text. An adapter would have to build literals on the client. AGENTS section 6 requires bound parameters, and the red team report lists client-side interpolation in the MariaDB stream path as a Medium finding. Revisit the step only if the driver offers server-side binding.
 
+Done after the spikes (2026-10-12):
+
+- `support/targets/` records for the four adapters, with status `compatible` and evidence `pending`. Each profile (`neon-lossless-text`, `postgres-js-lossless-text`, `pglite-lossless-text`, `neon-http-lossless-text`) shares the committed `postgres-lossless-text` TypePolicy. `scripts/validate-support.mjs` now checks the exported-descriptor rule for the profile that the package exports under the same ID, so that several driver profiles can share one policy.
+- `support/test-registry.json` entries and the conditions `neon.pooler-transaction-mode`, `neon-http.stateless-requests` and `neon-http.non-interactive-transaction`.
+- The four transports are in the transaction and resource matrix (`tests/contracts/matrix.json`), with boundary tests for the fake native layer and integration tests on a real PostgreSQL 16.4 container. PGlite uses a fresh instance for each fixture, because a poisoned instance stays poisoned. Neon HTTP has only `cancellation.pre-io` and `metadata.affected-rows` evidence, because it has no transaction, stream or cancel.
+- The matrix work found one defect in the postgres.js provider: `acquire()` did not release the reservation when lease setup failed. It does now, and `tests/pool-init-failure.test.ts` covers it.
+- postgres.js keeps the physical connection after a discarded lease (it runs `ROLLBACK` and `DISCARD ALL`). The shared integration scenario `transaction.caught-error-terminal-outcome` has a harness flag `discardClosesPhysical` for this case.
+- The environment of each adapter reports the profile ID `pg-lossless-text`, not the profile ID in its target record. No check compares the two yet.
+
 Not done yet:
 
-- `support/targets/` records, `support/test-registry.json` entries and `support/runtime-compatibility.json` cells for the four adapters.
+- `support/runtime-compatibility.json` cells with plain-JavaScript smoke tests on the packed tarballs. Neon needs Node 19 or later (`@neondatabase/serverless` declares `node >=19.0.0`).
 - `docs-claims` tests for the documented behavior.
 - Evidence for the Neon pooled endpoint with PgBouncer.
-- `pnpm run test:consumer` and the Bun and Deno runtime cells.
+- The Bun and Deno runtime cells for Neon and PGlite.
+- CI evidence of the exact revision for all four records.

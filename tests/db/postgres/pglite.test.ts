@@ -3,6 +3,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, test } from "vitest";
 import { sql } from "@sqlbraid/postgres";
 import { createPgliteDatabase } from "@sqlbraid/postgres/pglite";
+import { transactionIntegrationTests } from "../../contracts/transaction.integration.js";
+import { affectedRowsContract, affectedRowsTitle } from "../command-metadata.js";
 
 let pg: PGlite;
 
@@ -129,4 +131,49 @@ test("pglite.rejects stream, routine call and an active AbortSignal before I/O",
 
 test("pglite.rejects an object that is not a PGlite instance", () => {
   assert.throws(() => createPgliteDatabase({} as never), /PGlite instance/u);
+});
+
+// PGlite has one connection. A poisoned instance stays poisoned, so each fixture owns a fresh instance.
+// The observer reads the same instance outside any transaction.
+for (const contract of transactionIntegrationTests(
+  "pglite",
+  "direct",
+  async () => {
+    const own = await PGlite.create();
+    const db = createPgliteDatabase(own);
+    await own.query("CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY)");
+    return {
+      db,
+      caughtStatementOutcome: "rollback",
+      write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+      committedRows: async () =>
+        (await own.query<{ id: string }>("SELECT id FROM braid_contract_tx ORDER BY id")).rows.map((row) => row.id),
+      accessMode: {
+        inheritedReadOnly: true,
+        setDefault: async () => {
+          await db.execute(sql`SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`);
+        },
+        restoreDefault: async () => {
+          await db.execute(sql`SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE`);
+        },
+      },
+      close: async () => {
+        await own.close();
+      },
+    };
+  },
+  { accessMode: true },
+))
+  test(contract.title, { timeout: 60_000 }, contract.run);
+
+test(`${affectedRowsTitle("pglite")} command affected rows are exact`, { timeout: 60_000 }, async () => {
+  const own = await PGlite.create();
+  try {
+    await own.query("CREATE TABLE braid_contract_affected (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL)");
+    await affectedRowsContract(createPgliteDatabase(own), sql, async () =>
+      (await own.query<{ id: string }>("SELECT id FROM braid_contract_affected ORDER BY id")).rows.map((row) => row.id),
+    );
+  } finally {
+    await own.close();
+  }
 });

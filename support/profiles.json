@@ -686,6 +686,104 @@
         "hash": "ff6fa6dee6180525bdcac0c046ac2c58631d05ed5402e9175ea26e79134299f0"
       },
       "fixtureTestIds": ["bun-sql-sqlite.data.profile"]
+    },
+    "neon-lossless-text": {
+      "id": "neon-lossless-text",
+      "driverId": "neon-serverless",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {},
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "postgres-lossless-text",
+        "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
+      },
+      "fixtureTestIds": ["neon.data.lossless-text"]
+    },
+    "postgres-js-lossless-text": {
+      "id": "postgres-js-lossless-text",
+      "driverId": "postgres-js",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {
+        "fetch_types": false
+      },
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "postgres-lossless-text",
+        "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
+      },
+      "fixtureTestIds": ["postgres-js.data.lossless-text"]
+    },
+    "pglite-lossless-text": {
+      "id": "pglite-lossless-text",
+      "driverId": "pglite",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {},
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "postgres-lossless-text",
+        "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
+      },
+      "fixtureTestIds": ["pglite.data.lossless-text"]
+    },
+    "neon-http-lossless-text": {
+      "id": "neon-http-lossless-text",
+      "driverId": "neon-http",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {},
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "postgres-lossless-text",
+        "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
+      },
+      "fixtureTestIds": ["neon-http.data.lossless-text"]
     }
   },
   "fixtures": {
@@ -1203,6 +1301,66 @@
       },
       "sqlbraidRepresentations": {
         "binary": "Uint8Array"
+      }
+    },
+    "neon.data.lossless-text": {
+      "profile": "neon-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      }
+    },
+    "postgres-js.data.lossless-text": {
+      "profile": "postgres-js-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      }
+    },
+    "pglite.data.lossless-text": {
+      "profile": "pglite-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      }
+    },
+    "neon-http.data.lossless-text": {
+      "profile": "neon-http-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
       }
     }
   }

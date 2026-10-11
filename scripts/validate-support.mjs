@@ -94,19 +94,25 @@ export async function validateSupport({ root = scriptRoot } = {}) {
   } catch (error) {
     fail(error.code ?? "SUPPORT_TYPE_POLICY", error.message);
   }
-  const sourcePolicies = new Map(provenance.records.map((record) => [record.policy.id, record]));
+  const sourcePolicies = new Map();
+  for (const record of provenance.records) {
+    sourcePolicies.set(record.policy.id, [...(sourcePolicies.get(record.policy.id) ?? []), record]);
+  }
   const profiles = new Map(Object.entries(profileRegistry.profiles));
   for (const [id, profile] of profiles) {
     if (id !== profile.id)
       fail("SUPPORT_PROFILE_MISMATCH", `Profile registry key ${id} disagrees with descriptor ${profile.id}.`);
-    const sourceRecord = sourcePolicies.get(profile.typePolicy.id);
-    const sourcePolicy = sourceRecord?.policy;
+    const sourceRecords = sourcePolicies.get(profile.typePolicy.id) ?? [];
+    // Several driver profiles can share one committed policy. The descriptor check applies to the profile
+    // that the package exports under the same ID.
+    const sourceRecord = sourceRecords.find((record) => record.profile?.id === id);
+    const sourcePolicy = (sourceRecord ?? sourceRecords[0])?.policy;
     if (!sourcePolicy || sourcePolicy.hash !== profile.typePolicy.hash)
       fail(
         "SUPPORT_TYPE_POLICY_MISMATCH",
         `${id}: TypePolicy ${profile.typePolicy.id} is not the committed source policy.`,
       );
-    if (sourceRecord.profile) {
+    if (sourceRecord?.profile) {
       const sourceProfile = sourceRecord.profile;
       const requiredOptions = sourceProfile.connectionOptions ?? {
         parserProfile: { json: sourceProfile.json, temporal: sourceProfile.temporal },

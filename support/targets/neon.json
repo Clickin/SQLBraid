@@ -1,0 +1,141 @@
+{
+  "id": "neon-node-22-18-0",
+  "status": "compatible",
+  "database": {
+    "product": "postgres",
+    "version": "16.4",
+    "edition": "alpine; local Neon WebSocket proxy"
+  },
+  "driver": {
+    "id": "neon-serverless",
+    "version": "1.2.0",
+    "profile": "neon-lossless-text",
+    "package": "@sqlbraid/postgres/neon",
+    "transport": "text-positional ($1..$N) over WebSocket",
+    "stream": "pg-cursor",
+    "routine": "unsupported",
+    "bulk": "prepared-loop",
+    "requiredOptions": {},
+    "driverRawRepresentations": {
+      "integer": "string",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "exclusions": [
+      "A local WebSocket proxy stands in for the Neon service; no Neon project was tested.",
+      "Named prepared statements on a Neon pooled endpoint (PgBouncer, transaction mode) have no evidence.",
+      "Routine calls are not certified for this driver."
+    ]
+  },
+  "runtime": {
+    "id": "node",
+    "version": "22.18.0"
+  },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Node 22.18.0 with @neondatabase/serverless 1.2.0 and a local WebSocket proxy in front of postgres:16.4-alpine.",
+    "image": "postgres:16.4-alpine",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+  },
+  "ci": {
+    "command": "pnpm exec vitest run --project \"${{ matrix.project }}\"",
+    "workflow": ".github/workflows/release.yml",
+    "releaseBlocking": false
+  },
+  "numeric": {
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "neon-lossless-text"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "neon-lossless-text"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "unsupported",
+      "profile": "neon-lossless-text"
+    }
+  },
+  "containers": {
+    "postgres-arrays": "unclassified",
+    "postgres-domains": "unclassified",
+    "postgres-ranges": "unclassified",
+    "postgres-composites": "unclassified",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
+  "capabilities": {
+    "result.rows": {
+      "status": "guaranteed",
+      "testIds": ["neon.data.lossless-text"]
+    },
+    "numeric.exact-integer": {
+      "status": "guaranteed",
+      "testIds": ["neon.data.lossless-text"],
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "driverRawRepresentations": ["string"]
+    },
+    "numeric.exact-decimal": {
+      "status": "guaranteed",
+      "testIds": ["neon.data.lossless-text"],
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless",
+      "driverRawRepresentations": ["string"]
+    },
+    "data.json-lossless-text": {
+      "status": "guaranteed",
+      "testIds": ["neon.data.lossless-text"]
+    },
+    "data.temporal-lossless": {
+      "status": "guaranteed",
+      "testIds": ["neon.data.lossless-text"]
+    },
+    "transaction": {
+      "status": "guaranteed",
+      "testIds": ["neon.execution.transaction"]
+    },
+    "transaction.savepoint": {
+      "status": "guaranteed",
+      "testIds": ["neon.execution.transaction"]
+    },
+    "statement.bulk": {
+      "status": "guaranteed",
+      "testIds": ["neon.execution.transaction"]
+    },
+    "statement.stream": {
+      "status": "guaranteed",
+      "testIds": ["neon.execution.transaction"]
+    },
+    "statement.cancel": {
+      "status": "guarded",
+      "conditionCode": "pg.physical-connection-destroy",
+      "testIds": ["neon.execution.abort"]
+    }
+  },
+  "typePolicy": {
+    "id": "postgres-lossless-text",
+    "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  }
+}

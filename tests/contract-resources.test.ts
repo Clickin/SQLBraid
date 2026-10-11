@@ -152,30 +152,32 @@ for (const id of streamTransports)
       assert.equal(state.released + state.discarded, state.acquired);
     });
 
-    test(`[contract:${id}:resource.cleanup-failure:boundary] [ownership:${ownership}] simultaneous read and close failures preserve both and prevent healthy reuse`, async () => {
-      const { db, state, rows, command } = resourceFixture(id, ownership);
-      const primary = new Error("native read failed");
-      const cleanup = new Error("native close failed");
-      state.readFailure = primary;
-      state.cleanupFailure = cleanup;
-      await assert.rejects(
-        async () => {
-          for await (const row of db.stream(rows())) void row;
-        },
-        (error) => containsError(error, primary) && containsError(error, cleanup),
-      );
-      assert.equal(state.closed, 1);
-      assert.equal(state.released, 0);
-      if (state.acquired > 0) assert.equal(state.discarded, 1);
-      else {
-        const prior = state.io;
-        await assert.rejects(db.execute(command()), { code: "BRAID_CONNECTION_POISONED" });
-        assert.equal(state.io, prior);
-      }
-    });
+    // The postgres.js cursor closes itself, so the adapter has no explicit cleanup to fail (see the matrix native fact).
+    if (id !== "postgres-js")
+      test(`[contract:${id}:resource.cleanup-failure:boundary] [ownership:${ownership}] simultaneous read and close failures preserve both and prevent healthy reuse`, async () => {
+        const { db, state, rows, command } = resourceFixture(id, ownership);
+        const primary = new Error("native read failed");
+        const cleanup = new Error("native close failed");
+        state.readFailure = primary;
+        state.cleanupFailure = cleanup;
+        await assert.rejects(
+          async () => {
+            for await (const row of db.stream(rows())) void row;
+          },
+          (error) => containsError(error, primary) && containsError(error, cleanup),
+        );
+        assert.equal(state.closed, 1);
+        assert.equal(state.released, 0);
+        if (state.acquired > 0) assert.equal(state.discarded, 1);
+        else {
+          const prior = state.io;
+          await assert.rejects(db.execute(command()), { code: "BRAID_CONNECTION_POISONED" });
+          assert.equal(state.io, prior);
+        }
+      });
   }
 
-for (const id of ["pg", "mysql2", "mariadb", "node-oracledb", "sqlite-wasm"] as const)
+for (const id of ["pg", "neon-serverless", "mysql2", "mariadb", "node-oracledb", "sqlite-wasm"] as const)
   for (const ownership of resourceOwnerships(id)) {
     test(`[contract:${id}:resource.init-failure:boundary] [ownership:${ownership}] resource created before initialization failure is closed exactly once`, async () => {
       const { db, state, rows } = resourceFixture(id, ownership);
@@ -193,7 +195,7 @@ for (const id of ["pg", "mysql2", "mariadb", "node-oracledb", "sqlite-wasm"] as 
     });
   }
 
-for (const id of ["pg", "mysql2", "mariadb", "node-oracledb"] as const)
+for (const id of ["pg", "neon-serverless", "mysql2", "mariadb", "node-oracledb"] as const)
   for (const ownership of resourceOwnerships(id)) {
     test(`[contract:${id}:cancellation.before-handoff:boundary] [ownership:${ownership}] abort immediately after native creation closes before any row escapes`, async () => {
       const { db, state, rows } = resourceFixture(id, ownership);

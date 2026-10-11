@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import ws from "ws";
-import { Pool, neonConfig } from "@neondatabase/serverless";
+import { Client, Pool, neonConfig } from "@neondatabase/serverless";
+import { Client as PgClient } from "pg";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, inject, test } from "vitest";
 import { sql } from "@sqlbraid/postgres";
-import { createNeonPoolDatabase } from "@sqlbraid/postgres/neon";
+import { createNeonDatabase, createNeonPoolDatabase } from "@sqlbraid/postgres/neon";
+import { transactionIntegrationTests } from "../../contracts/transaction.integration.js";
+import { affectedRowsContract, affectedRowsTitle } from "../command-metadata.js";
 
 const WSPROXY_IMAGE = "ghcr.io/neondatabase/wsproxy:latest";
 
@@ -97,4 +100,90 @@ test("neon.abort ends the physical connection and the pool stays usable", { time
     /terminated after statement abort/u,
   );
   assert.deepEqual(await db.all(sql.rows`SELECT 1 AS one`), [{ one: "1" }]);
+});
+
+function neonConnectionString(): string {
+  const database = new URL((inject("postgres") as { readonly connectionUri: string }).connectionUri);
+  return `postgres://${database.username}:${database.password}@host.docker.internal/${database.pathname.slice(1)}`;
+}
+
+async function endPool(target: Pick<Pool, "end">): Promise<void> {
+  const ending = target.end().catch(() => undefined);
+  const timeout = Promise.withResolvers<void>();
+  const timer = setTimeout(timeout.resolve, 500);
+  await Promise.race([ending, timeout.promise]);
+  clearTimeout(timer);
+}
+
+for (const mode of ["direct", "pooled"] as const) {
+  for (const contract of transactionIntegrationTests(
+    "neon-serverless",
+    mode,
+    async () => {
+      const connectionString = neonConnectionString();
+      const observer = new PgClient({
+        connectionString: (inject("postgres") as { connectionUri: string }).connectionUri,
+      });
+      const client = mode === "direct" ? new Client({ connectionString }) : undefined;
+      const contractPool = mode === "pooled" ? new Pool({ connectionString, max: 1 }) : undefined;
+      try {
+        await observer.connect();
+        await client?.connect();
+        const db = client
+          ? createNeonDatabase(client, { streamBatchSize: 1 })
+          : createNeonPoolDatabase(contractPool!, { streamBatchSize: 1 });
+        await observer.query("DROP TABLE IF EXISTS braid_contract_tx");
+        await observer.query("CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY)");
+        return {
+          db,
+          caughtStatementOutcome: "rollback",
+          streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
+          physicalId: async (scope) => (await scope.one(sql.rows<{ id: string }>`SELECT pg_backend_pid() AS id`)).id,
+          write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+          committedRows: async () =>
+            (await observer.query<{ id: string }>("SELECT id FROM braid_contract_tx ORDER BY id")).rows.map(
+              (row) => row.id,
+            ),
+          accessMode: {
+            inheritedReadOnly: true,
+            setDefault: async () => {
+              await db.execute(sql`SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`);
+            },
+            restoreDefault: async () => {
+              await db.execute(sql`SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE`);
+            },
+          },
+          close: async () => {
+            try {
+              await observer.query("DROP TABLE braid_contract_tx");
+            } finally {
+              await Promise.all([client?.end(), contractPool && endPool(contractPool), observer.end()]);
+            }
+          },
+        };
+      } catch (error) {
+        await Promise.allSettled([client?.end(), contractPool && endPool(contractPool), observer.end()]);
+        throw error;
+      }
+    },
+    { accessMode: true, pooledLease: mode === "pooled", stream: true },
+  ))
+    test(contract.title, { timeout: 60_000 }, contract.run);
+}
+
+test(`${affectedRowsTitle("neon-serverless")} command affected rows are exact`, { timeout: 60_000 }, async () => {
+  const observer = new PgClient({ connectionString: (inject("postgres") as { connectionUri: string }).connectionUri });
+  await observer.connect();
+  try {
+    await observer.query("DROP TABLE IF EXISTS braid_contract_affected");
+    await observer.query("CREATE TABLE braid_contract_affected (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL)");
+    await affectedRowsContract(createNeonPoolDatabase(pool), sql, async () =>
+      (await observer.query<{ id: string }>("SELECT id FROM braid_contract_affected ORDER BY id")).rows.map(
+        (row) => row.id,
+      ),
+    );
+  } finally {
+    await observer.query("DROP TABLE IF EXISTS braid_contract_affected");
+    await observer.end();
+  }
 });

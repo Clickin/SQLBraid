@@ -145,9 +145,13 @@ export function validateMatrix({ catalog, matrix, targets, profiles, registry, c
         entry.ownership.includes("pooled") === pool,
       `${transport}: contradictory ownership classification`,
     );
-    // Bun network clients enter through a reserve provider; the public factory has no direct path.
+    // Bun network clients and postgres.js enter through a reserve provider; the public factory has no direct path.
     const expectedOwnership =
-      target.driver.id === "bun-sql" && pool ? ["pooled"] : pool ? ["direct", "pooled"] : ["direct"];
+      (target.driver.id === "bun-sql" || target.driver.id === "postgres-js") && pool
+        ? ["pooled"]
+        : pool
+          ? ["direct", "pooled"]
+          : ["direct"];
     sameKeys(entry.ownership, expectedOwnership, `${transport} ownership`);
     for (const [capability, fact] of Object.entries(entry.capabilityEvidence ?? {})) {
       requireThat(

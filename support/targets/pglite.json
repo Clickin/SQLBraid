@@ -1,0 +1,151 @@
+{
+  "id": "pglite-node-22-18-0",
+  "status": "compatible",
+  "database": {
+    "product": "postgres",
+    "version": "18.3",
+    "edition": "PGlite WASM"
+  },
+  "driver": {
+    "id": "pglite",
+    "version": "0.5.8",
+    "profile": "pglite-lossless-text",
+    "package": "@sqlbraid/postgres/pglite",
+    "transport": "text-positional ($1..$N), in process",
+    "stream": "unsupported",
+    "routine": "unsupported",
+    "bulk": "prepared-loop",
+    "requiredOptions": {},
+    "driverRawRepresentations": {
+      "integer": "string",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "exclusions": [
+      "One serialized executor owns the PGlite instance; the application must not call the instance during db.tx.",
+      "Streaming, statement cancellation and routine calls are unsupported.",
+      "The browser runtime is not covered."
+    ]
+  },
+  "runtime": {
+    "id": "node",
+    "version": "22.18.0"
+  },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Node 22.18.0 with @electric-sql/pglite 0.5.8, an in-process PostgreSQL 18.3 build. No service is needed.",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+  },
+  "ci": {
+    "command": "pnpm exec vitest run --project \"${{ matrix.project }}\"",
+    "workflow": ".github/workflows/release.yml",
+    "releaseBlocking": false
+  },
+  "numeric": {
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "pglite-lossless-text"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "pglite-lossless-text"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "unsupported",
+      "profile": "pglite-lossless-text"
+    }
+  },
+  "containers": {
+    "postgres-arrays": "unclassified",
+    "postgres-domains": "unclassified",
+    "postgres-ranges": "unclassified",
+    "postgres-composites": "unclassified",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
+  "capabilities": {
+    "result.rows": {
+      "status": "guaranteed",
+      "testIds": ["pglite.data.lossless-text"]
+    },
+    "numeric.exact-integer": {
+      "status": "guaranteed",
+      "testIds": ["pglite.data.lossless-text"],
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "driverRawRepresentations": ["string"]
+    },
+    "numeric.exact-decimal": {
+      "status": "guaranteed",
+      "testIds": ["pglite.data.lossless-text"],
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless",
+      "driverRawRepresentations": ["string"]
+    },
+    "data.json-lossless-text": {
+      "status": "guaranteed",
+      "testIds": ["pglite.data.lossless-text"]
+    },
+    "data.temporal-lossless": {
+      "status": "guaranteed",
+      "testIds": ["pglite.data.lossless-text"]
+    },
+    "result.command": {
+      "status": "guaranteed",
+      "testIds": ["pglite.execution.command-bulk"]
+    },
+    "transaction": {
+      "status": "guaranteed",
+      "testIds": ["pglite.execution.transaction"]
+    },
+    "transaction.savepoint": {
+      "status": "guaranteed",
+      "testIds": ["pglite.execution.transaction"]
+    },
+    "transaction.read-only": {
+      "status": "guaranteed",
+      "testIds": ["pglite.execution.transaction"]
+    },
+    "statement.bulk": {
+      "status": "guaranteed",
+      "testIds": ["pglite.execution.command-bulk"]
+    },
+    "statement.stream": {
+      "status": "unsupported",
+      "testIds": ["pglite.execution.stream-unsupported"]
+    },
+    "statement.cancel": {
+      "status": "unsupported",
+      "testIds": ["pglite.execution.stream-unsupported"]
+    },
+    "routine.call": {
+      "status": "unsupported",
+      "testIds": []
+    }
+  },
+  "typePolicy": {
+    "id": "postgres-lossless-text",
+    "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  }
+}

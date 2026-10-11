@@ -4,6 +4,7 @@ import { GenericContainer, Wait, type StartedTestContainer } from "testcontainer
 import { afterAll, beforeAll, inject, test } from "vitest";
 import { sql } from "@sqlbraid/postgres";
 import { createNeonHttpDatabase } from "@sqlbraid/postgres/neon-http";
+import { affectedRowsContract, affectedRowsTitle } from "../command-metadata.js";
 
 const HTTP_PROXY_IMAGE = "ghcr.io/timowilhelm/local-neon-http-proxy:main";
 
@@ -122,4 +123,17 @@ test("neon-http.rejects transactions, sessions, streams, calls and signals", { t
 
 test("neon-http.rejects an object that is not a neon() function", () => {
   assert.throws(() => createNeonHttpDatabase({} as never), /neon\(\) query function/u);
+});
+
+test(`${affectedRowsTitle("neon-http")} command affected rows are exact`, { timeout: 60_000 }, async () => {
+  await db.execute(sql.command`DROP TABLE IF EXISTS braid_contract_affected`);
+  await db.execute(sql.command`CREATE TABLE braid_contract_affected (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL)`);
+  try {
+    // Every request is committed on its own, so the same database reads the committed ids.
+    await affectedRowsContract(db, sql, async () =>
+      (await db.all(sql.rows<{ id: string }>`SELECT id FROM braid_contract_affected ORDER BY id`)).map((row) => row.id),
+    );
+  } finally {
+    await db.execute(sql.command`DROP TABLE IF EXISTS braid_contract_affected`);
+  }
 });

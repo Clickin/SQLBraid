@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { Client as PgClient } from "pg";
 import postgres from "postgres";
 import { afterAll, inject, test } from "vitest";
 import { postgresParameter, sql } from "@sqlbraid/postgres";
 import { createPostgresJsDatabase, createPostgresJsProvider, postgresJsOptions } from "@sqlbraid/postgres/postgres-js";
+import { transactionIntegrationTests } from "../../contracts/transaction.integration.js";
+import { affectedRowsContract, affectedRowsTitle } from "../command-metadata.js";
 
 type Settings = { readonly connectionUri: string };
 
@@ -150,5 +153,72 @@ test("postgres-js.a discarded lease resets the session", { timeout: 30_000 }, as
     await assert.rejects(async () => second.query(rendered("SELECT * FROM pjs_temp")), /pjs_temp/u);
   } finally {
     await second.release();
+  }
+});
+
+// postgres.js is pooled only: each root operation reserves one connection.
+for (const contract of transactionIntegrationTests(
+  "postgres-js",
+  "pooled",
+  async () => {
+    const observer = new PgClient({ connectionString: connectionUri() });
+    const pool = postgres(connectionUri(), { max: 1, onnotice: () => undefined, ...postgresJsOptions() });
+    try {
+      await observer.connect();
+      const db = createPostgresJsDatabase(pool, { streamBatchSize: 1 });
+      await observer.query("DROP TABLE IF EXISTS braid_contract_tx");
+      await observer.query("CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY)");
+      return {
+        db,
+        caughtStatementOutcome: "rollback",
+        // A discarded lease resets the session and keeps the physical connection.
+        discardClosesPhysical: false,
+        streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
+        physicalId: async (scope) => (await scope.one(sql.rows<{ id: string }>`SELECT pg_backend_pid() AS id`)).id,
+        write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+        committedRows: async () =>
+          (await observer.query<{ id: string }>("SELECT id FROM braid_contract_tx ORDER BY id")).rows.map(
+            (row) => row.id,
+          ),
+        accessMode: {
+          inheritedReadOnly: true,
+          setDefault: async () => {
+            await db.execute(sql`SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`);
+          },
+          restoreDefault: async () => {
+            await db.execute(sql`SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE`);
+          },
+        },
+        close: async () => {
+          try {
+            await observer.query("DROP TABLE braid_contract_tx");
+          } finally {
+            await Promise.all([pool.end({ timeout: 2 }), observer.end()]);
+          }
+        },
+      };
+    } catch (error) {
+      await Promise.allSettled([pool.end({ timeout: 2 }), observer.end()]);
+      throw error;
+    }
+  },
+  { accessMode: true, pooledLease: true, stream: true },
+))
+  test(contract.title, { timeout: 60_000 }, contract.run);
+
+test(`${affectedRowsTitle("postgres-js")} command affected rows are exact`, { timeout: 60_000 }, async () => {
+  const observer = new PgClient({ connectionString: connectionUri() });
+  await observer.connect();
+  try {
+    await observer.query("DROP TABLE IF EXISTS braid_contract_affected");
+    await observer.query("CREATE TABLE braid_contract_affected (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL)");
+    await affectedRowsContract(createPostgresJsDatabase(client(1)), sql, async () =>
+      (await observer.query<{ id: string }>("SELECT id FROM braid_contract_affected ORDER BY id")).rows.map(
+        (row) => row.id,
+      ),
+    );
+  } finally {
+    await observer.query("DROP TABLE IF EXISTS braid_contract_affected");
+    await observer.end();
   }
 });

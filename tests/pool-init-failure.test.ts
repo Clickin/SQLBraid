@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { ConnectionProvider } from "@sqlbraid/core";
 import { createPgPoolProvider } from "@sqlbraid/postgres/pg";
+import { createNeonPoolProvider } from "@sqlbraid/postgres/neon";
+import { createPostgresJsProvider, postgresJsOptions, type PostgresJsLike } from "@sqlbraid/postgres/postgres-js";
 import { createMysql2PoolProvider } from "@sqlbraid/mysql/mysql2";
 import { createMariaDbPoolProvider } from "@sqlbraid/mariadb/mariadb";
 import { createTediousPoolProvider } from "@sqlbraid/mssql/tedious";
@@ -26,6 +28,52 @@ const providers: readonly {
             escapeLiteral: (value: string) => value,
             release,
           };
+        },
+      });
+    },
+  },
+  {
+    name: "Neon",
+    create(checkout, release, setup) {
+      return createNeonPoolProvider({
+        async connect() {
+          checkout();
+          return {
+            query: async () => ({ rows: [], fields: [] }),
+            get escapeIdentifier() {
+              setup();
+              return (value: string) => value;
+            },
+            escapeLiteral: (value: string) => value,
+            release,
+          };
+        },
+      });
+    },
+  },
+  {
+    name: "postgres.js",
+    create(checkout, release, setup) {
+      const parsers: Record<number, (value: string) => unknown> = {};
+      for (const type of Object.values(postgresJsOptions().types))
+        for (const oid of type.from) parsers[oid] = type.parse;
+      let reserved = false;
+      const client = {
+        options: { fetch_types: false, parsers },
+        async unsafe() {
+          return [];
+        },
+        async reserve() {
+          checkout();
+          reserved = true;
+          return { unsafe: () => ({}), release };
+        },
+      } as unknown as PostgresJsLike;
+      // The provider reads the stream batch size once at creation and again for each lease.
+      return createPostgresJsProvider(client, {
+        get streamBatchSize() {
+          if (reserved) setup();
+          return 10;
         },
       });
     },
@@ -123,8 +171,15 @@ const providers: readonly {
 
 for (const fixture of providers) {
   const id =
-    ({ PostgreSQL: "pg", Tedious: "tedious", MariaDB: "mariadb" } as Record<string, string>)[fixture.name] ??
-    fixture.name;
+    (
+      {
+        PostgreSQL: "pg",
+        Neon: "neon-serverless",
+        "postgres.js": "postgres-js",
+        Tedious: "tedious",
+        MariaDB: "mariadb",
+      } as Record<string, string>
+    )[fixture.name] ?? fixture.name;
   const nativeInit = id.startsWith("bun-sql-") ? ` [contract:${id}:resource.init-failure:boundary]` : "";
   const nativeCleanup = id.startsWith("bun-sql-") ? ` [contract:${id}:resource.cleanup-failure:boundary]` : "";
   test(`[contract:${id}:pool.checkout-init-failure:boundary]${nativeInit} [ownership:pooled] ${fixture.name} releases every failed initialization and preserves its original error`, async () => {

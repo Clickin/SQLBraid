@@ -1,0 +1,150 @@
+{
+  "id": "neon-http-node-22-18-0",
+  "status": "compatible",
+  "database": {
+    "product": "postgres",
+    "version": "16.4",
+    "edition": "alpine; local Neon HTTP proxy"
+  },
+  "driver": {
+    "id": "neon-http",
+    "version": "1.2.0",
+    "profile": "neon-http-lossless-text",
+    "package": "@sqlbraid/postgres/neon-http",
+    "transport": "text-positional ($1..$N) over HTTP, one request per statement",
+    "stream": "unsupported",
+    "routine": "unsupported",
+    "bulk": "remote-batch (one server-side transaction)",
+    "requiredOptions": {},
+    "driverRawRepresentations": {
+      "integer": "string",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "exclusions": [
+      "A local HTTP proxy stands in for the Neon service; no Neon project was tested.",
+      "Stateless requests: db.tx, db.session, streams, statement cancellation and routine calls are unsupported.",
+      "Only bulk runs as one server-side transaction."
+    ]
+  },
+  "runtime": {
+    "id": "node",
+    "version": "22.18.0"
+  },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Node 22.18.0 with @neondatabase/serverless 1.2.0 and a local HTTP proxy in front of postgres:16.4-alpine.",
+    "image": "postgres:16.4-alpine",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+  },
+  "ci": {
+    "command": "pnpm exec vitest run --project \"${{ matrix.project }}\"",
+    "workflow": ".github/workflows/release.yml",
+    "releaseBlocking": false
+  },
+  "numeric": {
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "neon-http-lossless-text"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "neon-http-lossless-text"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "unsupported",
+      "profile": "neon-http-lossless-text"
+    }
+  },
+  "containers": {
+    "postgres-arrays": "unclassified",
+    "postgres-domains": "unclassified",
+    "postgres-ranges": "unclassified",
+    "postgres-composites": "unclassified",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
+  "capabilities": {
+    "result.rows": {
+      "status": "guaranteed",
+      "testIds": ["neon-http.data.lossless-text"]
+    },
+    "numeric.exact-integer": {
+      "status": "guaranteed",
+      "testIds": ["neon-http.data.lossless-text"],
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "driverRawRepresentations": ["string"]
+    },
+    "numeric.exact-decimal": {
+      "status": "guaranteed",
+      "testIds": ["neon-http.data.lossless-text"],
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless",
+      "driverRawRepresentations": ["string"]
+    },
+    "data.json-lossless-text": {
+      "status": "guaranteed",
+      "testIds": ["neon-http.data.lossless-text"]
+    },
+    "data.temporal-lossless": {
+      "status": "guaranteed",
+      "testIds": ["neon-http.data.lossless-text"]
+    },
+    "result.command": {
+      "status": "guaranteed",
+      "testIds": ["neon-http.execution.command-bulk"]
+    },
+    "statement.bulk": {
+      "status": "guaranteed",
+      "testIds": ["neon-http.execution.command-bulk"]
+    },
+    "transaction": {
+      "status": "unsupported",
+      "conditionCode": "neon-http.non-interactive-transaction",
+      "testIds": ["neon-http.execution.stateless-unsupported"]
+    },
+    "session.pinned": {
+      "status": "unsupported",
+      "conditionCode": "neon-http.stateless-requests",
+      "testIds": ["neon-http.execution.stateless-unsupported"]
+    },
+    "statement.stream": {
+      "status": "unsupported",
+      "testIds": ["neon-http.execution.stateless-unsupported"]
+    },
+    "statement.cancel": {
+      "status": "unsupported",
+      "testIds": ["neon-http.execution.stateless-unsupported"]
+    },
+    "routine.call": {
+      "status": "unsupported",
+      "testIds": []
+    }
+  },
+  "typePolicy": {
+    "id": "postgres-lossless-text",
+    "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  }
+}

@@ -989,5 +989,84 @@
   "libsql.execution.transaction": {
     "file": "tests/db/sqlite/first-party-capabilities.test.ts",
     "title": "libsql.execution.transaction"
+  },
+  "neon.data.lossless-text": {
+    "file": "tests/db/postgres/neon.test.ts",
+    "title": "neon.lossless text results"
+  },
+  "neon.execution.transaction": {
+    "file": "tests/db/postgres/neon.test.ts",
+    "title": "neon.transaction, savepoint, bulk and stream"
+  },
+  "neon.execution.abort": {
+    "file": "tests/db/postgres/neon.test.ts",
+    "title": "neon.abort ends the physical connection and the pool stays usable"
+  },
+  "postgres-js.data.lossless-text": {
+    "file": "tests/db/postgres/postgres-js.test.ts",
+    "title": "postgres-js.lossless text results"
+  },
+  "postgres-js.execution.transaction": {
+    "file": "tests/db/postgres/postgres-js.test.ts",
+    "title": "postgres-js.transaction, savepoint and rollback keep one connection"
+  },
+  "postgres-js.execution.bulk-stream": {
+    "file": "tests/db/postgres/postgres-js.test.ts",
+    "title": "postgres-js.bulk and stream, including an early break"
+  },
+  "postgres-js.execution.cancel-unsupported": {
+    "file": "tests/db/postgres/postgres-js.test.ts",
+    "title": "postgres-js.rejects an active AbortSignal and routine calls before I/O",
+    "outcome": "failure"
+  },
+  "postgres-js.execution.discard": {
+    "file": "tests/db/postgres/postgres-js.test.ts",
+    "title": "postgres-js.a discarded lease resets the session"
+  },
+  "pglite.data.lossless-text": {
+    "file": "tests/db/postgres/pglite.test.ts",
+    "title": "pglite.lossless text results"
+  },
+  "pglite.execution.transaction": {
+    "file": "tests/db/postgres/pglite.test.ts",
+    "title": "pglite.transaction, savepoint, rollback and read-only"
+  },
+  "pglite.execution.command-bulk": {
+    "file": "tests/db/postgres/pglite.test.ts",
+    "title": "pglite.command results and bulk"
+  },
+  "pglite.execution.stream-unsupported": {
+    "file": "tests/db/postgres/pglite.test.ts",
+    "title": "pglite.rejects stream, routine call and an active AbortSignal before I/O",
+    "outcome": "failure"
+  },
+  "neon-http.data.lossless-text": {
+    "file": "tests/db/postgres/neon-http.test.ts",
+    "title": "neon-http.lossless text results"
+  },
+  "neon-http.execution.command-bulk": {
+    "file": "tests/db/postgres/neon-http.test.ts",
+    "title": "neon-http.command results and atomic bulk"
+  },
+  "neon-http.execution.stateless-unsupported": {
+    "file": "tests/db/postgres/neon-http.test.ts",
+    "title": "neon-http.rejects transactions, sessions, streams, calls and signals",
+    "outcome": "failure"
+  },
+  "neon.execution.environment": {
+    "file": "tests/db/postgres/neon.test.ts",
+    "title": "neon.environment reports the neon driver and guards prepared statements"
+  },
+  "postgres-js.execution.environment": {
+    "file": "tests/db/postgres/postgres-js.test.ts",
+    "title": "postgres-js.environment reports the driver and unsupported capabilities"
+  },
+  "pglite.execution.environment": {
+    "file": "tests/db/postgres/pglite.test.ts",
+    "title": "pglite.environment reports the driver and unsupported capabilities"
+  },
+  "neon-http.execution.environment": {
+    "file": "tests/db/postgres/neon-http.test.ts",
+    "title": "neon-http.environment reports stateless capabilities"
   }
 }

@@ -8,6 +8,11 @@ export interface TransactionIntegrationHarness {
   write(db: Database, id: string): Promise<unknown>;
   readonly caughtStatementOutcome: "commit" | "rollback";
   physicalId?(db: Database): Promise<string>;
+  /**
+   * A discarded lease normally closes the physical connection. Set false for a driver that resets the session
+   * and keeps the connection, such as postgres.js.
+   */
+  readonly discardClosesPhysical?: boolean;
   readonly streamQuery?: RowQuery<{ readonly id: string }>;
   /** The fixture starts empty. Duplicate primary keys must fail without application-side validation. */
   close(): Promise<void>;
@@ -105,7 +110,7 @@ const scenarios: Record<string, (h: TransactionIntegrationHarness, ownership: st
     assert.deepEqual(await committedRows(), []);
   },
   "transaction.caught-error-terminal-outcome": async (
-    { db, write, committedRows, caughtStatementOutcome, physicalId },
+    { db, write, committedRows, caughtStatementOutcome, physicalId, discardClosesPhysical = true },
     ownership,
   ) => {
     let callbackReturned = false;
@@ -131,7 +136,8 @@ const scenarios: Record<string, (h: TransactionIntegrationHarness, ownership: st
     );
     if (physicalId && ownership === "pooled" && caughtStatementOutcome === "rollback") {
       const after = await physicalId(db);
-      assert.notEqual(after, before, "a rejected terminal outcome must discard the uncertain physical lease");
+      if (discardClosesPhysical)
+        assert.notEqual(after, before, "a rejected terminal outcome must discard the uncertain physical lease");
       await write(db, "B");
       assert.deepEqual(await committedRows(), ["B"]);
     }

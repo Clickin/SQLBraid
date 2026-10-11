@@ -2241,6 +2241,705 @@
           "evidence": ["integration", "boundary"]
         }
       }
+    },
+    "neon-serverless": {
+      "target": "neon-node-22-18-0",
+      "ownership": ["direct", "pooled"],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The adapter owns a native pool/reservation lease.",
+          "source": "packages/postgres/src/pg/executor.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/postgres/src/pg/executor.ts"
+        },
+        "commit-status": {
+          "supported": true,
+          "reason": "PostgreSQL command status can report ROLLBACK for a fulfilled COMMIT.",
+          "source": "packages/postgres/src/pg/executor.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/postgres/src/pg/executor.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/postgres/src/pg/executor.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/postgres/src/pg/executor.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/postgres/src/pg/executor.ts"
+        }
+      },
+      "capabilityEvidence": {
+        "transaction.read-only": {
+          "status": "guaranteed",
+          "reason": "BEGIN READ ONLY and BEGIN READ WRITE run on the same pg-compatible physical client.",
+          "source": "packages/postgres/src/pg/executor.ts"
+        },
+        "session.pinned": {
+          "status": "guaranteed",
+          "reason": "The pool provider pins one physical client for a session scope.",
+          "source": "packages/postgres/src/pg/executor.ts"
+        }
+      },
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": ["integration"]
+        },
+        "transaction.callback-rollback": {
+          "evidence": ["integration"]
+        },
+        "transaction.statement-rollback": {
+          "evidence": ["integration"]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": ["integration"]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": ["integration"]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.commit-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.commit-terminal-outcome": {
+          "evidence": ["boundary"]
+        },
+        "transaction.rollback-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "evidence": ["integration", "boundary"]
+        },
+        "pool.checkout-init-failure": {
+          "evidence": ["boundary"]
+        },
+        "resource.root-lease": {
+          "evidence": ["boundary"]
+        },
+        "resource.session-lease": {
+          "evidence": ["integration", "boundary"]
+        },
+        "resource.transaction-lease": {
+          "evidence": ["integration", "boundary"]
+        },
+        "resource.init-failure": {
+          "evidence": ["boundary"]
+        },
+        "resource.stream-return": {
+          "evidence": ["integration", "boundary"]
+        },
+        "resource.stream-read-failure": {
+          "evidence": ["boundary"]
+        },
+        "resource.cleanup-failure": {
+          "evidence": ["boundary"]
+        },
+        "cancellation.pre-io": {
+          "evidence": ["boundary"]
+        },
+        "cancellation.in-flight": {
+          "evidence": ["boundary"]
+        },
+        "cancellation.before-handoff": {
+          "evidence": ["boundary"]
+        },
+        "cancellation.iteration": {
+          "evidence": ["boundary"]
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": ["integration", "boundary"]
+        }
+      }
+    },
+    "postgres-js": {
+      "target": "postgres-js-node-22-18-0",
+      "ownership": ["pooled"],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The provider reserves one postgres.js connection for each lease.",
+          "source": "packages/postgres/src/postgres-js/executor.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/postgres/src/postgres-js/executor.ts"
+        },
+        "commit-status": {
+          "supported": true,
+          "reason": "PostgreSQL command status can report ROLLBACK for a fulfilled COMMIT.",
+          "source": "packages/postgres/src/postgres-js/executor.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/postgres/src/postgres-js/executor.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/postgres/src/postgres-js/executor.ts"
+        },
+        "resource-init": {
+          "supported": false,
+          "reason": "The adapter holds no native cursor, request, statement or reservation before the postgres.js cursor starts; the driver owns the cursor lifecycle.",
+          "source": "packages/postgres/src/postgres-js/executor.ts"
+        },
+        "cleanup": {
+          "supported": false,
+          "reason": "The postgres.js cursor closes itself on early return and on read failure; the adapter holds no other resource that needs explicit cleanup.",
+          "source": "packages/postgres/src/postgres-js/executor.ts"
+        }
+      },
+      "capabilityEvidence": {
+        "session.pinned": {
+          "status": "guaranteed",
+          "reason": "A session scope pins one reserved postgres.js connection.",
+          "source": "packages/postgres/src/postgres-js/executor.ts"
+        }
+      },
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": ["integration"]
+        },
+        "transaction.callback-rollback": {
+          "evidence": ["integration"]
+        },
+        "transaction.statement-rollback": {
+          "evidence": ["integration"]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": ["integration"]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": ["integration"]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.commit-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.commit-terminal-outcome": {
+          "evidence": ["boundary"]
+        },
+        "transaction.rollback-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "evidence": ["integration", "boundary"]
+        },
+        "pool.checkout-init-failure": {
+          "evidence": ["boundary"]
+        },
+        "resource.root-lease": {
+          "evidence": ["boundary"]
+        },
+        "resource.session-lease": {
+          "evidence": ["integration", "boundary"]
+        },
+        "resource.transaction-lease": {
+          "evidence": ["integration", "boundary"]
+        },
+        "resource.init-failure": {
+          "notApplicable": {
+            "requirement": "native:resource-init",
+            "reason": "The adapter holds no native cursor, request, statement or reservation before the postgres.js cursor starts; the driver owns the cursor lifecycle."
+          }
+        },
+        "resource.stream-return": {
+          "evidence": ["integration", "boundary"]
+        },
+        "resource.stream-read-failure": {
+          "evidence": ["boundary"]
+        },
+        "resource.cleanup-failure": {
+          "notApplicable": {
+            "requirement": "native:cleanup",
+            "reason": "The postgres.js cursor closes itself on early return and on read failure; the adapter holds no other resource that needs explicit cleanup."
+          }
+        },
+        "cancellation.pre-io": {
+          "evidence": ["boundary"]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target postgres-js-node-22-18-0."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target postgres-js-node-22-18-0."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target postgres-js-node-22-18-0."
+          }
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": ["integration", "boundary"]
+        }
+      }
+    },
+    "pglite": {
+      "target": "pglite-node-22-18-0",
+      "ownership": ["direct"],
+      "native": {
+        "pool": {
+          "supported": false,
+          "reason": "The adapter owns one serialized PGlite instance and has no pool or reservation lease.",
+          "source": "packages/postgres/src/pglite/executor.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/postgres/src/pglite/executor.ts"
+        },
+        "commit-status": {
+          "supported": true,
+          "reason": "PostgreSQL command status can report ROLLBACK for a fulfilled COMMIT.",
+          "source": "packages/postgres/src/pglite/executor.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/postgres/src/pglite/executor.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/postgres/src/pglite/executor.ts"
+        },
+        "resource-init": {
+          "supported": false,
+          "reason": "The adapter creates no native cursor, request, statement or reservation that needs initialization after acquisition.",
+          "source": "packages/postgres/src/pglite/executor.ts"
+        },
+        "cleanup": {
+          "supported": false,
+          "reason": "The adapter holds no native cursor, iterator, statement or reserved connection that needs explicit cleanup.",
+          "source": "packages/postgres/src/pglite/executor.ts"
+        }
+      },
+      "capabilityEvidence": {
+        "session.pinned": {
+          "status": "guaranteed",
+          "reason": "The serialized executor is the single execution resource for a session scope.",
+          "source": "packages/postgres/src/pglite/executor.ts"
+        }
+      },
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": ["integration"]
+        },
+        "transaction.callback-rollback": {
+          "evidence": ["integration"]
+        },
+        "transaction.statement-rollback": {
+          "evidence": ["integration"]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": ["integration"]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": ["integration"]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.commit-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.commit-terminal-outcome": {
+          "evidence": ["boundary"]
+        },
+        "transaction.rollback-failure": {
+          "evidence": ["boundary"]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "evidence": ["integration", "boundary"]
+        },
+        "pool.checkout-init-failure": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The adapter owns one serialized PGlite instance and has no pool or reservation lease."
+          }
+        },
+        "resource.root-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The adapter owns one serialized PGlite instance and has no pool or reservation lease."
+          }
+        },
+        "resource.session-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The adapter owns one serialized PGlite instance and has no pool or reservation lease."
+          }
+        },
+        "resource.transaction-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The adapter owns one serialized PGlite instance and has no pool or reservation lease."
+          }
+        },
+        "resource.init-failure": {
+          "notApplicable": {
+            "requirement": "native:resource-init",
+            "reason": "The adapter creates no native cursor, request, statement or reservation that needs initialization after acquisition."
+          }
+        },
+        "resource.stream-return": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target pglite-node-22-18-0."
+          }
+        },
+        "resource.stream-read-failure": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target pglite-node-22-18-0."
+          }
+        },
+        "resource.cleanup-failure": {
+          "notApplicable": {
+            "requirement": "native:cleanup",
+            "reason": "The adapter holds no native cursor, iterator, statement or reserved connection that needs explicit cleanup."
+          }
+        },
+        "cancellation.pre-io": {
+          "evidence": ["boundary"]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target pglite-node-22-18-0."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target pglite-node-22-18-0."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target pglite-node-22-18-0."
+          }
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": ["integration", "boundary"]
+        }
+      }
+    },
+    "neon-http": {
+      "target": "neon-http-node-22-18-0",
+      "ownership": ["direct"],
+      "native": {
+        "pool": {
+          "supported": false,
+          "reason": "The adapter sends stateless HTTP requests and has no pool or reservation lease.",
+          "source": "packages/postgres/src/neon-http/executor.ts"
+        },
+        "savepoint-release": {
+          "supported": false,
+          "reason": "The adapter has no interactive transaction and no savepoint control.",
+          "source": "packages/postgres/src/neon-http/executor.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The adapter has no interactive COMMIT; bulk is one server-side transaction.",
+          "source": "packages/postgres/src/neon-http/executor.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/postgres/src/neon-http/executor.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/postgres/src/neon-http/executor.ts"
+        },
+        "resource-init": {
+          "supported": false,
+          "reason": "The adapter creates no native cursor, request, statement or reservation that needs initialization after acquisition.",
+          "source": "packages/postgres/src/neon-http/executor.ts"
+        },
+        "cleanup": {
+          "supported": false,
+          "reason": "The adapter holds no native cursor, iterator, statement or reserved connection that needs explicit cleanup.",
+          "source": "packages/postgres/src/neon-http/executor.ts"
+        }
+      },
+      "capabilityEvidence": {
+        "transaction.savepoint": {
+          "status": "unsupported",
+          "reason": "Neon HTTP has no interactive transaction, so it has no savepoint.",
+          "source": "packages/postgres/src/neon-http/executor.ts"
+        },
+        "transaction.read-only": {
+          "status": "unsupported",
+          "reason": "Neon HTTP has no interactive transaction with a per-transaction access mode.",
+          "source": "packages/postgres/src/neon-http/executor.ts"
+        }
+      },
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "transaction.callback-rollback": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "transaction.statement-rollback": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "transaction.savepoint-recovery": {
+          "notApplicable": {
+            "requirement": "capability:transaction.savepoint",
+            "reason": "Neon HTTP has no interactive transaction, so it has no savepoint."
+          }
+        },
+        "transaction.savepoint-rollback-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction.savepoint",
+            "reason": "Neon HTTP has no interactive transaction, so it has no savepoint."
+          }
+        },
+        "transaction.savepoint-create-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction.savepoint",
+            "reason": "Neon HTTP has no interactive transaction, so it has no savepoint."
+          }
+        },
+        "transaction.savepoint-release-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction.savepoint",
+            "reason": "Neon HTTP has no interactive transaction, so it has no savepoint."
+          }
+        },
+        "transaction.commit-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "transaction.rollback-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "transaction.access-mode": {
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "Neon HTTP has no interactive transaction with a per-transaction access mode."
+          }
+        },
+        "pool.checkout-init-failure": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The adapter sends stateless HTTP requests and has no pool or reservation lease."
+          }
+        },
+        "resource.root-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The adapter sends stateless HTTP requests and has no pool or reservation lease."
+          }
+        },
+        "resource.session-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The adapter sends stateless HTTP requests and has no pool or reservation lease."
+          }
+        },
+        "resource.transaction-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The adapter sends stateless HTTP requests and has no pool or reservation lease."
+          }
+        },
+        "resource.init-failure": {
+          "notApplicable": {
+            "requirement": "native:resource-init",
+            "reason": "The adapter creates no native cursor, request, statement or reservation that needs initialization after acquisition."
+          }
+        },
+        "resource.stream-return": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "resource.stream-read-failure": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "resource.cleanup-failure": {
+          "notApplicable": {
+            "requirement": "native:cleanup",
+            "reason": "The adapter holds no native cursor, iterator, statement or reserved connection that needs explicit cleanup."
+          }
+        },
+        "cancellation.pre-io": {
+          "evidence": ["boundary"]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target neon-http-node-22-18-0."
+          }
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": ["integration", "boundary"]
+        }
+      }
     }
   }
 }
