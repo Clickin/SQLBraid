@@ -188,29 +188,38 @@ export function createPostgresJsProvider(
       // postgres.js never settles the first reserve() of a cold pool when fetch_types is off.
       await sql.unsafe("SELECT 1");
       const reserved = await sql.reserve();
-      const executor = createPostgresJsExecutor(reserved, options);
-      let released = false;
-      return {
-        ...executor,
-        async release(releaseOptions = {}): Promise<void> {
-          if (released) return;
-          released = true;
-          if (releaseOptions.discard === true) {
-            try {
-              await reserved.unsafe("ROLLBACK", []);
-              await reserved.unsafe("DISCARD ALL", []);
-            } catch (error) {
-              // The session state is unknown. Keep the reservation instead of returning a dirty connection.
-              throw cleanupAggregate(
-                [error],
-                "postgres.js session reset failed; the reservation was not released.",
-                error,
-              );
+      try {
+        const executor = createPostgresJsExecutor(reserved, options);
+        let released = false;
+        return {
+          ...executor,
+          async release(releaseOptions = {}): Promise<void> {
+            if (released) return;
+            released = true;
+            if (releaseOptions.discard === true) {
+              try {
+                await reserved.unsafe("ROLLBACK", []);
+                await reserved.unsafe("DISCARD ALL", []);
+              } catch (error) {
+                // The session state is unknown. Keep the reservation instead of returning a dirty connection.
+                throw cleanupAggregate(
+                  [error],
+                  "postgres.js session reset failed; the reservation was not released.",
+                  error,
+                );
+              }
             }
-          }
+            await reserved.release();
+          },
+        };
+      } catch (error) {
+        try {
           await reserved.release();
-        },
-      };
+        } catch (cleanup) {
+          throw cleanupAggregate([error, cleanup], "postgres.js reservation initialization cleanup failed.", error);
+        }
+        throw error;
+      }
     },
   };
 }
