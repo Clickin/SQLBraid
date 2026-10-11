@@ -19,6 +19,20 @@ import { createNeonPoolDatabase } from "@sqlbraid/postgres/neon";
 const db = createNeonPoolDatabase(new Pool({ connectionString: process.env.DATABASE_URL }));
 ```
 
+### Neon (HTTP)
+
+Use the `@sqlbraid/postgres/neon-http` adapter with the `neon()` query function. Each statement is one HTTP request, so the adapter pins no connection. `db.tx()` and `db.session()` reject. `db.bulk()` runs in one server-side transaction through `sql.transaction()`.
+
+```ts
+import { neon } from "@neondatabase/serverless";
+import { createNeonHttpDatabase } from "@sqlbraid/postgres/neon-http";
+
+const db = createNeonHttpDatabase(neon(process.env.DATABASE_URL!));
+```
+
+- The adapter sets the result options and the type parsers for each query. Exact numerics, JSON, temporal values and arrays stay text.
+- `statement.stream`, `statement.cancel` and routine calls are unsupported. An active `AbortSignal` is rejected before I/O.
+
 ### postgres.js
 
 Use the `@sqlbraid/postgres/postgres-js` adapter with a [postgres.js](https://github.com/porsager/postgres) client. Spread `postgresJsOptions()` into the client options. The adapter checks them and rejects a client that does not use the lossless text parsers.

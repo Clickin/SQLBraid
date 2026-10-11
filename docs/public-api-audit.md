@@ -283,15 +283,15 @@ const db = createBunSqlDatabase(client, { dialect: "postgres" });
 const rows = await db.all(sql.rows`SELECT id FROM users`);
 ```
 
-| Package              | Application surface                            | SPI / advanced surface                                                                                      |
-| -------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@sqlbraid/postgres` | `sql`, `postgresParameter.refcursor()`         | dialect, TypePolicy, representation profiles, `/pg`, `/neon`, `/postgres-js`, `/pglite`, `/inspector`       |
-| `@sqlbraid/mysql`    | `sql`                                          | dialect, TypePolicy, representation profiles, `/mysql2`, `/inspector`                                       |
-| `@sqlbraid/mariadb`  | `sql`                                          | dialect, TypePolicy, representation profiles, `/mariadb`, `/inspector`                                      |
-| `@sqlbraid/bun-sql`  | `createBunSqlDatabase`, `createBunSqlProvider` | Bun.SQL multi-dialect adapter; requires a user-selected `postgres`, `mysql`, `mariadb`, or `sqlite` dialect |
-| `@sqlbraid/sqlite`   | `sql`                                          | dialect, TypePolicy, `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1`, `/inspector`             |
-| `@sqlbraid/oracle`   | `sql`, `oracleParameter`                       | portable dialect/TypePolicy, `/oracledb`, `/inspector`                                                      |
-| `@sqlbraid/mssql`    | `sql`, `mssqlParameter`                        | portable dialect/TypePolicy, `/tedious`, `/inspector`                                                       |
+| Package              | Application surface                            | SPI / advanced surface                                                                                              |
+| -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `@sqlbraid/postgres` | `sql`, `postgresParameter.refcursor()`         | dialect, TypePolicy, representation profiles, `/pg`, `/neon`, `/neon-http`, `/postgres-js`, `/pglite`, `/inspector` |
+| `@sqlbraid/mysql`    | `sql`                                          | dialect, TypePolicy, representation profiles, `/mysql2`, `/inspector`                                               |
+| `@sqlbraid/mariadb`  | `sql`                                          | dialect, TypePolicy, representation profiles, `/mariadb`, `/inspector`                                              |
+| `@sqlbraid/bun-sql`  | `createBunSqlDatabase`, `createBunSqlProvider` | Bun.SQL multi-dialect adapter; requires a user-selected `postgres`, `mysql`, `mariadb`, or `sqlite` dialect         |
+| `@sqlbraid/sqlite`   | `sql`                                          | dialect, TypePolicy, `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1`, `/inspector`                     |
+| `@sqlbraid/oracle`   | `sql`, `oracleParameter`                       | portable dialect/TypePolicy, `/oracledb`, `/inspector`                                                              |
+| `@sqlbraid/mssql`    | `sql`, `mssqlParameter`                        | portable dialect/TypePolicy, `/tedious`, `/inspector`                                                               |
 
 Portable dialect roots do not load optional native driver dependencies. An
 adapter in a subpath must obey these rules:

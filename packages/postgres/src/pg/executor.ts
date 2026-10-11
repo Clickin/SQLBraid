@@ -13,7 +13,7 @@ import type {
   StatementBindingDescription,
 } from "@sqlbraid/core";
 import { assertSavepointName } from "@sqlbraid/core/driver";
-import { AdapterError, ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
+import { AdapterError, safeDatabaseCount } from "@sqlbraid/core";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { representationProfiles, typePolicyForProfile } from "../type-policy.js";
 import {
@@ -27,18 +27,16 @@ import {
   resolvePgBinding,
 } from "../common/binding.js";
 import { cleanupAggregate, cleanupFailure, unsupported } from "../common/errors.js";
-import { arrayOids, exactNumericOids, jsonOids, temporalOids } from "../common/oids.js";
+import { queryTypeOverrides } from "../common/type-overrides.js";
 import { resolveParserProfile } from "../common/parser-profile.js";
 import { assertUniqueFields, outputRow, projectPgRows, preparePgRowProjector, quotePortal } from "../common/results.js";
 import { postgresBeginSql, resolveStreamBatchSize } from "../common/transaction.js";
 import { pgEnvironmentFor, pgExecutionCapabilities } from "./environment.js";
-import { pgOidTypes } from "./types.js";
 import type {
   PgClientLike,
   PgCursorFactory,
   PgCursorLike,
   PgExecutorOptions,
-  PgParserProfile,
   PgPoolLike,
   PgResultLike,
   PgTypeOverrides,
@@ -51,38 +49,6 @@ export interface PgDriverIdentity {
 }
 
 export const pgDriverIdentity: PgDriverIdentity = Object.freeze({ id: "pg" });
-
-function textValue(value: unknown): unknown {
-  if (typeof value === "string") return value;
-  throw new ResultExactnessError("PostgreSQL lossless text profile requires text-format results.");
-}
-
-function binary64Value(value: unknown): number {
-  return Number(textValue(value));
-}
-
-function binary32Value(value: unknown): number {
-  return Math.fround(binary64Value(value));
-}
-
-function queryTypeOverrides(client: PgClientLike, profile: Required<PgParserProfile>): PgTypeOverrides | undefined {
-  const lossless = profile.json === "text" && profile.temporal === "text";
-  return {
-    getTypeParser(oid, format) {
-      if (oid === 700) return binary32Value;
-      if (oid === 701) return binary64Value;
-      if (
-        exactNumericOids.has(oid) ||
-        (profile.json === "text" && jsonOids.has(oid)) ||
-        (profile.temporal === "text" && temporalOids.has(oid)) ||
-        (lossless && (arrayOids.has(oid) || pgOidTypes[oid] === undefined))
-      ) {
-        return textValue;
-      }
-      return client.getTypeParser?.(oid, format) ?? ((value: unknown) => value);
-    },
-  };
-}
 
 async function optionalCursorFactory(): Promise<PgCursorFactory> {
   try {
@@ -358,7 +324,7 @@ export function createPgExecutorFor(
   const policy = options.typePolicy ?? profilePolicy;
   const firstPartyProfile =
     options.profile === undefined || representationProfiles.some((entry) => entry === options.profile);
-  const types = queryTypeOverrides(client, profile);
+  const types = queryTypeOverrides((oid, format) => client.getTypeParser?.(oid, format), profile);
   const batchSize = resolveStreamBatchSize(options.streamBatchSize);
   const runControl = async (text: string): Promise<void> => {
     const result = await client.query({ text, values: [] });

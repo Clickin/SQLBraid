@@ -75,6 +75,7 @@ export default defineConfig([
     index: "src/index.ts",
     pg: "src/pg.ts",
     neon: "src/neon.ts",
+    "neon-http": "src/neon-http.ts",
     pglite: "src/pglite.ts",
     "postgres-js": "src/postgres-js.ts",
     inspector: "src/inspector.ts",
