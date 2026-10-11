@@ -35,6 +35,21 @@ const db = createPostgresJsDatabase(postgres(process.env.DATABASE_URL!, postgres
 - `statement.cancel` and routine calls are unsupported. An active `AbortSignal` is rejected before I/O.
 - A discarded lease runs `ROLLBACK` and `DISCARD ALL` before it returns to the pool, because postgres.js does not expose the physical connection.
 
+### PGlite
+
+Use the `@sqlbraid/postgres/pglite` adapter with a [PGlite](https://pglite.dev) instance. PGlite is one connection in one process, so SQLBraid must own the instance. A direct call on it during `db.tx()` joins the open transaction.
+
+```ts
+import { PGlite } from "@electric-sql/pglite";
+import { createPgliteDatabase } from "@sqlbraid/postgres/pglite";
+
+const db = createPgliteDatabase(await PGlite.create());
+```
+
+- The adapter sets parsers for each query, so exact numerics, JSON, temporal values and arrays stay text.
+- `statement.stream`, `statement.cancel` and routine calls are unsupported. An active `AbortSignal` is rejected before I/O.
+- The adapter does not close the instance.
+
 ### Key Details
 
 - **Numerics**: Exact integers and numeric results are strings. Floating-point values are numbers.

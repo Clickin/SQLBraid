@@ -9,7 +9,7 @@ description: 각 역할을 맡는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/core`            | 공개 인터페이스, Standard Schema 관련 타입, 렌더링된 파라미터 메타데이터                                                  |
 | `@sqlbraid/template`        | 태그 템플릿, 지시어, 렌더링, 구조적 조각, `sql.bind`                                                                      |
 | `@sqlbraid/runtime`         | 실행, 매핑, 결과 종류 검사, 트랜잭션, 스트리밍, 준비된 쿼리의 형태                                                        |
-| `@sqlbraid/postgres`        | PostgreSQL 방언·TypePolicy, `/pg`·`/neon`·`/postgres-js` 어댑터, `/inspector`                                             |
+| `@sqlbraid/postgres`        | PostgreSQL 방언·TypePolicy, `/pg`·`/neon`·`/postgres-js`·`/pglite` 어댑터, `/inspector`                                   |
 | `@sqlbraid/mysql`           | MySQL 방언·TypePolicy, `/mysql2` 어댑터, `/inspector`                                                                     |
 | `@sqlbraid/sqlite`          | SQLite 방언, `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1` 어댑터, `/inspector`                            |
 | `@sqlbraid/mariadb`         | MariaDB 방언·TypePolicy, `/mariadb` 어댑터, `/inspector`                                                                  |

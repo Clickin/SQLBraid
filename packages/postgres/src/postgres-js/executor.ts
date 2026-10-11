@@ -23,8 +23,7 @@ import {
 import { cleanupAggregate, unsupported } from "../common/errors.js";
 import { assertUniqueFields, preparePgRowProjector, projectPgRows } from "../common/results.js";
 import { postgresBeginSql, resolveStreamBatchSize } from "../common/transaction.js";
-import { pgEnvironmentFor } from "../pg/environment.js";
-import { representationProfiles, typePolicyForProfile } from "../type-policy.js";
+import { losslessEnvironmentFor, losslessPolicy, rejectActiveSignal } from "../common/lossless.js";
 import type { PgFieldLike } from "../pg/types.js";
 import { assertPostgresJsLossless } from "./options.js";
 import type {
@@ -43,9 +42,6 @@ export type {
   PostgresJsResultLike,
 } from "./types.js";
 
-const losslessProfile = { json: "text", temporal: "text" } as const;
-const losslessPolicy = representationProfiles[0]!.typePolicy;
-
 const unsupportedCapabilities = Object.freeze({
   "statement.cancel": { status: "unsupported" as const },
   "routine.call": { status: "unsupported" as const },
@@ -61,25 +57,10 @@ function fieldsOf(result: PostgresJsResultLike): readonly PgFieldLike[] {
 }
 
 function rejectSignal(options: ExecutionOptions | undefined): void {
-  const signal = options?.signal;
-  signal?.throwIfAborted();
-  if (signal !== undefined) {
-    throw unsupported(
-      "statement.cancel",
-      "BRAID_CANCEL_UNSUPPORTED",
-      "The postgres.js adapter cannot cancel an active statement. A protocol cancel can reach a later statement on the same connection.",
-    );
-  }
-}
-
-function environmentFor(policy: NonNullable<PostgresJsExecutorOptions["typePolicy"]>) {
-  const base = pgEnvironmentFor(losslessProfile, losslessPolicy, driver);
-  if (policy === losslessPolicy) return base;
-  return {
-    ...pgEnvironmentFor(losslessProfile, typePolicyForProfile(losslessProfile), driver),
-    driver: { id: driver.id, profile: "custom-type-policy" },
-    typePolicy: { id: policy.id, hash: policy.hash },
-  };
+  rejectActiveSignal(
+    "The postgres.js adapter cannot cancel an active statement. A protocol cancel can reach a later statement on the same connection.",
+    options,
+  );
 }
 
 /** Wrap one reserved postgres.js connection. The provider owns the reservation. */
@@ -101,7 +82,7 @@ function createPostgresJsExecutor(
   return {
     ownershipKey: reserved,
     statementBinding: pgStatementBinding,
-    environment: environmentFor(policy),
+    environment: losslessEnvironmentFor(driver, policy),
     async query<Row>(
       rendered: RenderedStatement,
       binding?: StatementBindingDescription,
@@ -202,7 +183,7 @@ export function createPostgresJsProvider(
   resolveStreamBatchSize(options.streamBatchSize);
   return {
     statementBinding: pgStatementBinding,
-    environment: environmentFor(options.typePolicy ?? losslessPolicy),
+    environment: losslessEnvironmentFor(driver, options.typePolicy ?? losslessPolicy),
     async acquire(): Promise<ConnectionLease> {
       // postgres.js never settles the first reserve() of a cold pool when fetch_types is off.
       await sql.unsafe("SELECT 1");

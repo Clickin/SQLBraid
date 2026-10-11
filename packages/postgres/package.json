@@ -36,6 +36,10 @@
       "types": "./dist/postgres-js.d.ts",
       "import": "./dist/postgres-js.js"
     },
+    "./pglite": {
+      "types": "./dist/pglite.d.ts",
+      "import": "./dist/pglite.js"
+    },
     "./neon": {
       "types": "./dist/neon.d.ts",
       "import": "./dist/neon.js"
