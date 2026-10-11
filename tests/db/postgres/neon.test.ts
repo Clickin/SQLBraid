@@ -1,34 +1,22 @@
 import assert from "node:assert/strict";
 import ws from "ws";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { GenericContainer, Network, Wait, type StartedNetwork, type StartedTestContainer } from "testcontainers";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { afterAll, beforeAll, test } from "vitest";
+import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
+import { afterAll, beforeAll, inject, test } from "vitest";
 import { sql } from "@sqlbraid/postgres";
 import { createNeonPoolDatabase } from "@sqlbraid/postgres/neon";
-import { supportTarget } from "../support-target.js";
 
-const image = supportTarget(process.env.SQLBRAID_POSTGRES_TARGET ?? "postgres").reproducibility.image;
 const WSPROXY_IMAGE = "ghcr.io/neondatabase/wsproxy:latest";
 
-let network: StartedNetwork;
-let database: StartedPostgreSqlContainer;
 let proxy: StartedTestContainer;
 let pool: Pool;
 
 beforeAll(async () => {
-  assert.ok(image, "PostgreSQL support target has no reproducibility image.");
-  network = await new Network().start();
-  database = await new PostgreSqlContainer(image)
-    .withNetwork(network)
-    .withNetworkAliases("neon-pg")
-    .withDatabase("sqlbraid")
-    .withUsername("sqlbraid")
-    .withPassword("sqlbraid")
-    .start();
+  // The proxy reaches the shared PostgreSQL container through the host port.
+  const database = new URL((inject("postgres") as { readonly connectionUri: string }).connectionUri);
   proxy = await new GenericContainer(WSPROXY_IMAGE)
-    .withNetwork(network)
-    .withEnvironment({ ALLOW_ADDR_REGEX: ".*", APPEND_PORT: "neon-pg:5432" })
+    .withExtraHosts([{ host: "host.docker.internal", ipAddress: "host-gateway" }])
+    .withEnvironment({ ALLOW_ADDR_REGEX: ".*", APPEND_PORT: `host.docker.internal:${database.port}` })
     .withExposedPorts(80)
     .withWaitStrategy(Wait.forListeningPorts())
     .start();
@@ -37,14 +25,14 @@ beforeAll(async () => {
   neonConfig.useSecureWebSocket = false;
   neonConfig.pipelineTLS = false;
   neonConfig.pipelineConnect = false;
-  pool = new Pool({ connectionString: "postgres://sqlbraid:sqlbraid@neon-pg/sqlbraid" });
-}, 180_000);
+  pool = new Pool({
+    connectionString: `postgres://${database.username}:${database.password}@host.docker.internal/${database.pathname.slice(1)}`,
+  });
+}, 120_000);
 
 afterAll(async () => {
   await pool?.end();
   await proxy?.stop();
-  await database?.stop();
-  await network?.stop();
 }, 60_000);
 
 test("neon.environment reports the neon driver and guards prepared statements", { timeout: 30_000 }, async () => {

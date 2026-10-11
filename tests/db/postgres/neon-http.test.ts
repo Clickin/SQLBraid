@@ -1,41 +1,31 @@
 import assert from "node:assert/strict";
 import { neon, neonConfig } from "@neondatabase/serverless";
-import { GenericContainer, Network, Wait, type StartedNetwork, type StartedTestContainer } from "testcontainers";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { afterAll, beforeAll, test } from "vitest";
+import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
+import { afterAll, beforeAll, inject, test } from "vitest";
 import { sql } from "@sqlbraid/postgres";
 import { createNeonHttpDatabase } from "@sqlbraid/postgres/neon-http";
-import { supportTarget } from "../support-target.js";
 
-const image = supportTarget(process.env.SQLBRAID_POSTGRES_TARGET ?? "postgres").reproducibility.image;
 const HTTP_PROXY_IMAGE = "ghcr.io/timowilhelm/local-neon-http-proxy:main";
 
-let network: StartedNetwork;
-let database: StartedPostgreSqlContainer;
 let proxy: StartedTestContainer;
 let db: ReturnType<typeof createNeonHttpDatabase>;
 
 const codeOf = (error: unknown) => (error as { code?: string }).code;
 
 beforeAll(async () => {
-  assert.ok(image, "PostgreSQL support target has no reproducibility image.");
-  network = await new Network().start();
-  database = await new PostgreSqlContainer(image)
-    .withNetwork(network)
-    .withNetworkAliases("neon-http-pg")
-    .withDatabase("sqlbraid")
-    .withUsername("sqlbraid")
-    .withPassword("sqlbraid")
-    .start();
+  // The proxy reaches the shared PostgreSQL container through the host port.
+  const database = new URL((inject("postgres") as { readonly connectionUri: string }).connectionUri);
   proxy = await new GenericContainer(HTTP_PROXY_IMAGE)
-    .withNetwork(network)
-    .withEnvironment({ PG_CONNECTION_STRING: "postgres://sqlbraid:sqlbraid@neon-http-pg:5432/sqlbraid" })
+    .withExtraHosts([{ host: "host.docker.internal", ipAddress: "host-gateway" }])
+    .withEnvironment({
+      PG_CONNECTION_STRING: `postgres://${database.username}:${database.password}@host.docker.internal:${database.port}${database.pathname}`,
+    })
     .withExposedPorts(4444)
     .withWaitStrategy(Wait.forListeningPorts())
     .start();
   neonConfig.fetchEndpoint = () => `http://${proxy.getHost()}:${proxy.getMappedPort(4444)}/sql`;
   neonConfig.useSecureWebSocket = false;
-  const client = neon("postgres://sqlbraid:sqlbraid@db.localtest.me:5432/sqlbraid");
+  const client = neon(`postgres://${database.username}:${database.password}@db.localtest.me:5432${database.pathname}`);
   db = createNeonHttpDatabase(client);
   // The proxy listens before it can reach PostgreSQL, so retry the first request.
   for (let attempt = 0; ; attempt += 1) {
@@ -49,12 +39,10 @@ beforeAll(async () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
-}, 180_000);
+}, 120_000);
 
 afterAll(async () => {
   await proxy?.stop();
-  await database?.stop();
-  await network?.stop();
 }, 60_000);
 
 test("neon-http.environment reports stateless capabilities", { timeout: 30_000 }, async () => {

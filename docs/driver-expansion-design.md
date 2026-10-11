@@ -1,6 +1,6 @@
 # Driver expansion design: postgres.js, Neon, PGlite, PlanetScale HTTP
 
-Status: proposal. This page is not a support claim and not a release claim. Support labels come only from `support/targets/` after exact-revision CI evidence.
+Status: steps 0 to 4a are built. Step 4b is rejected (see section 7). This page is not a support claim and not a release claim. No `support/targets/` record exists yet for the new adapters, so they have no support label. Support labels come only from `support/targets/` after exact-revision CI evidence.
 
 Rules that apply: `AGENTS.md` sections 8, 10, 11 and 14, and `docs/driver-author-guide.md`.
 
@@ -13,7 +13,7 @@ Rules that apply: `AGENTS.md` sections 8, 10, 11 and 14, and `docs/driver-author
 | 2    | `postgres` (postgres.js)                                      | postgres | `@sqlbraid/postgres/postgres-js` | Official, if CI passes |
 | 3    | `@electric-sql/pglite`                                        | postgres | `@sqlbraid/postgres/pglite`      | Official, if CI passes |
 | 4a   | `@neondatabase/serverless` `neon()` over HTTP                 | postgres | `@sqlbraid/postgres/neon-http`   | Compatible             |
-| 4b   | `@planetscale/database`                                       | mysql    | `@sqlbraid/mysql/planetscale`    | Compatible             |
+| 4b   | `@planetscale/database`                                       | mysql    | none                             | Rejected               |
 
 Decisions:
 
@@ -122,6 +122,8 @@ Evidence: a local Neon HTTP proxy in Testcontainers. Label Compatible.
 
 ## 7. Step 4b: PlanetScale HTTP
 
+**Rejected on 2026-10-12.** The original plan below is kept as history. See section 11 for the reason.
+
 Dialect: MySQL (`@sqlbraid/mysql` type policy). Subpath: `@sqlbraid/mysql/planetscale`.
 
 - Transport: `?` text-positional. Use `conn.execute(sql, values)`.
@@ -167,3 +169,32 @@ Add the new subpaths to the runtime-only packed gate. The runtime roots must sti
 - Does step 4a (Neon HTTP) belong in 1.x, given its narrow capabilities? The default here is yes, as Compatible.
 - Is a browser cell for PGlite in scope for the first release? The default here is no.
 - Can the project pay for a real Neon project in CI? The default here is no, so Neon stays Compatible.
+
+## 11. Outcome of the spikes (2026-10-12)
+
+Each adapter was tested against a real PostgreSQL 16.4 container. Neon used a local WebSocket proxy or a local HTTP proxy.
+
+| Step | Result                                                                                                                                                |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Shared code is in `packages/postgres/src/common/`. The `pg` suites pass without edits.                                                                |
+| 1    | Neon `Pool` works through `createPgPoolProvider` without a fork. The pooled-endpoint PgBouncer question is open, so `statement.prepare` is `guarded`. |
+| 2    | Raw `BEGIN` works on a reserved connection (the `UNSAFE_TRANSACTION` guard accepts `sql.reserved`). Cancel and discard need workarounds, see below.   |
+| 3    | PGlite works as a serialized executor. Streaming and cancellation are unsupported.                                                                    |
+| 4a   | Neon HTTP works as a stateless executor with atomic `remote-batch` bulk.                                                                              |
+| 4b   | Rejected. See section 7.                                                                                                                              |
+
+postgres.js findings that changed the design:
+
+- A cold `sql.reserve()` never settles when `fetch_types` is off. The provider runs `SELECT 1` before each reserve.
+- postgres.js does not expose the physical connection. Terminating the backend from the same connection raised an uncaught `57P01` error. A discarded lease runs `ROLLBACK` and `DISCARD ALL` instead.
+- `query.cancel()` can reach a later statement. The adapter declares `statement.cancel` unsupported.
+- Routine calls are not implemented for postgres.js, PGlite and Neon HTTP.
+
+Step 4b is rejected because `@planetscale/database` 2.0.0 does not bind parameters. Its README states that `execute` does not interpolate query parameters, and that a caller must escape values into the SQL text. An adapter would have to build literals on the client. AGENTS section 6 requires bound parameters, and the red team report lists client-side interpolation in the MariaDB stream path as a Medium finding. Revisit the step only if the driver offers server-side binding.
+
+Not done yet:
+
+- `support/targets/` records, `support/test-registry.json` entries and `support/runtime-compatibility.json` cells for the four adapters.
+- `docs-claims` tests for the documented behavior.
+- Evidence for the Neon pooled endpoint with PgBouncer.
+- `pnpm run test:consumer` and the Bun and Deno runtime cells.
