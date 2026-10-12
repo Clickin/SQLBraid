@@ -18,6 +18,9 @@ assert.equal(typeof helpers.assertDirectiveCondition, "function");
 
 if (process.env.SQLBRAID_COMPAT_DRIVER === "better-sqlite3") await smokeBetterSqlite3();
 if (process.env.SQLBRAID_COMPAT_DRIVER === "@libsql/client") await smokeLibsql();
+if (process.env.SQLBRAID_COMPAT_DRIVER === "@electric-sql/pglite") await smokePglite();
+if (process.env.SQLBRAID_COMPAT_DRIVER === "postgres") await smokePostgresJs();
+if (process.env.SQLBRAID_COMPAT_DRIVER === "@neondatabase/serverless") await smokeNeon();
 
 async function smokeBetterSqlite3() {
   const loaded = await import("better-sqlite3");
@@ -75,4 +78,61 @@ async function smokeLibsql() {
     { exact: "9223372036854775807", real_value: 1.5 },
   ]);
   client.close?.();
+}
+
+// PGlite runs in process, so this smoke executes real SQL.
+async function smokePglite() {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { sql: postgres } = await import("@sqlbraid/postgres");
+  const { createPgliteDatabase } = await import("@sqlbraid/postgres/pglite");
+  const pg = await PGlite.create();
+  try {
+    const db = createPgliteDatabase(pg);
+    assert.equal((await db.environment()).driver.id, "pglite");
+    await db.execute(postgres.command`CREATE TABLE values_table (id int PRIMARY KEY, exact int8 NOT NULL)`);
+    await db.execute(postgres.command`INSERT INTO values_table VALUES (1, ${9223372036854775807n})`);
+    assert.deepEqual(await db.all(postgres.rows`SELECT id, exact FROM values_table`), [
+      { id: "1", exact: "9223372036854775807" },
+    ]);
+    await assert.rejects(
+      db.tx(async (tx) => {
+        await tx.execute(postgres.command`INSERT INTO values_table VALUES (2, 7)`);
+        throw new Error("compatibility rollback");
+      }),
+      /compatibility rollback/u,
+    );
+    assert.deepEqual(await db.all(postgres.rows`SELECT id FROM values_table`), [{ id: "1" }]);
+  } finally {
+    await pg.close();
+  }
+}
+
+// The network drivers connect lazily. No database runs here, so these smokes prove that the installed driver
+// objects pass the adapter checks, not that a query works.
+const unreachable = "postgres://user:password@127.0.0.1:1/database";
+
+async function smokePostgresJs() {
+  const loaded = await import("postgres");
+  const postgres = loaded.default ?? loaded;
+  const { createPostgresJsDatabase, postgresJsOptions } = await import("@sqlbraid/postgres/postgres-js");
+  const client = postgres(unreachable, { max: 1, ...postgresJsOptions() });
+  try {
+    const db = createPostgresJsDatabase(client);
+    assert.equal((await db.environment()).driver.id, "postgres-js");
+  } finally {
+    await client.end({ timeout: 0 });
+  }
+}
+
+async function smokeNeon() {
+  const { neon, Pool } = await import("@neondatabase/serverless");
+  const { createNeonHttpDatabase } = await import("@sqlbraid/postgres/neon-http");
+  const { createNeonPoolDatabase } = await import("@sqlbraid/postgres/neon");
+  assert.equal((await createNeonHttpDatabase(neon(unreachable)).environment()).driver.id, "neon-http");
+  const pool = new Pool({ connectionString: unreachable });
+  try {
+    assert.equal((await createNeonPoolDatabase(pool).environment()).driver.id, "neon-serverless");
+  } finally {
+    await pool.end();
+  }
 }

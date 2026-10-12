@@ -29,6 +29,13 @@ const expectedPackageEngines = Object.freeze({
   "@sqlbraid/cli": ">=22.18.0",
   "@sqlbraid/language-server": ">=22.18.0",
 });
+const registeredDrivers = new Set([
+  "better-sqlite3",
+  "@libsql/client",
+  "@electric-sql/pglite",
+  "postgres",
+  "@neondatabase/serverless",
+]);
 const requiredCells = new Set([
   "node-16-20-2-runtime",
   "node-16-20-2-better-sqlite3-9-6-0",
@@ -36,6 +43,9 @@ const requiredCells = new Set([
   "node-16-20-2-libsql-0-18-0",
   "node-16-20-2-opentelemetry-api-1-9-1",
   "node-16-20-2-migrate",
+  "node-16-20-2-postgres-js-3-4-9",
+  "node-22-18-0-neon-serverless-1-2-0",
+  "node-22-18-0-pglite-0-5-8",
 ]);
 
 function fail(code, detail) {
@@ -136,7 +146,7 @@ async function validateRuntimeCompatibility({ root = scriptRoot } = {}) {
     }
     if (cell.driver) {
       assertExactVersion(cell.driver.version, `${cell.id}.driver.version`);
-      if (cell.driver.package !== "better-sqlite3" && cell.driver.package !== "@libsql/client") {
+      if (!registeredDrivers.has(cell.driver.package)) {
         fail("RUNTIME_COMPATIBILITY_DRIVER", `${cell.id} has an unregistered driver ${cell.driver.package}.`);
       }
     }

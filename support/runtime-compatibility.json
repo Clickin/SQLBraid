@@ -33,7 +33,10 @@
   "cells": [
     {
       "id": "node-16-20-2-migrate",
-      "runtime": { "id": "node", "version": "16.20.2" },
+      "runtime": {
+        "id": "node",
+        "version": "16.20.2"
+      },
       "packages": [
         "@sqlbraid/core",
         "@sqlbraid/template",
@@ -42,8 +45,13 @@
         "@sqlbraid/sqlite",
         "@sqlbraid/migrate"
       ],
-      "driver": { "package": "@libsql/client", "version": "0.18.0" },
-      "smoke": { "entrypoint": "tests/scripts/migrate-consumer.mjs" },
+      "driver": {
+        "package": "@libsql/client",
+        "version": "0.18.0"
+      },
+      "smoke": {
+        "entrypoint": "tests/scripts/migrate-consumer.mjs"
+      },
       "releaseBlocking": true,
       "reason": "Packed migration runtime, SQL loading, a pre-generated manifest and optional schema drift with a real SQLite database."
     },
@@ -162,11 +170,103 @@
       "reason": "Local libSQL client line selected for the candidate Node floor."
     },
     {
+      "id": "node-16-20-2-postgres-js-3-4-9",
+      "runtime": {
+        "id": "node",
+        "version": "16.20.2"
+      },
+      "packages": [
+        "@sqlbraid/core",
+        "@sqlbraid/template",
+        "@sqlbraid/runtime",
+        "@sqlbraid/postgres",
+        "@sqlbraid/mysql",
+        "@sqlbraid/mariadb",
+        "@sqlbraid/sqlite",
+        "@sqlbraid/oracle",
+        "@sqlbraid/mssql",
+        "@sqlbraid/bun-sql",
+        "sqlbraid"
+      ],
+      "driver": {
+        "package": "postgres",
+        "version": "3.4.9"
+      },
+      "smoke": {
+        "entrypoint": "scripts/runtime-compatibility-smoke.mjs"
+      },
+      "releaseBlocking": true,
+      "reason": "postgres.js declares node >=12. The smoke installs the packed adapter, checks the lossless client options and builds the provider without a database."
+    },
+    {
+      "id": "node-22-18-0-neon-serverless-1-2-0",
+      "runtime": {
+        "id": "node",
+        "version": "22.18.0"
+      },
+      "packages": [
+        "@sqlbraid/core",
+        "@sqlbraid/template",
+        "@sqlbraid/runtime",
+        "@sqlbraid/postgres",
+        "@sqlbraid/mysql",
+        "@sqlbraid/mariadb",
+        "@sqlbraid/sqlite",
+        "@sqlbraid/oracle",
+        "@sqlbraid/mssql",
+        "@sqlbraid/bun-sql",
+        "sqlbraid"
+      ],
+      "driver": {
+        "package": "@neondatabase/serverless",
+        "version": "1.2.0"
+      },
+      "smoke": {
+        "entrypoint": "scripts/runtime-compatibility-smoke.mjs"
+      },
+      "releaseBlocking": true,
+      "reason": "@neondatabase/serverless declares node >=19.0.0. The smoke builds the WebSocket pool and HTTP adapters without a database or network."
+    },
+    {
+      "id": "node-22-18-0-pglite-0-5-8",
+      "runtime": {
+        "id": "node",
+        "version": "22.18.0"
+      },
+      "packages": [
+        "@sqlbraid/core",
+        "@sqlbraid/template",
+        "@sqlbraid/runtime",
+        "@sqlbraid/postgres",
+        "@sqlbraid/mysql",
+        "@sqlbraid/mariadb",
+        "@sqlbraid/sqlite",
+        "@sqlbraid/oracle",
+        "@sqlbraid/mssql",
+        "@sqlbraid/bun-sql",
+        "sqlbraid"
+      ],
+      "driver": {
+        "package": "@electric-sql/pglite",
+        "version": "0.5.8"
+      },
+      "smoke": {
+        "entrypoint": "scripts/runtime-compatibility-smoke.mjs"
+      },
+      "releaseBlocking": true,
+      "reason": "PGlite runs in process. The smoke runs real SQL, exact int8 text and a rollback on the packed adapter."
+    },
+    {
       "id": "node-16-20-2-opentelemetry-api-1-9-1",
-      "runtime": { "id": "node", "version": "16.20.2" },
+      "runtime": {
+        "id": "node",
+        "version": "16.20.2"
+      },
       "packages": ["@sqlbraid/core", "@sqlbraid/opentelemetry"],
       "driver": null,
-      "smoke": { "entrypoint": "tests/scripts/otel-api-consumer.mjs" },
+      "smoke": {
+        "entrypoint": "tests/scripts/otel-api-consumer.mjs"
+      },
       "releaseBlocking": true,
       "reason": "Optional API-only bridge floor; SDK/exporter compatibility is tested separately on modern Node."
     }
