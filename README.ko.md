@@ -201,7 +201,7 @@ sql.rows<User>`
 // teamName = null,   onlyActive = false ->  SELECT u.id, u.name FROM users u ORDER BY u.id
 ```
 
-지시어는 빌드 단계 없이 런타임에 동작합니다. 비활성 분기의 `${...}` 표현식까지 평가하지 않으려면 선택 사항인 컴파일러(`@sqlbraid/cli` 또는 Vite 플러그인)를 실행하세요. [dynamic @braid](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/)를 참고하세요.
+지시어는 빌드 단계 없이 런타임에 동작합니다. 비활성 분기의 `${...}` 표현식까지 평가하지 않으려면 선택 사항인 컴파일러(`@sqlbraid/cli` 또는 Vite 플러그인)를 실행하세요. 컴파일러는 SQL 분기를 펼치거나 빌드 시점에 SQL을 만들지 않습니다. 각 `${...}` 표현식이 실행되는 시점만 바꿉니다. SQL과 값은 여전히 런타임에 만듭니다. [컴파일러가 하는 일](https://clickin.github.io/SQLBraid/latest/ko/concepts/dynamic-braid/#컴파일러가-하는-일)을 참고하세요.
 
 테이블 이름, 컬럼 목록, 조각 같은 SQL 구조를 문장에 넣어야 하면 명시적인 헬퍼 `sql.ident`, `sql.list`, `sql.join`, `sql.fragment`를 씁니다. [구조 조각](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/)을 참고하세요.
 

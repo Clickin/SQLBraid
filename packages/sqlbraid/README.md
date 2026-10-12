@@ -199,7 +199,7 @@ sql.rows<User>`
 // teamName = null,   onlyActive = false ->  SELECT u.id, u.name FROM users u ORDER BY u.id
 ```
 
-Directives work at runtime with no build step. If you also want inactive branches to skip evaluating their `${...}` expressions, run the optional compiler (`@sqlbraid/cli` or the Vite plugin). See [dynamic @braid](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/).
+Directives work at runtime with no build step. If you also want inactive branches to skip evaluating their `${...}` expressions, run the optional compiler (`@sqlbraid/cli` or the Vite plugin). The compiler does not expand the SQL branches or build SQL at build time. It only changes when each `${...}` expression runs. SQL and values are still made at runtime. See [what the compiler does](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/#what-the-compiler-does).
 
 To put SQL structure in a statement (a table name, a column list, a fragment), you use an explicit helper: `sql.ident`, `sql.list`, `sql.join`, or `sql.fragment`. See [structural fragments](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/).
 
