@@ -201,9 +201,10 @@ Done after the spikes (2026-10-12):
 - postgres.js keeps the physical connection after a discarded lease (it runs `ROLLBACK` and `DISCARD ALL`). The shared integration scenario `transaction.caught-error-terminal-outcome` has a harness flag `discardClosesPhysical` for this case.
 - The environment of each adapter reports the profile ID `pg-lossless-text`, not the profile ID in its target record. No check compares the two yet.
 
+- `support/runtime-compatibility.json` has three cells: `node-16-20-2-postgres-js-3-4-9`, `node-22-18-0-neon-serverless-1-2-0` and `node-22-18-0-pglite-0-5-8`. They install the packed tarballs with the exact driver version. The PGlite smoke runs real SQL. The postgres.js and Neon smokes build the providers and adapters without a database, so they prove install and adapter checks, not queries. Neon HTTP shares the Neon cell. Each cell passed locally under its exact Node version.
+
 Not done yet:
 
-- `support/runtime-compatibility.json` cells with plain-JavaScript smoke tests on the packed tarballs. Neon needs Node 19 or later (`@neondatabase/serverless` declares `node >=19.0.0`).
 - `docs-claims` tests for the documented behavior.
 - Evidence for the Neon pooled endpoint with PgBouncer.
 - The Bun and Deno runtime cells for Neon and PGlite.

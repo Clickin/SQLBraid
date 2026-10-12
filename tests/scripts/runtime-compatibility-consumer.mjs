@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 
+// The network drivers connect lazily. No database runs here, so these smokes prove that the installed driver
+// objects pass the adapter checks, not that a query works.
+const unreachable = "postgres://user:password@127.0.0.1:1/database";
+
 const { sql } = await import("@sqlbraid/sqlite");
 const rendered = sql`SELECT ${1} AS value`.render();
 assert.deepEqual(rendered.segments, ["SELECT ", " AS value"]);
@@ -107,18 +111,17 @@ async function smokePglite() {
   }
 }
 
-// The network drivers connect lazily. No database runs here, so these smokes prove that the installed driver
-// objects pass the adapter checks, not that a query works.
-const unreachable = "postgres://user:password@127.0.0.1:1/database";
-
 async function smokePostgresJs() {
   const loaded = await import("postgres");
   const postgres = loaded.default ?? loaded;
-  const { createPostgresJsDatabase, postgresJsOptions } = await import("@sqlbraid/postgres/postgres-js");
+  const { createPostgresJsProvider, postgresJsOptions } = await import("@sqlbraid/postgres/postgres-js");
   const client = postgres(unreachable, { max: 1, ...postgresJsOptions() });
   try {
-    const db = createPostgresJsDatabase(client);
-    assert.equal((await db.environment()).driver.id, "postgres-js");
+    // The provider rejects a client whose parsers differ from the lossless text profile.
+    const provider = createPostgresJsProvider(client);
+    assert.equal(typeof provider.acquire, "function");
+    assert.ok(provider.statementBinding);
+    assert.throws(() => createPostgresJsProvider(postgres(unreachable, { max: 1 })), /fetch_types|postgresJsOptions/u);
   } finally {
     await client.end({ timeout: 0 });
   }
@@ -126,12 +129,14 @@ async function smokePostgresJs() {
 
 async function smokeNeon() {
   const { neon, Pool } = await import("@neondatabase/serverless");
-  const { createNeonHttpDatabase } = await import("@sqlbraid/postgres/neon-http");
-  const { createNeonPoolDatabase } = await import("@sqlbraid/postgres/neon");
-  assert.equal((await createNeonHttpDatabase(neon(unreachable)).environment()).driver.id, "neon-http");
+  const { createNeonHttpExecutor } = await import("@sqlbraid/postgres/neon-http");
+  const { createNeonPoolProvider } = await import("@sqlbraid/postgres/neon");
+  assert.ok(createNeonHttpExecutor(neon(unreachable)).statementBinding);
   const pool = new Pool({ connectionString: unreachable });
   try {
-    assert.equal((await createNeonPoolDatabase(pool).environment()).driver.id, "neon-serverless");
+    const provider = createNeonPoolProvider(pool);
+    assert.equal(typeof provider.acquire, "function");
+    assert.ok(provider.statementBinding);
   } finally {
     await pool.end();
   }
