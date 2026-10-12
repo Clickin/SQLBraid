@@ -63,7 +63,7 @@ test("driver projection retains raw/canonical representation and policy evidence
     "Streaming",
     "Routines",
     "Bulk",
-    "Excluded profiles",
+    "Limits",
   ]);
 
   const target = data.targets.find((candidate) => candidate.id === "better-sqlite3-node-22-18-0");

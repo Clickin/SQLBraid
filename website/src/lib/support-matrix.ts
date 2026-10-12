@@ -106,7 +106,7 @@ const labels = {
     stream: "Streaming",
     routine: "Routines",
     bulk: "Bulk",
-    exclusions: "Excluded profiles",
+    exclusions: "Limits",
     condition: "Condition",
     test: "Test ID",
     ci: "CI gate",
@@ -135,7 +135,7 @@ const labels = {
     stream: "스트리밍",
     routine: "루틴",
     bulk: "벌크",
-    exclusions: "제외 프로필",
+    exclusions: "제한 사항",
     condition: "조건",
     test: "테스트 ID",
     ci: "CI 게이트",
@@ -203,6 +203,9 @@ function targetDriverLabel(target: SupportTarget): string {
 function targetRuntimeLabel(target: SupportTarget): string {
   return `${target.runtime.id}${target.runtime.version ? `@${target.runtime.version}` : ""}`;
 }
+
+/** Driver columns shown in the grid. The other columns are shown in the detail panel of the selected row. */
+export const SUPPORT_MATRIX_DRIVER_GRID = [0, 1, 2, 12, 13, 14] as const;
 
 export function supportMatrixColumns(view: SupportMatrixView, locale: SupportMatrixLocale): readonly string[] {
   const l = labels[locale];

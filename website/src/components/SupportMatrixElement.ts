@@ -1,6 +1,7 @@
 import {
   projectSupportMatrixRow,
   supportMatrixCapabilityLabel,
+  SUPPORT_MATRIX_DRIVER_GRID,
   supportMatrixColumns,
   supportMatrixStatus,
   type SupportMatrixData,
@@ -26,6 +27,10 @@ const labels = {
     results: "results",
     profile: "Profile",
     target: "Target",
+    details: "Details",
+    limits: "Limits",
+    none: "None recorded",
+    hint: "Select a row to see its details below the table.",
   },
   ko: {
     database: "데이터베이스",
@@ -40,6 +45,10 @@ const labels = {
     results: "개 결과",
     profile: "프로필",
     target: "대상",
+    details: "상세",
+    limits: "제한 사항",
+    none: "기록된 항목 없음",
+    hint: "행을 선택하면 표 아래에 상세 내용이 나옵니다.",
   },
 } as const;
 const filterKeys: readonly FilterKey[] = ["database", "driver", "runtime", "status", "profile", "capability"];
@@ -58,6 +67,7 @@ class SupportMatrixElement extends HTMLElement {
   private layer!: HTMLElement;
   private search!: HTMLInputElement;
   private filters!: Record<FilterKey, HTMLSelectElement>;
+  private selected = 0;
   private frame = 0;
   private payloadObserver?: MutationObserver;
   private hashListener = () => this.followHash();
@@ -97,6 +107,7 @@ class SupportMatrixElement extends HTMLElement {
         <div class="support-matrix__viewport" data-viewport role="table" tabindex="0" aria-label="${l.target}">
           <div class="support-matrix__header-slot" data-header></div><div class="support-matrix__rows" data-rows></div>
         </div>
+        <section class="support-matrix__details" data-details hidden aria-live="polite"></section>
       </div>
     </div>`;
     this.viewport = this.querySelector<HTMLElement>("[data-viewport]")!;
@@ -152,6 +163,8 @@ class SupportMatrixElement extends HTMLElement {
         });
         this.rebuild();
       }
+      const clickedRow = target.closest<HTMLElement>("[data-index]");
+      if (clickedRow && this.view === "driver") this.select(Number(clickedRow.dataset.index));
       const link = target.closest<HTMLAnchorElement>("[data-target-link]");
       if (link) {
         event.preventDefault();
@@ -241,7 +254,9 @@ class SupportMatrixElement extends HTMLElement {
             .toLocaleLowerCase(this.locale)
             .includes(search),
       );
-    const columns = supportMatrixColumns(this.view, this.locale);
+    const allColumns = supportMatrixColumns(this.view, this.locale);
+    const columns = this.view === "driver" ? SUPPORT_MATRIX_DRIVER_GRID.map((index) => allColumns[index]!) : allColumns;
+    this.selected = 0;
     this.style.setProperty("--matrix-columns", String(columns.length));
     this.querySelector("[data-panel]")!.setAttribute("aria-labelledby", `matrix-${this.locale}-${this.view}`);
     this.querySelectorAll<HTMLElement>("[data-view]").forEach((button) => {
@@ -255,9 +270,44 @@ class SupportMatrixElement extends HTMLElement {
     this.viewport.setAttribute("aria-colcount", String(columns.length));
     this.layer.style.height = `${this.rows.length * ROW_HEIGHT}px`;
     this.viewport.scrollTop = 0;
-    this.querySelector("[data-count]")!.textContent = `${this.rows.length} ${labels[this.locale].results}`;
+    this.querySelector("[data-count]")!.textContent =
+      `${this.rows.length} ${labels[this.locale].results}` +
+      (this.view === "driver" ? ` · ${labels[this.locale].hint}` : "");
     this.renderVisible();
+    this.renderDetails();
     this.updateScrollEdges();
+  }
+
+  private select(index: number): void {
+    if (this.view !== "driver" || index < 0 || index >= this.rows.length || index === this.selected) return;
+    this.selected = index;
+    this.renderVisible();
+    this.renderDetails();
+  }
+
+  private renderDetails(): void {
+    const panel = this.querySelector<HTMLElement>("[data-details]");
+    if (!panel) return;
+    const row = this.view === "driver" ? this.rows[this.selected] : undefined;
+    if (!row) {
+      panel.hidden = true;
+      panel.innerHTML = "";
+      return;
+    }
+    const l = labels[this.locale];
+    const columns = supportMatrixColumns("driver", this.locale);
+    const cells = projectSupportMatrixRow(this.data, "driver", row, this.locale);
+    const pair = (term: string, value: string) => `<div><dt>${escape(term)}</dt><dd>${escape(value)}</dd></div>`;
+    const facts = [
+      pair(labels[this.locale].status, supportMatrixStatus(row.target.status, this.locale)),
+      ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((index) => pair(columns[index]!, cells[index]!)),
+    ].join("");
+    const limits = row.target.driver.exclusions ?? [];
+    panel.innerHTML = `<h3>${escape(cells[0])} ${escape(cells[1])} · ${escape(row.target.id)}</h3>
+      <dl>${facts}</dl>
+      <h4>${escape(l.limits)}</h4>
+      ${limits.length ? `<ul>${limits.map((item) => `<li>${escape(item)}</li>`).join("")}</ul>` : `<p>${escape(l.none)}</p>`}`;
+    panel.hidden = false;
   }
 
   private renderCell(value: string, index: number, row: SupportMatrixRow): string {
@@ -285,8 +335,10 @@ class SupportMatrixElement extends HTMLElement {
       .slice(start, end)
       .map((row, offset) => {
         const index = start + offset;
-        const cells = projectSupportMatrixRow(this.data, this.view, row, this.locale);
-        return `<div role="row" aria-rowindex="${index + 2}" class="support-matrix__row support-matrix__data-row" data-row-view="${this.view}" tabindex="0" data-index="${index}" style="top:${index * ROW_HEIGHT}px">${cells.map((cell, cellIndex) => `<span role="cell" title="${escape(cell)}">${this.renderCell(cell, cellIndex, row)}</span>`).join("")}</div>`;
+        const projected = projectSupportMatrixRow(this.data, this.view, row, this.locale);
+        const cells = this.view === "driver" ? SUPPORT_MATRIX_DRIVER_GRID.map((cell) => projected[cell]!) : projected;
+        const selected = this.view === "driver" && index === this.selected;
+        return `<div role="row" aria-rowindex="${index + 2}" class="support-matrix__row support-matrix__data-row${selected ? " is-selected" : ""}"${this.view === "driver" ? ` aria-selected="${selected}"` : ""} data-row-view="${this.view}" tabindex="0" data-index="${index}" style="top:${index * ROW_HEIGHT}px">${cells.map((cell, cellIndex) => `<span role="cell" title="${escape(cell)}">${this.renderCell(cell, cellIndex, row)}</span>`).join("")}</div>`;
       })
       .join("");
     if (focused !== undefined)
@@ -307,6 +359,7 @@ class SupportMatrixElement extends HTMLElement {
     this.viewport.scrollTop = index * ROW_HEIGHT;
     this.renderVisible();
     this.layer.querySelector<HTMLElement>(`[data-index="${index}"]`)?.focus({ preventScroll: true });
+    this.select(index);
   }
 
   private followHash(): void {

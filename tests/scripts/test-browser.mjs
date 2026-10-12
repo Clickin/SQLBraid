@@ -319,11 +319,30 @@ async function supportMatrix(browser, previewUrl) {
       );
       if (
         profileRows.length !== expectedProfileTargets.length ||
-        expectedProfileTargets.some((id) => !profileRows.some((row) => row.includes(id))) ||
-        profileRows.some((row) => !row.includes("mysql2-lossless-text"))
+        expectedProfileTargets.some((id) => !profileRows.some((row) => row.includes(id)))
       )
         throw new Error("Support matrix profile filter lost a runtime tuple or leaked another profile.");
       measurements.push({ locale, view: "profile-filter", profile: "mysql2-lossless-text", rows: profileRows.length });
+      await matrix.locator("[data-reset]").click();
+      await matrix.locator('[data-view="driver"]').click();
+      await matrix.locator('[data-index="0"]').click();
+      const firstTargetId = decodeURIComponent(
+        (await matrix.locator('[data-index="0"] [data-target-link]').getAttribute("href")).slice(1),
+      );
+      const driverDetails = await matrix.locator("[data-details]").textContent();
+      const firstDriverExclusions = await page
+        .locator("[data-support-matrix]")
+        .evaluate(
+          (element, id) =>
+            JSON.parse(element.textContent).targets.find((target) => target.id === id).driver.exclusions ?? [],
+          firstTargetId,
+        );
+      if (
+        !(await matrix.locator("[data-details]").isVisible()) ||
+        !driverDetails.includes(firstTargetId) ||
+        firstDriverExclusions.some((item) => !driverDetails.includes(item))
+      )
+        throw new Error("Support matrix driver details did not show the full limits of the selected row.");
       await matrix.locator("[data-reset]").click();
       await matrix.locator('[data-view="capability"]').click();
       const capabilityStatusOptions = await matrix

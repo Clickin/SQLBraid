@@ -395,6 +395,85 @@ const statusClass = (value: string) => value.toLowerCase().replace(/[^a-z0-9-]/g
     background: color-mix(in srgb, var(--sl-color-gray-5) 35%, var(--matrix-surface));
   }
 
+  .support-matrix__data-row.is-selected {
+    background: color-mix(in srgb, var(--sl-color-accent-low) 18%, transparent);
+    box-shadow: inset 3px 0 0 var(--sl-color-accent-high);
+  }
+
+  .support-matrix__data-row[data-row-view="driver"] {
+    cursor: pointer;
+  }
+
+  .support-matrix__details {
+    margin-block-start: 0.9rem;
+    border: 1px solid var(--matrix-border);
+    border-radius: 0.5rem;
+    padding: 0.9rem 1rem;
+    background: var(--matrix-surface);
+    font-size: var(--sl-text-sm, 0.875rem);
+  }
+
+  .support-matrix__details[hidden] {
+    display: none;
+  }
+
+  .support-matrix__details h3,
+  .support-matrix__details h4 {
+    margin: 0 0 0.5rem;
+    font-size: var(--sl-text-base, 1rem);
+  }
+
+  .support-matrix__details h3 {
+    font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+    overflow-wrap: anywhere;
+  }
+
+  .support-matrix__details h4 {
+    margin-block-start: 0.9rem;
+    color: var(--matrix-muted);
+    font-size: var(--sl-text-xs, 0.75rem);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .support-matrix__details dl {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: 0.6rem 1.2rem;
+    margin: 0;
+  }
+
+  .support-matrix .support-matrix__details dl > div,
+  .support-matrix .support-matrix__details dt,
+  .support-matrix .support-matrix__details dd,
+  .support-matrix .support-matrix__details li,
+  .support-matrix .support-matrix__details p {
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+  }
+
+  .support-matrix__details dt {
+    color: var(--matrix-muted);
+    font-size: var(--sl-text-xs, 0.75rem);
+    font-weight: 600;
+  }
+
+  .support-matrix__details dd {
+    overflow-wrap: anywhere;
+  }
+
+  .support-matrix__details ul {
+    display: grid;
+    gap: 0.4rem;
+    margin: 0;
+    padding-inline-start: 1.2rem;
+  }
+
+  .support-matrix__details p {
+    margin: 0;
+  }
+
   .support-matrix__row a,
   .support-matrix__fallback a {
     font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
@@ -408,7 +487,6 @@ const statusClass = (value: string) => value.toLowerCase().replace(/[^a-z0-9-]/g
   .support-matrix__data-row[data-row-view="driver"] > span:nth-child(3),
   .support-matrix__data-row[data-row-view="driver"] > span:nth-child(4),
   .support-matrix__data-row[data-row-view="driver"] > span:nth-child(5),
-  .support-matrix__data-row[data-row-view="driver"] > span:nth-child(11),
   .support-matrix__data-row[data-row-view="capability"] > span:nth-child(2),
   .support-matrix__data-row[data-row-view="capability"] > span:nth-child(5) {
     font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
