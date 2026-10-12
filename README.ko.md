@@ -268,25 +268,25 @@ const rows = await db.all(sql.rows`SELECT id, created_at FROM users`);
 
 ## 지원 드라이버
 
-`sqlbraid`와 드라이버를 설치하고, 맞는 하위 경로를 import하세요. postgres.js, Neon, PGlite 어댑터는 `@sqlbraid/postgres`에서 오므로, 이 경우에는 `sqlbraid` 대신 그 패키지를 설치하세요.
+`sqlbraid`와 드라이버를 설치하고, 맞는 하위 경로를 import하세요. 드라이버 열에는 설치할 npm 패키지(또는 내장 모듈이나 플랫폼 API)를 적었습니다. postgres.js, Neon, PGlite 어댑터는 `@sqlbraid/postgres`에서 오므로, 이 경우에는 `sqlbraid` 대신 그 패키지를 설치하세요.
 
-| 데이터베이스                       | 드라이버               | import                           |
-| ---------------------------------- | ---------------------- | -------------------------------- |
-| PostgreSQL                         | `pg`                   | `sqlbraid/pg`                    |
-| PostgreSQL                         | postgres.js            | `@sqlbraid/postgres/postgres-js` |
-| PostgreSQL                         | Neon (WebSocket)       | `@sqlbraid/postgres/neon`        |
-| PostgreSQL                         | Neon (HTTP)            | `@sqlbraid/postgres/neon-http`   |
-| PostgreSQL                         | PGlite                 | `@sqlbraid/postgres/pglite`      |
-| MySQL                              | `mysql2`               | `sqlbraid/mysql2`                |
-| MariaDB                            | `mariadb`              | `sqlbraid/mariadb`               |
-| SQLite                             | `node:sqlite`          | `sqlbraid/node-sqlite`           |
-| SQLite                             | `better-sqlite3`       | `sqlbraid/better-sqlite3`        |
-| SQLite                             | libSQL                 | `sqlbraid/libsql`                |
-| SQLite                             | SQLite WASM (브라우저) | `sqlbraid/sqlite-wasm`           |
-| SQLite                             | Cloudflare D1          | `sqlbraid/d1`                    |
-| Oracle                             | `oracledb` (Thin)      | `sqlbraid/oracledb`              |
-| SQL Server                         | `tedious`              | `sqlbraid/tedious`               |
-| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL                | `sqlbraid/bun-sql`               |
+| 데이터베이스                       | 드라이버                               | import                           |
+| ---------------------------------- | -------------------------------------- | -------------------------------- |
+| PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    |
+| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` |
+| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`        |
+| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`   |
+| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`      |
+| MySQL                              | `mysql2`                               | `sqlbraid/mysql2`                |
+| MariaDB                            | `mariadb`                              | `sqlbraid/mariadb`               |
+| SQLite                             | `node:sqlite`                          | `sqlbraid/node-sqlite`           |
+| SQLite                             | `better-sqlite3`                       | `sqlbraid/better-sqlite3`        |
+| SQLite                             | `@libsql/client` (libSQL)              | `sqlbraid/libsql`                |
+| SQLite                             | `@sqlite.org/sqlite-wasm` (브라우저)   | `sqlbraid/sqlite-wasm`           |
+| SQLite                             | Cloudflare D1 바인딩                   | `sqlbraid/d1`                    |
+| Oracle                             | `oracledb` (Thin)                      | `sqlbraid/oracledb`              |
+| SQL Server                         | `tedious`                              | `sqlbraid/tedious`               |
+| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (Bun 내장)                     | `sqlbraid/bun-sql`               |
 
 ## 선택 도구
 

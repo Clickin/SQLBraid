@@ -266,25 +266,25 @@ Driver support differs. Check the [support matrix](https://clickin.github.io/SQL
 
 ## Supported drivers
 
-Install `sqlbraid` plus your driver, then import the matching subpath. The postgres.js, Neon and PGlite adapters come from `@sqlbraid/postgres`, so install that package instead of `sqlbraid` for them.
+Install `sqlbraid` plus your driver, then import the matching subpath. The Driver column shows the npm package to install (or the built-in module or platform API). The postgres.js, Neon and PGlite adapters come from `@sqlbraid/postgres`, so install that package instead of `sqlbraid` for them.
 
-| Database                           | Driver                | Import                           |
-| ---------------------------------- | --------------------- | -------------------------------- |
-| PostgreSQL                         | `pg`                  | `sqlbraid/pg`                    |
-| PostgreSQL                         | postgres.js           | `@sqlbraid/postgres/postgres-js` |
-| PostgreSQL                         | Neon (WebSocket)      | `@sqlbraid/postgres/neon`        |
-| PostgreSQL                         | Neon (HTTP)           | `@sqlbraid/postgres/neon-http`   |
-| PostgreSQL                         | PGlite                | `@sqlbraid/postgres/pglite`      |
-| MySQL                              | `mysql2`              | `sqlbraid/mysql2`                |
-| MariaDB                            | `mariadb`             | `sqlbraid/mariadb`               |
-| SQLite                             | `node:sqlite`         | `sqlbraid/node-sqlite`           |
-| SQLite                             | `better-sqlite3`      | `sqlbraid/better-sqlite3`        |
-| SQLite                             | libSQL                | `sqlbraid/libsql`                |
-| SQLite                             | SQLite WASM (browser) | `sqlbraid/sqlite-wasm`           |
-| SQLite                             | Cloudflare D1         | `sqlbraid/d1`                    |
-| Oracle                             | `oracledb` (Thin)     | `sqlbraid/oracledb`              |
-| SQL Server                         | `tedious`             | `sqlbraid/tedious`               |
-| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL               | `sqlbraid/bun-sql`               |
+| Database                           | Driver                                 | Import                           |
+| ---------------------------------- | -------------------------------------- | -------------------------------- |
+| PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    |
+| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` |
+| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`        |
+| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`   |
+| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`      |
+| MySQL                              | `mysql2`                               | `sqlbraid/mysql2`                |
+| MariaDB                            | `mariadb`                              | `sqlbraid/mariadb`               |
+| SQLite                             | `node:sqlite`                          | `sqlbraid/node-sqlite`           |
+| SQLite                             | `better-sqlite3`                       | `sqlbraid/better-sqlite3`        |
+| SQLite                             | `@libsql/client` (libSQL)              | `sqlbraid/libsql`                |
+| SQLite                             | `@sqlite.org/sqlite-wasm` (browser)    | `sqlbraid/sqlite-wasm`           |
+| SQLite                             | Cloudflare D1 binding                  | `sqlbraid/d1`                    |
+| Oracle                             | `oracledb` (Thin)                      | `sqlbraid/oracledb`              |
+| SQL Server                         | `tedious`                              | `sqlbraid/tedious`               |
+| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (built into Bun)               | `sqlbraid/bun-sql`               |
 
 ## Optional tooling
 
