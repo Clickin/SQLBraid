@@ -106,14 +106,43 @@ END $$;
 ```
 
 ```ts
+import type { RoutineCallResult } from "sqlbraid";
+import { postgresParameter, sql } from "sqlbraid/pg";
+
+interface UserRow {
+  id: string;
+  name: string;
+}
+
+const result = await db.tx(async (tx) =>
+  tx.call(
+    sql.call<RoutineCallResult<{}, [UserRow]>>`
+      CALL list_active_users(${sql.out("users", postgresParameter.refcursor())})
+    `,
+  ),
+);
+
+console.log(result.resultSets[0].rows); // UserRow[]: [{ id: "1", name: "Ada" }]
+```
+
+`RoutineCallResult<Output, Sets, ReturnValue>` declares the whole result. `Output` is the type of the scalar OUT values, `Sets` is a tuple with one row type for each result set, and `ReturnValue` is the return value. Each result set can have a different row type. Here the refcursor becomes a result set, so `Output` is empty.
+
+As with `sql.rows`, you can use Standard Schema instead of a type argument. The schema checks each row and can convert it. The row type is the output type of the schema:
+
+```ts
 import { postgresParameter, sql } from "sqlbraid/pg";
 
 const result = await db.tx(async (tx) =>
-  tx.call(sql.call`CALL list_active_users(${sql.out("users", postgresParameter.refcursor())})`),
+  tx.call(
+    sql.call({ resultSets: [UserSchema] as const })`
+      CALL list_active_users(${sql.out("users", postgresParameter.refcursor())})
+    `,
+  ),
 );
-
-console.log(result.resultSets[0].rows); // [{ id: "1", name: "Ada" }]
+// With a schema that turns id into a number: [{ id: 1, name: "Ada" }]
 ```
+
+`output` and `returnValue` accept a schema in the same way.
 
 Driver support for OUT parameters, multiple result sets and return values differs. See [routine calls](https://clickin.github.io/SQLBraid/latest/concepts/routines/) and the [support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/).
 

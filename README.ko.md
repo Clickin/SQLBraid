@@ -108,14 +108,43 @@ END $$;
 ```
 
 ```ts
+import type { RoutineCallResult } from "sqlbraid";
+import { postgresParameter, sql } from "sqlbraid/pg";
+
+interface UserRow {
+  id: string;
+  name: string;
+}
+
+const result = await db.tx(async (tx) =>
+  tx.call(
+    sql.call<RoutineCallResult<{}, [UserRow]>>`
+      CALL list_active_users(${sql.out("users", postgresParameter.refcursor())})
+    `,
+  ),
+);
+
+console.log(result.resultSets[0].rows); // UserRow[]: [{ id: "1", name: "Ada" }]
+```
+
+`RoutineCallResult<Output, Sets, ReturnValue>`는 호출 결과 전체를 선언합니다. `Output`은 스칼라 OUT 값의 타입이고, `Sets`는 결과 집합마다 행 타입 하나씩을 담은 튜플이며, `ReturnValue`는 반환값 타입입니다. 결과 집합마다 행 타입이 다를 수 있습니다. 이 예제에서는 refcursor가 결과 집합이 되므로 `Output`은 비어 있습니다.
+
+`sql.rows`처럼 타입 인자 대신 Standard Schema를 쓸 수도 있습니다. 스키마가 각 행을 검증하고 변환할 수 있습니다. 행 타입은 스키마의 출력 타입입니다.
+
+```ts
 import { postgresParameter, sql } from "sqlbraid/pg";
 
 const result = await db.tx(async (tx) =>
-  tx.call(sql.call`CALL list_active_users(${sql.out("users", postgresParameter.refcursor())})`),
+  tx.call(
+    sql.call({ resultSets: [UserSchema] as const })`
+      CALL list_active_users(${sql.out("users", postgresParameter.refcursor())})
+    `,
+  ),
 );
-
-console.log(result.resultSets[0].rows); // [{ id: "1", name: "Ada" }]
+// id를 숫자로 바꾸는 스키마를 쓰면: [{ id: 1, name: "Ada" }]
 ```
+
+`output`과 `returnValue`도 같은 방식으로 스키마를 받습니다.
 
 OUT 파라미터, 여러 결과 집합, 반환값의 지원 범위는 드라이버마다 다릅니다. [루틴 호출](https://clickin.github.io/SQLBraid/latest/concepts/routines/)과 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)를 참고하세요.
 
