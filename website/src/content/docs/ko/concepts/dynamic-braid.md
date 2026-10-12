@@ -24,6 +24,44 @@ const query = sql.rows<UserRow>`
 - `set`은 UPDATE의 대입 목록에 같은 처리를 합니다. 남은 대입이 없으면 `BRAID_EMPTY_SET`을 던집니다.
 - `trim`은 명시적인 속성 `prefix`, `prefixOverrides`, `suffix`, `suffixOverrides`를 받습니다.
 
+## `set`과 `trim`
+
+`set`은 UPDATE의 대입 목록을 만듭니다. 각 대입 뒤에 쉼표를 붙여 쓰면, `set`이 마지막 쉼표를 지웁니다.
+
+```ts
+const update = sql.command`
+  UPDATE users
+  /*@braid set*/
+    /*@braid if ${newName != null}*/ name = ${newName}, /*@braid end*/
+    /*@braid if ${newAge != null}*/ age = ${newAge}, /*@braid end*/
+  /*@braid end*/
+  WHERE id = ${userId}
+`;
+// newName = "Ada", newAge = null  ->  UPDATE users SET name = ? WHERE id = ?
+// newName = null,  newAge = null  ->  데이터베이스를 호출하기 전에 BRAID_EMPTY_SET을 던집니다
+```
+
+`trim`은 일반 형태입니다. `where`와 `set`은 속성이 고정된 `trim`입니다. 괄호로 묶은 목록처럼 다른 경우에는 `trim`을 씁니다.
+
+```ts
+const query = sql.rows<UserRow>`
+  SELECT id, name FROM users
+  WHERE role IN
+  /*@braid trim prefix="(" suffix=")" suffixOverrides=","*/
+    /*@braid if ${roleA != null}*/ ${roleA}, /*@braid end*/
+    /*@braid if ${roleB != null}*/ ${roleB}, /*@braid end*/
+  /*@braid end*/
+`;
+// roleA = "x", roleB = "y"   ->  ... WHERE role IN (?, ?)
+// roleA = "x", roleB = null  ->  ... WHERE role IN (?)
+```
+
+속성 규칙은 다음과 같습니다.
+
+- `prefix`와 `suffix`는 쓴 그대로 붙습니다. 공백은 직접 넣어야 합니다. 예: `prefix="WHERE "`. 공백이 없으면 결과가 `WHEREid = ?`가 됩니다.
+- `prefixOverrides`와 `suffixOverrides`는 제거할 토큰 목록이고 `|`로 구분합니다. 예: `prefixOverrides="AND |OR "`. 대소문자를 구분하지 않습니다. 내용의 첫 토큰과 마지막 토큰만 검사합니다.
+- 내용이 비어 있으면 `trim`은 아무것도 출력하지 않습니다. `prefix`나 `suffix`도 붙이지 않습니다. 위 목록 예제에서 두 역할이 모두 `null`이면 SQL이 `WHERE role IN`이 되어 데이터베이스가 거부합니다. 이 경우는 바깥 `if`로 막으세요.
+
 ## 분기는 지연 평가됩니다
 
 **이 보장은 SQLBraid 컴파일러로 변환했을 때만 성립합니다.** 일반 JavaScript, `tsc`, 런타임 태그 호출은 태그를 호출하기 전에 모든 `${...}`를 평가합니다. 분기를 지연 평가하려면 다음 순서를 따르세요.

@@ -66,6 +66,7 @@ declare global {
   const status: string, email: string, displayName: string, sortColumn: string, sortKey: string, sort: string;
   const sortDescending: boolean, descending: boolean, includePrivate: boolean;
   const teamName: string | null, onlyActive: boolean;
+  const newName: string | null, newAge: number | null, roleA: string | null, roleB: string | null;
   const signal: AbortSignal;
   function loadPrivatePolicy(): boolean;
   function consume(row: unknown): void;
