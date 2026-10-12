@@ -268,25 +268,25 @@ const rows = await db.all(sql.rows`SELECT id, created_at FROM users`);
 
 ## 지원 드라이버
 
-`sqlbraid`와 드라이버를 설치하고, 맞는 하위 경로를 import하세요. 드라이버 열에는 설치할 npm 패키지(또는 내장 모듈이나 플랫폼 API)를 적었습니다. postgres.js, Neon, PGlite 어댑터는 `@sqlbraid/postgres`에서 오므로, 이 경우에는 `sqlbraid` 대신 그 패키지를 설치하세요.
+`sqlbraid`와 드라이버를 설치하고, 맞는 하위 경로를 import하세요. 드라이버 열에는 설치할 npm 패키지(또는 내장 모듈이나 플랫폼 API)를 적었습니다. postgres.js, Neon, PGlite 어댑터는 `@sqlbraid/postgres`에서 오므로, 이 경우에는 `sqlbraid` 대신 그 패키지를 설치하세요. 지원 열은 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)의 레이블입니다. **Official**은 CI가 정확한 드라이버 버전과 런타임을 테스트한다는 뜻입니다. **Compatible**은 API가 동작할 수 있지만 정확히 인증된 대상은 없다는 뜻입니다.
 
-| 데이터베이스                       | 드라이버                               | import                           |
-| ---------------------------------- | -------------------------------------- | -------------------------------- |
-| PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    |
-| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` |
-| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`        |
-| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`   |
-| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`      |
-| MySQL                              | `mysql2`                               | `sqlbraid/mysql2`                |
-| MariaDB                            | `mariadb`                              | `sqlbraid/mariadb`               |
-| SQLite                             | `node:sqlite`                          | `sqlbraid/node-sqlite`           |
-| SQLite                             | `better-sqlite3`                       | `sqlbraid/better-sqlite3`        |
-| SQLite                             | `@libsql/client` (libSQL)              | `sqlbraid/libsql`                |
-| SQLite                             | `@sqlite.org/sqlite-wasm` (브라우저)   | `sqlbraid/sqlite-wasm`           |
-| SQLite                             | Cloudflare D1 바인딩                   | `sqlbraid/d1`                    |
-| Oracle                             | `oracledb` (Thin)                      | `sqlbraid/oracledb`              |
-| SQL Server                         | `tedious`                              | `sqlbraid/tedious`               |
-| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (Bun 내장)                     | `sqlbraid/bun-sql`               |
+| 데이터베이스                       | 드라이버                               | import                           | 지원       |
+| ---------------------------------- | -------------------------------------- | -------------------------------- | ---------- |
+| PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    | Official   |
+| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` | Compatible |
+| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`        | Compatible |
+| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`   | Compatible |
+| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`      | Compatible |
+| MySQL                              | `mysql2`                               | `sqlbraid/mysql2`                | Official   |
+| MariaDB                            | `mariadb`                              | `sqlbraid/mariadb`               | Official   |
+| SQLite                             | `node:sqlite`                          | `sqlbraid/node-sqlite`           | Official   |
+| SQLite                             | `better-sqlite3`                       | `sqlbraid/better-sqlite3`        | Compatible |
+| SQLite                             | `@libsql/client` (libSQL)              | `sqlbraid/libsql`                | Compatible |
+| SQLite                             | `@sqlite.org/sqlite-wasm` (브라우저)   | `sqlbraid/sqlite-wasm`           | Official   |
+| SQLite                             | Cloudflare D1 바인딩                   | `sqlbraid/d1`                    | Compatible |
+| Oracle                             | `oracledb` (Thin)                      | `sqlbraid/oracledb`              | Official   |
+| SQL Server                         | `tedious`                              | `sqlbraid/tedious`               | Official   |
+| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (Bun 내장)                     | `sqlbraid/bun-sql`               | Official   |
 
 ## 선택 도구
 
@@ -295,9 +295,31 @@ const rows = await db.all(sql.rows`SELECT id, created_at FROM users`);
 - **코드 생성** (`@sqlbraid/codegen`, `@sqlbraid/cli`): 데이터베이스 스키마를 읽어 `Row`, `Insert`, `Update` 타입을 생성합니다. CI에서 `codegen --check`를 실행할 수 있습니다.
 - **에디터 지원** (`@sqlbraid/language-server`, [VS Code 확장](https://marketplace.visualstudio.com/items?itemName=sqlbraid.sqlbraid-vscode)): 템플릿 안의 SQL에 진단, 자동 완성, 호버를 제공합니다.
 - **Vite 플러그인** (`@sqlbraid/vite`): 빌드에서 지시어 컴파일러를 실행합니다.
+- **Webpack, Rspack, Next.js** (`@sqlbraid/webpack`): 지시어 컴파일러를 실행하는 로더입니다. Next.js 16의 Webpack과 Turbopack에서 모두 동작합니다. [Next.js 예제](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack)를 참고하세요.
+- **에이전트 스킬** ([`skills/sqlbraid`](https://github.com/Clickin/SQLBraid/tree/main/skills/sqlbraid)): AI 코딩 에이전트에게 SQLBraid 쿼리 작성법을 알려 주는 이식 가능한 스킬입니다.
 - **마이그레이션** (`@sqlbraid/migrate`): 버전이 있는 SQL 파일과 명시적인 시작 시 검사입니다. 마이그레이션은 SQL 파일일 뿐이고, 데이터베이스를 만들어도 자동으로 실행되지 않습니다. `migrate` 명령은 `@sqlbraid/cli`에 있습니다.
 
 모든 패키지는 [패키지 구성](https://clickin.github.io/SQLBraid/latest/reference/packages/)을 참고하세요.
+
+## 예제
+
+각 예제는 작은 프로젝트이고, 저장소가 패킹한 패키지로 테스트합니다.
+
+| 예제                                                                                                          | 보여 주는 것                                                                               |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`nextjs-webpack`](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack)                     | Next.js App Router, Webpack 로더(Webpack과 Turbopack), 동적 필터, 트랜잭션                 |
+| [`bookstore-api`](https://github.com/Clickin/SQLBraid/tree/main/examples/bookstore-api)                       | PostgreSQL 기반 Hono REST API: 마이그레이션, Standard Schema 매핑, 주문 트랜잭션, 스트리밍 |
+| [`sqlite-quickstart`](https://github.com/Clickin/SQLBraid/tree/main/examples/sqlite-quickstart)               | 가장 작은 프로젝트: `node:sqlite`와 컴파일러                                               |
+| [`postgres`](https://github.com/Clickin/SQLBraid/tree/main/examples/postgres)                                 | PostgreSQL 클라이언트와 풀                                                                 |
+| [`mysql`](https://github.com/Clickin/SQLBraid/tree/main/examples/mysql)                                       | MySQL 풀                                                                                   |
+| [`codegen`](https://github.com/Clickin/SQLBraid/tree/main/examples/codegen)                                   | 메타데이터 스냅샷에서 `Row`, `Insert`, `Update` 타입 생성                                  |
+| [`opentelemetry-slow-query`](https://github.com/Clickin/SQLBraid/tree/main/examples/opentelemetry-slow-query) | OpenTelemetry 관찰자로 쿼리 스팬과 소요 시간 메트릭 수집                                   |
+
+## 요구 사항
+
+- 런타임 패키지(`sqlbraid`와 드라이버 하위 경로)는 Node.js 16.20.2 이상을 선언합니다. 드라이버마다 자체 최소 버전이 있습니다. `node:sqlite` 어댑터는 Node.js 22.18 이상이 필요합니다.
+- 빌드와 에디터 도구(`@sqlbraid/cli`, `@sqlbraid/compiler`, `@sqlbraid/vite`, `@sqlbraid/webpack`, `@sqlbraid/language-server`)는 Node.js 22.18 이상이 필요합니다.
+- 권장 Node.js 버전은 지원 중인 LTS 릴리스입니다.
 
 ## 상태
 

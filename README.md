@@ -268,25 +268,25 @@ Driver support differs. Check the [support matrix](https://clickin.github.io/SQL
 
 ## Supported drivers
 
-Install `sqlbraid` plus your driver, then import the matching subpath. The Driver column shows the npm package to install (or the built-in module or platform API). The postgres.js, Neon and PGlite adapters come from `@sqlbraid/postgres`, so install that package instead of `sqlbraid` for them.
+Install `sqlbraid` plus your driver, then import the matching subpath. The Driver column shows the npm package to install (or the built-in module or platform API). The postgres.js, Neon and PGlite adapters come from `@sqlbraid/postgres`, so install that package instead of `sqlbraid` for them. The Support column is the label in the [support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/). **Official** means that CI tests the exact driver version and runtime. **Compatible** means that the API can work, but no exact certified target is claimed.
 
-| Database                           | Driver                                 | Import                           |
-| ---------------------------------- | -------------------------------------- | -------------------------------- |
-| PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    |
-| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` |
-| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`        |
-| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`   |
-| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`      |
-| MySQL                              | `mysql2`                               | `sqlbraid/mysql2`                |
-| MariaDB                            | `mariadb`                              | `sqlbraid/mariadb`               |
-| SQLite                             | `node:sqlite`                          | `sqlbraid/node-sqlite`           |
-| SQLite                             | `better-sqlite3`                       | `sqlbraid/better-sqlite3`        |
-| SQLite                             | `@libsql/client` (libSQL)              | `sqlbraid/libsql`                |
-| SQLite                             | `@sqlite.org/sqlite-wasm` (browser)    | `sqlbraid/sqlite-wasm`           |
-| SQLite                             | Cloudflare D1 binding                  | `sqlbraid/d1`                    |
-| Oracle                             | `oracledb` (Thin)                      | `sqlbraid/oracledb`              |
-| SQL Server                         | `tedious`                              | `sqlbraid/tedious`               |
-| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (built into Bun)               | `sqlbraid/bun-sql`               |
+| Database                           | Driver                                 | Import                           | Support    |
+| ---------------------------------- | -------------------------------------- | -------------------------------- | ---------- |
+| PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    | Official   |
+| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` | Compatible |
+| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`        | Compatible |
+| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`   | Compatible |
+| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`      | Compatible |
+| MySQL                              | `mysql2`                               | `sqlbraid/mysql2`                | Official   |
+| MariaDB                            | `mariadb`                              | `sqlbraid/mariadb`               | Official   |
+| SQLite                             | `node:sqlite`                          | `sqlbraid/node-sqlite`           | Official   |
+| SQLite                             | `better-sqlite3`                       | `sqlbraid/better-sqlite3`        | Compatible |
+| SQLite                             | `@libsql/client` (libSQL)              | `sqlbraid/libsql`                | Compatible |
+| SQLite                             | `@sqlite.org/sqlite-wasm` (browser)    | `sqlbraid/sqlite-wasm`           | Official   |
+| SQLite                             | Cloudflare D1 binding                  | `sqlbraid/d1`                    | Compatible |
+| Oracle                             | `oracledb` (Thin)                      | `sqlbraid/oracledb`              | Official   |
+| SQL Server                         | `tedious`                              | `sqlbraid/tedious`               | Official   |
+| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (built into Bun)               | `sqlbraid/bun-sql`               | Official   |
 
 ## Optional tooling
 
@@ -295,9 +295,31 @@ None of these are runtime dependencies.
 - **Codegen** (`@sqlbraid/codegen`, `@sqlbraid/cli`): reads your database schema and generates `Row`, `Insert`, and `Update` types. `codegen --check` can run in CI.
 - **Editor support** (`@sqlbraid/language-server`, [VS Code extension](https://marketplace.visualstudio.com/items?itemName=sqlbraid.sqlbraid-vscode)): diagnostics, completion, and hover for SQL inside templates.
 - **Vite plugin** (`@sqlbraid/vite`): runs the directive compiler in your build.
+- **Webpack, Rspack and Next.js** (`@sqlbraid/webpack`): a loader that runs the directive compiler. It works with Next.js 16 on Webpack and on Turbopack. See the [Next.js example](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack).
+- **Agent skill** ([`skills/sqlbraid`](https://github.com/Clickin/SQLBraid/tree/main/skills/sqlbraid)): a portable skill that teaches AI coding agents how to write SQLBraid queries.
 - **Migrations** (`@sqlbraid/migrate`): versioned SQL files and explicit startup checks. Migrations are plain SQL files. Creating a database does not run them. The `migrate` commands are in `@sqlbraid/cli`.
 
 See the [package map](https://clickin.github.io/SQLBraid/latest/reference/packages/) for every package.
+
+## Examples
+
+Each example is a small project that the repository tests against the packed packages.
+
+| Example                                                                                                       | What it shows                                                                                  |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [`nextjs-webpack`](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack)                     | Next.js App Router, the Webpack loader (Webpack and Turbopack), dynamic filters, a transaction |
+| [`bookstore-api`](https://github.com/Clickin/SQLBraid/tree/main/examples/bookstore-api)                       | Hono REST API on PostgreSQL: migrations, Standard Schema mapping, order transaction, streaming |
+| [`sqlite-quickstart`](https://github.com/Clickin/SQLBraid/tree/main/examples/sqlite-quickstart)               | The smallest project: `node:sqlite` and the compiler                                           |
+| [`postgres`](https://github.com/Clickin/SQLBraid/tree/main/examples/postgres)                                 | PostgreSQL client and pool                                                                     |
+| [`mysql`](https://github.com/Clickin/SQLBraid/tree/main/examples/mysql)                                       | MySQL pool                                                                                     |
+| [`codegen`](https://github.com/Clickin/SQLBraid/tree/main/examples/codegen)                                   | Generate `Row`, `Insert` and `Update` types from a metadata snapshot                           |
+| [`opentelemetry-slow-query`](https://github.com/Clickin/SQLBraid/tree/main/examples/opentelemetry-slow-query) | Query spans and duration metrics with the OpenTelemetry observer                               |
+
+## Requirements
+
+- The runtime packages (`sqlbraid` and the driver subpaths) declare Node.js 16.20.2 or newer. Each driver has its own minimum. The `node:sqlite` adapter needs Node.js 22.18 or newer.
+- The build and editor tools (`@sqlbraid/cli`, `@sqlbraid/compiler`, `@sqlbraid/vite`, `@sqlbraid/webpack`, `@sqlbraid/language-server`) need Node.js 22.18 or newer.
+- The recommended Node.js versions are the supported LTS releases.
 
 ## Status
 
