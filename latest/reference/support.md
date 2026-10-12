@@ -669,6 +669,88 @@ Exclusions: MySQL has no generic DML RETURNING capability OUT and INOUT carriers
 | `dml.update-returning` | unsupported |
 | `dml.delete-returning` | unsupported |
 
+### neon-http-node-22-18-0
+
+- Status: **compatible**
+- Database: postgres 16.4 alpine; local Neon HTTP proxy
+- Driver: neon-http @1.2.0 neon-http-lossless-text
+- Runtime: node @22.18.0
+- Evidence: pending
+- Transport: text-positional ($1..$N) over HTTP, one request per statement; stream: unsupported; routine: unsupported; bulk: remote-batch (one server-side transaction)
+Exclusions: A local HTTP proxy stands in for the Neon service; no Neon project was tested. Stateless requests: db.tx, db.session, streams, statement cancellation and routine calls are unsupported. Only bulk runs as one server-side transaction.
+
+| Numeric contract | Representation | Fidelity | Profile |
+| --- | --- | --- | --- |
+| exact-integer | string | lossless | neon-http-lossless-text |
+| exact-decimal | string | lossless | neon-http-lossless-text |
+| approximate-binary | number | unsupported | neon-http-lossless-text |
+
+| Container | Status |
+| --- | --- |
+| postgres-arrays | unclassified |
+| postgres-domains | unclassified |
+| postgres-ranges | unclassified |
+| postgres-composites | unclassified |
+| oracle-objects | unsupported |
+| sql-server-variant | unsupported |
+| json-nested | unclassified |
+| vector | unclassified |
+
+| Capability | Claim |
+| --- | --- |
+| `result.rows` | guaranteed |
+| `numeric.exact-integer` | guaranteed; exact-integer; string; lossless; raw=string |
+| `numeric.exact-decimal` | guaranteed; exact-decimal; string; lossless; raw=string |
+| `data.json-lossless-text` | guaranteed |
+| `data.temporal-lossless` | guaranteed |
+| `result.command` | guaranteed |
+| `statement.bulk` | guaranteed |
+| `transaction` | unsupported; neon-http.non-interactive-transaction: Neon HTTP transactions are a fixed statement list, not an interactive closure |
+| `session.pinned` | unsupported; neon-http.stateless-requests: Neon HTTP sends each statement as its own request and cannot pin a session |
+| `statement.stream` | unsupported |
+| `statement.cancel` | unsupported |
+| `routine.call` | unsupported |
+
+### neon-node-22-18-0
+
+- Status: **compatible**
+- Database: postgres 16.4 alpine; local Neon WebSocket proxy
+- Driver: neon-serverless @1.2.0 neon-lossless-text
+- Runtime: node @22.18.0
+- Evidence: pending
+- Transport: text-positional ($1..$N) over WebSocket; stream: pg-cursor; routine: unsupported; bulk: prepared-loop
+Exclusions: A local WebSocket proxy stands in for the Neon service; no Neon project was tested. Named prepared statements on a Neon pooled endpoint (PgBouncer, transaction mode) have no evidence. Routine calls are not certified for this driver.
+
+| Numeric contract | Representation | Fidelity | Profile |
+| --- | --- | --- | --- |
+| exact-integer | string | lossless | neon-lossless-text |
+| exact-decimal | string | lossless | neon-lossless-text |
+| approximate-binary | number | unsupported | neon-lossless-text |
+
+| Container | Status |
+| --- | --- |
+| postgres-arrays | unclassified |
+| postgres-domains | unclassified |
+| postgres-ranges | unclassified |
+| postgres-composites | unclassified |
+| oracle-objects | unsupported |
+| sql-server-variant | unsupported |
+| json-nested | unclassified |
+| vector | unclassified |
+
+| Capability | Claim |
+| --- | --- |
+| `result.rows` | guaranteed |
+| `numeric.exact-integer` | guaranteed; exact-integer; string; lossless; raw=string |
+| `numeric.exact-decimal` | guaranteed; exact-decimal; string; lossless; raw=string |
+| `data.json-lossless-text` | guaranteed |
+| `data.temporal-lossless` | guaranteed |
+| `transaction` | guaranteed |
+| `transaction.savepoint` | guaranteed |
+| `statement.bulk` | guaranteed |
+| `statement.stream` | guaranteed |
+| `statement.cancel` | guarded; pg.physical-connection-destroy: Cancellation destroys and discards the pg connection |
+
 ### oracle-oracledb-thin-node-23-9
 
 - Status: **official**
@@ -742,6 +824,49 @@ Exclusions: This is Oracle Free 23.9 evidence, not Oracle Database 19c evidence 
 | `dml.update-returning` | guaranteed |
 | `dml.delete-returning` | guaranteed |
 | `metadata.command-safe` | guarded; oracle.count-safe-integer: Oracle safe command count |
+
+### pglite-node-22-18-0
+
+- Status: **compatible**
+- Database: postgres 18.3 PGlite WASM
+- Driver: pglite @0.5.8 pglite-lossless-text
+- Runtime: node @22.18.0
+- Evidence: pending
+- Transport: text-positional ($1..$N), in process; stream: unsupported; routine: unsupported; bulk: prepared-loop
+Exclusions: One serialized executor owns the PGlite instance; the application must not call the instance during db.tx. Streaming, statement cancellation and routine calls are unsupported. The browser runtime is not covered.
+
+| Numeric contract | Representation | Fidelity | Profile |
+| --- | --- | --- | --- |
+| exact-integer | string | lossless | pglite-lossless-text |
+| exact-decimal | string | lossless | pglite-lossless-text |
+| approximate-binary | number | unsupported | pglite-lossless-text |
+
+| Container | Status |
+| --- | --- |
+| postgres-arrays | unclassified |
+| postgres-domains | unclassified |
+| postgres-ranges | unclassified |
+| postgres-composites | unclassified |
+| oracle-objects | unsupported |
+| sql-server-variant | unsupported |
+| json-nested | unclassified |
+| vector | unclassified |
+
+| Capability | Claim |
+| --- | --- |
+| `result.rows` | guaranteed |
+| `numeric.exact-integer` | guaranteed; exact-integer; string; lossless; raw=string |
+| `numeric.exact-decimal` | guaranteed; exact-decimal; string; lossless; raw=string |
+| `data.json-lossless-text` | guaranteed |
+| `data.temporal-lossless` | guaranteed |
+| `result.command` | guaranteed |
+| `transaction` | guaranteed |
+| `transaction.savepoint` | guaranteed |
+| `transaction.read-only` | guaranteed |
+| `statement.bulk` | guaranteed |
+| `statement.stream` | unsupported |
+| `statement.cancel` | unsupported |
+| `routine.call` | unsupported |
 
 ### postgres-current
 
@@ -840,6 +965,48 @@ Exclusions: Only this exact Deno runtime, driver, database and representation pr
 | `routine.out` | guaranteed |
 | `routine.inout` | unsupported |
 | `routine.return-value` | unsupported |
+
+### postgres-js-node-22-18-0
+
+- Status: **compatible**
+- Database: postgres 16.4 alpine
+- Driver: postgres-js @3.4.9 postgres-js-lossless-text
+- Runtime: node @22.18.0
+- Evidence: pending
+- Transport: text-positional ($1..$N) on a reserved connection; stream: postgres.js cursor; routine: unsupported; bulk: prepared-loop
+Exclusions: The client must spread postgresJsOptions(); the adapter rejects other clients. A discarded lease runs ROLLBACK and DISCARD ALL because postgres.js does not expose the physical connection. Statement cancellation and routine calls are unsupported.
+
+| Numeric contract | Representation | Fidelity | Profile |
+| --- | --- | --- | --- |
+| exact-integer | string | lossless | postgres-js-lossless-text |
+| exact-decimal | string | lossless | postgres-js-lossless-text |
+| approximate-binary | number | unsupported | postgres-js-lossless-text |
+
+| Container | Status |
+| --- | --- |
+| postgres-arrays | unclassified |
+| postgres-domains | unclassified |
+| postgres-ranges | unclassified |
+| postgres-composites | unclassified |
+| oracle-objects | unsupported |
+| sql-server-variant | unsupported |
+| json-nested | unclassified |
+| vector | unclassified |
+
+| Capability | Claim |
+| --- | --- |
+| `result.rows` | guaranteed |
+| `numeric.exact-integer` | guaranteed; exact-integer; string; lossless; raw=string |
+| `numeric.exact-decimal` | guaranteed; exact-decimal; string; lossless; raw=string |
+| `data.json-lossless-text` | guaranteed |
+| `data.temporal-lossless` | guaranteed |
+| `transaction` | guaranteed |
+| `transaction.savepoint` | guaranteed |
+| `transaction.read-only` | guaranteed |
+| `statement.bulk` | guaranteed |
+| `statement.stream` | guaranteed |
+| `statement.cancel` | unsupported |
+| `routine.call` | unsupported |
 
 ### postgres-pg-node-16-4
 
