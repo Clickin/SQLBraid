@@ -148,7 +148,15 @@ const result = await db.tx(async (tx) =>
 
 OUT 파라미터, 여러 결과 집합, 반환값의 지원 범위는 드라이버마다 다릅니다. [루틴 호출](https://clickin.github.io/SQLBraid/latest/concepts/routines/)과 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)를 참고하세요.
 
-다른 데이터베이스: [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/) · [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/) · [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/) · [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/) · [브라우저의 SQLite와 D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/)
+## 빠른 시작: 다른 데이터베이스
+
+위 빠른 시작은 SQLite와 PostgreSQL을 씁니다. 다른 데이터베이스는 각 시작 가이드를 참고하세요.
+
+- [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/)
+- [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/)
+- [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/)
+- [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/)
+- [브라우저의 SQLite와 D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/)
 
 ## 동작 방식
 

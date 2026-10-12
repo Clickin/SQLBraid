@@ -148,7 +148,15 @@ const result = await db.tx(async (tx) =>
 
 Driver support for OUT parameters, multiple result sets and return values differs. See [routine calls](https://clickin.github.io/SQLBraid/latest/concepts/routines/) and the [support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/).
 
-Other databases: [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/) · [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/) · [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/) · [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/) · [SQLite in the browser and D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/)
+## Quickstart: other databases
+
+The quickstarts above use SQLite and PostgreSQL. For the other databases, see their getting-started guides:
+
+- [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/)
+- [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/)
+- [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/)
+- [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/)
+- [SQLite in the browser and D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/)
 
 ## How it works
 
