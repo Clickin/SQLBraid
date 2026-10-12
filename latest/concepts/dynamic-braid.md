@@ -84,6 +84,36 @@ const query = sql.rows<UserRow>`
 
 The compiler lowers guarded templates to explicit capture statements. When `includePrivate` is false, `loadPrivatePolicy()` is not evaluated. The compiler cannot lower a guarded template if a top-level `await` or `yield` occurs in the guarded expression context. In that case, the compiler reports `BRAID_ASYNC_CONTEXT`. It does not change the evaluation order.
 
+## What the compiler does
+
+The compiler does **not** expand the SQL branches. It does not build one SQL string for each combination of conditions. It does not run your conditions at build time. SQL text and bound values are always made at runtime, from the values of that call.
+
+The compiler changes only **when each `${...}` expression is evaluated**. In plain JavaScript, every `${...}` runs before the tag function is called. After lowering, an expression runs only if its branch is active, and it runs only once. This is a simplified view of the result for the query above:
+
+<!-- doc-snippet: skip -->
+
+```js
+sql.rows(strings, (read) => {
+  if (read(0, () => includePrivate)) {
+    // inside the active branch only:
+    if (read(1, () => loadPrivatePolicy())) {
+      /* ... */
+    }
+  }
+});
+```
+
+The runtime then renders the SQL and the parameter list from the directives and from the values that were evaluated.
+
+| The compiler does                                                  | The compiler does not do                                 |
+| ------------------------------------------------------------------ | -------------------------------------------------------- |
+| Skip `${...}` in inactive branches and evaluate each one only once | Generate SQL variants or run conditions during the build |
+| Keep the order of evaluation, lexical `this` and source maps       | Parse or check the SQL inside a branch                   |
+| Keep the type of a query-bound Standard Schema mapper              | Transpile TypeScript or JSX (your bundler does this)     |
+| Report `BRAID_ASYNC_CONTEXT` when it cannot lower a template       | Check types for you (use `sqlbraid check`)               |
+
+Without the compiler, the SQL result is the same. Only the evaluation time of the JavaScript expressions differs. If the expressions in inactive branches are cheap and safe, you do not need the compiler.
+
 ## Choose branches
 
 ```ts
