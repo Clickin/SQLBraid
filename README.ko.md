@@ -94,6 +94,31 @@ await db.tx(async (tx) => {
 });
 ```
 
+## 빠른 시작: 저장 프로시저
+
+쿼리 빌더에서는 저장 프로시저를 쓰려면 보통 드라이버를 직접 호출해야 합니다. SQLBraid에서는 `CALL` 문을 쓰고 각 OUT 파라미터를 표시합니다. `db.call`은 OUT 값을 `output`에, 결과 집합을 `resultSets`에 담아 반환합니다. 드라이버가 반환값을 제공하면 `returnValue`에도 담습니다.
+
+이 예제는 PostgreSQL과 앞선 빠른 시작의 `db`를 씁니다. 프로시저는 `refcursor` OUT 파라미터로 행을 돌려줍니다. PostgreSQL에서는 이때 열린 트랜잭션이 필요하므로 `db.tx` 안에서 호출합니다.
+
+```sql
+CREATE PROCEDURE list_active_users(OUT users refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN users FOR SELECT id, name FROM users WHERE active;
+END $$;
+```
+
+```ts
+import { postgresParameter, sql } from "sqlbraid/pg";
+
+const result = await db.tx(async (tx) =>
+  tx.call(sql.call`CALL list_active_users(${sql.out("users", postgresParameter.refcursor())})`),
+);
+
+console.log(result.resultSets[0].rows); // [{ id: "1", name: "Ada" }]
+```
+
+OUT 파라미터, 여러 결과 집합, 반환값의 지원 범위는 드라이버마다 다릅니다. [루틴 호출](https://clickin.github.io/SQLBraid/latest/concepts/routines/)과 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)를 참고하세요.
+
 다른 데이터베이스: [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/) · [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/) · [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/) · [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/) · [브라우저의 SQLite와 D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/)
 
 ## 동작 방식
@@ -147,14 +172,15 @@ const rows = await db.all(sql.rows`SELECT id, created_at FROM users`);
 
 아래 도구는 모두 훌륭합니다. 다만 선택한 트레이드오프가 다릅니다.
 
-|                          | 작성하는 SQL                                           | 동적 SQL           | 결과 타입                                                   | 데이터베이스                                           |
-| ------------------------ | ------------------------------------------------------ | ------------------ | ----------------------------------------------------------- | ------------------------------------------------------ |
-| **Prisma**               | Prisma 스키마와 클라이언트 API, 원시 SQL은 탈출구      | 클라이언트 API로   | 스키마에서 생성                                             | 다수                                                   |
-| **Drizzle**              | TypeScript 스키마와 쿼리 API, 원시 부분은 `sql` 템플릿 | 쿼리 API로         | 스키마에서 추론                                             | 다수                                                   |
-| **Kysely**               | 타입 안전한 쿼리 빌더                                  | 빌더 메서드 체이닝 | DB 인터페이스에서 추론                                      | 다수                                                   |
-| **postgres.js / slonik** | 태그드 템플릿의 원시 SQL                               | JS에서 조각을 조합 | 직접 선언                                                   | PostgreSQL                                             |
-| **pgtyped / sqlc**       | 원시 SQL 파일                                          | 제한적             | SQL을 데이터베이스에 대조해 생성                            | 주로 PostgreSQL                                        |
-| **SQLBraid**             | 태그드 템플릿의 원시 SQL                               | SQL 안의 지시어    | 직접 선언하고 런타임에 검사. 테이블 모델은 선택적 코드 생성 | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server |
+|                                | 작성하는 SQL                                           | 동적 SQL           | 결과 타입                                                   | 데이터베이스                                                     |
+| ------------------------------ | ------------------------------------------------------ | ------------------ | ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Prisma**                     | Prisma 스키마와 클라이언트 API, 원시 SQL은 탈출구      | 클라이언트 API로   | 스키마에서 생성                                             | 다수                                                             |
+| **Drizzle**                    | TypeScript 스키마와 쿼리 API, 원시 부분은 `sql` 템플릿 | 쿼리 API로         | 스키마에서 추론                                             | 다수                                                             |
+| **Kysely**                     | 타입 안전한 쿼리 빌더                                  | 빌더 메서드 체이닝 | DB 인터페이스에서 추론                                      | 다수                                                             |
+| **postgres.js / slonik**       | 태그드 템플릿의 원시 SQL                               | JS에서 조각을 조합 | 직접 선언                                                   | PostgreSQL                                                       |
+| **pgtyped**                    | 원시 SQL 파일                                          | 제한적             | SQL을 데이터베이스에 대조해 생성                            | PostgreSQL                                                       |
+| **sqlc** (TypeScript 플러그인) | 원시 SQL 파일                                          | 제한적             | SQL을 데이터베이스에 대조해 생성                            | PostgreSQL(`pg`, `postgres`), MySQL(`mysql2`), SQLite(`sqlite3`) |
+| **SQLBraid**                   | 태그드 템플릿의 원시 SQL                               | SQL 안의 지시어    | 직접 선언하고 런타임에 검사. 테이블 모델은 선택적 코드 생성 | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server           |
 
 이런 경우에 SQLBraid를 선택하세요. 이미 SQL로 생각하는 경우, 쿼리에 선택 조건이 많은 경우, 여러 데이터베이스에서 같은 API가 필요한 경우입니다.
 
