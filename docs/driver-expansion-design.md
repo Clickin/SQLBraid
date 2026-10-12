@@ -1,6 +1,6 @@
 # Driver expansion design: postgres.js, Neon, PGlite, PlanetScale HTTP
 
-Status: steps 0 to 4a are built. Step 4b is rejected (see section 7). This page is not a support claim and not a release claim. Four `support/targets/` records exist for the new adapters (`neon`, `postgres-js`, `pglite`, `neon-http`). Each has status `compatible` and evidence `pending`, because no CI run of the exact revision backs them. Support labels come only from `support/targets/` after exact-revision CI evidence.
+Status: steps 0 to 4a are built. Step 4b is rejected (see section 7). This page is not a support claim and not a release claim. Four `support/targets/` records exist for the new adapters (`neon`, `postgres-js`, `pglite`, `neon-http`). Each has status `compatible`. Their evidence points to commit `43171a2` on `main` (Runtime portability, Documentation site and Driver certification runs). Support labels come only from `support/targets/` after exact-revision CI evidence.
 
 Rules that apply: `AGENTS.md` sections 8, 10, 11 and 14, and `docs/driver-author-guide.md`.
 
@@ -208,4 +208,3 @@ Not done yet:
 - `docs-claims` tests for the documented behavior.
 - Evidence for the Neon pooled endpoint with PgBouncer.
 - The Bun and Deno runtime cells for Neon and PGlite.
-- CI evidence of the exact revision for all four records.

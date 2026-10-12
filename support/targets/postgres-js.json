@@ -144,7 +144,27 @@
     "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
   },
   "evidence": {
-    "status": "pending",
-    "runs": []
+    "status": "verified",
+    "commit": "43171a283dfc9a0f85e1bcdfcf34b6fd906aa3e9",
+    "runs": [
+      {
+        "workflow": ".github/workflows/runtime-portability.yml",
+        "commit": "43171a283dfc9a0f85e1bcdfcf34b6fd906aa3e9",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/38188531083"
+      },
+      {
+        "workflow": ".github/workflows/docs-pages.yml",
+        "commit": "43171a283dfc9a0f85e1bcdfcf34b6fd906aa3e9",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/38188531097"
+      },
+      {
+        "workflow": ".github/workflows/driver-certification.yml",
+        "commit": "43171a283dfc9a0f85e1bcdfcf34b6fd906aa3e9",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/38188531045"
+      }
+    ]
   }
 }
