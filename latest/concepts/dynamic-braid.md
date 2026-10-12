@@ -23,6 +23,44 @@ const query = sql.rows<UserRow>`
 - `set` does the same for update assignments. If no assignment remains, it throws `BRAID_EMPTY_SET`.
 - `trim` accepts the explicit attributes `prefix`, `prefixOverrides`, `suffix` and `suffixOverrides`.
 
+## `set` and `trim`
+
+`set` builds the assignment list of an UPDATE. Write a trailing comma after each assignment. `set` removes the last one:
+
+```ts
+const update = sql.command`
+  UPDATE users
+  /*@braid set*/
+    /*@braid if ${newName != null}*/ name = ${newName}, /*@braid end*/
+    /*@braid if ${newAge != null}*/ age = ${newAge}, /*@braid end*/
+  /*@braid end*/
+  WHERE id = ${userId}
+`;
+// newName = "Ada", newAge = null  ->  UPDATE users SET name = ? WHERE id = ?
+// newName = null,  newAge = null  ->  throws BRAID_EMPTY_SET before the database call
+```
+
+`trim` is the general form. `where` and `set` are `trim` with fixed attributes. Use `trim` for other cases, such as a parenthesized list:
+
+```ts
+const query = sql.rows<UserRow>`
+  SELECT id, name FROM users
+  WHERE role IN
+  /*@braid trim prefix="(" suffix=")" suffixOverrides=","*/
+    /*@braid if ${roleA != null}*/ ${roleA}, /*@braid end*/
+    /*@braid if ${roleB != null}*/ ${roleB}, /*@braid end*/
+  /*@braid end*/
+`;
+// roleA = "x", roleB = "y"   ->  ... WHERE role IN (?, ?)
+// roleA = "x", roleB = null  ->  ... WHERE role IN (?)
+```
+
+Rules for the attributes:
+
+- `prefix` and `suffix` are added as written. Add the spaces yourself: `prefix="WHERE "`. Without the space, the result is `WHEREid = ?`.
+- `prefixOverrides` and `suffixOverrides` list the tokens to remove, separated by `|`: `prefixOverrides="AND |OR "`. The match is not case sensitive. Only the first and the last token of the content are checked.
+- If the content is empty, `trim` outputs nothing. It does not add the `prefix` or the `suffix`. In the list example above, if both roles are `null`, the SQL is `WHERE role IN` and the database rejects it. Guard that case with an outer `if`.
+
 ## Branches are lazy
 
 **This guarantee requires SQLBraid compiler lowering.** Plain JavaScript, `tsc` and runtime tag calls evaluate each `${...}` before they call the tag. To get lazy branches, do these steps:
