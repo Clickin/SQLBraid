@@ -8,6 +8,21 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 ## Unreleased
 
+### Added
+
+- `@sqlbraid/postgres` 1.1.0: four optional adapter subpaths. All four use the lossless text profile and have the
+  support label Compatible. They have no verification in real applications yet.
+  - `@sqlbraid/postgres/neon`: Neon over WebSocket (`@neondatabase/serverless` `Pool` and `Client`).
+  - `@sqlbraid/postgres/neon-http`: Neon over HTTP. It is stateless. `db.tx`, `db.session`, streams and cancellation
+    are unsupported. Bulk runs as one server-side transaction.
+  - `@sqlbraid/postgres/postgres-js`: postgres.js on reserved connections. Create the client with
+    `postgresJsOptions()`. Cancellation and routine calls are unsupported.
+  - `@sqlbraid/postgres/pglite`: PGlite in process, with one serialized executor. Streams, cancellation and routine
+    calls are unsupported.
+  - Evidence: `support/targets/{neon,neon-http,postgres-js,pglite}.json` and the cells `node-16-20-2-postgres-js-3-4-9`,
+    `node-22-18-0-neon-serverless-1-2-0` and `node-22-18-0-pglite-0-5-8` in `support/runtime-compatibility.json`.
+  - The published runtime floor of `@sqlbraid/postgres` stays `node >=16.20.2`. The Neon driver needs Node 19 or later.
+
 ### Security
 
 - `@sqlbraid/mariadb`: `db.stream()` binds only scalar values. Arrays, objects, GeoJSON and non-finite numbers fail
