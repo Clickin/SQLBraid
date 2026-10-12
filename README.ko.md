@@ -178,6 +178,29 @@ sql.rows<User>`
 // sort = "created"  ->  SELECT id, name FROM users ORDER BY created_at DESC
 ```
 
+`if`, `where`, `set`, `trim`, `choose`는 블록을 열고, `/*@braid end*/`가 그 블록을 닫습니다. `when`과 `otherwise`는 속한 `choose`의 `end`로 닫힙니다. 블록 안에는 줄을 몇 개든 넣을 수 있고, 블록은 중첩할 수 있습니다. 위의 한 줄 형태는 짧은 경우일 뿐입니다.
+
+```ts
+sql.rows<User>`
+  SELECT u.id, u.name
+  FROM users u
+  /*@braid if ${teamName != null}*/
+    JOIN teams t
+      ON t.id = u.team_id
+     AND t.name = ${teamName}
+  /*@braid end*/
+  /*@braid where*/
+    /*@braid if ${onlyActive}*/
+      AND u.active = 1
+      AND u.name IS NOT NULL
+    /*@braid end*/
+  /*@braid end*/
+  ORDER BY u.id
+`;
+// teamName = "core", onlyActive = true  ->  ... JOIN teams t ON t.id = u.team_id AND t.name = ? WHERE u.active = 1 AND u.name IS NOT NULL ORDER BY u.id
+// teamName = null,   onlyActive = false ->  SELECT u.id, u.name FROM users u ORDER BY u.id
+```
+
 지시어는 빌드 단계 없이 런타임에 동작합니다. 비활성 분기의 `${...}` 표현식까지 평가하지 않으려면 선택 사항인 컴파일러(`@sqlbraid/cli` 또는 Vite 플러그인)를 실행하세요. [dynamic @braid](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/)를 참고하세요.
 
 테이블 이름, 컬럼 목록, 조각 같은 SQL 구조를 문장에 넣어야 하면 명시적인 헬퍼 `sql.ident`, `sql.list`, `sql.join`, `sql.fragment`를 씁니다. [구조 조각](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/)을 참고하세요.

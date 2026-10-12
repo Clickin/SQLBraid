@@ -178,6 +178,29 @@ sql.rows<User>`
 // sort = "created"  ->  SELECT id, name FROM users ORDER BY created_at DESC
 ```
 
+Each `if`, `where`, `set`, `trim` and `choose` opens a block, and a `/*@braid end*/` closes it. `when` and `otherwise` are closed by the `end` of their `choose`. A block can hold any number of lines, and blocks can be nested. The one-line form above is just a short case:
+
+```ts
+sql.rows<User>`
+  SELECT u.id, u.name
+  FROM users u
+  /*@braid if ${teamName != null}*/
+    JOIN teams t
+      ON t.id = u.team_id
+     AND t.name = ${teamName}
+  /*@braid end*/
+  /*@braid where*/
+    /*@braid if ${onlyActive}*/
+      AND u.active = 1
+      AND u.name IS NOT NULL
+    /*@braid end*/
+  /*@braid end*/
+  ORDER BY u.id
+`;
+// teamName = "core", onlyActive = true  ->  ... JOIN teams t ON t.id = u.team_id AND t.name = ? WHERE u.active = 1 AND u.name IS NOT NULL ORDER BY u.id
+// teamName = null,   onlyActive = false ->  SELECT u.id, u.name FROM users u ORDER BY u.id
+```
+
 Directives work at runtime with no build step. If you also want inactive branches to skip evaluating their `${...}` expressions, run the optional compiler (`@sqlbraid/cli` or the Vite plugin). See [dynamic @braid](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/).
 
 To put SQL structure in a statement (a table name, a column list, a fragment), you use an explicit helper: `sql.ident`, `sql.list`, `sql.join`, or `sql.fragment`. See [structural fragments](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/).
