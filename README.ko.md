@@ -179,7 +179,7 @@ const rows = await db.all(sql.rows`SELECT id, created_at FROM users`);
 | **Kysely**                     | 타입 안전한 쿼리 빌더                                  | 빌더 메서드 체이닝 | DB 인터페이스에서 추론                                      | 다수                                                             |
 | **postgres.js / slonik**       | 태그드 템플릿의 원시 SQL                               | JS에서 조각을 조합 | 직접 선언                                                   | PostgreSQL                                                       |
 | **pgtyped**                    | 원시 SQL 파일                                          | 제한적             | SQL을 데이터베이스에 대조해 생성                            | PostgreSQL                                                       |
-| **sqlc** (TypeScript 플러그인) | 원시 SQL 파일                                          | 제한적             | SQL을 데이터베이스에 대조해 생성                            | PostgreSQL(`pg`, `postgres`), MySQL(`mysql2`), SQLite(`sqlite3`) |
+| **sqlc** (TypeScript 플러그인) | 원시 SQL 파일                                          | 지원하지 않음      | SQL을 데이터베이스에 대조해 생성                            | PostgreSQL(`pg`, `postgres`), MySQL(`mysql2`), SQLite(`sqlite3`) |
 | **SQLBraid**                   | 태그드 템플릿의 원시 SQL                               | SQL 안의 지시어    | 직접 선언하고 런타임에 검사. 테이블 모델은 선택적 코드 생성 | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server           |
 
 이런 경우에 SQLBraid를 선택하세요. 이미 SQL로 생각하는 경우, 쿼리에 선택 조건이 많은 경우, 여러 데이터베이스에서 같은 API가 필요한 경우입니다.
