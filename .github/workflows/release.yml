@@ -218,13 +218,13 @@ jobs:
         include:
           - id: postgres
             project: db-postgres
-            semantic_targets: postgres-pg-node-16-4
+            semantic_targets: postgres-pg-node-16-4,neon-node-22-18-0,postgres-js-node-22-18-0,pglite-node-22-18-0,neon-http-node-22-18-0
             postgres_target: postgres
             evidence_target: ""
             evidence_env: "{}"
           - id: postgres-current
             project: db-postgres
-            semantic_targets: postgres-current
+            semantic_targets: postgres-current,neon-node-22-18-0,postgres-js-node-22-18-0,pglite-node-22-18-0,neon-http-node-22-18-0
             postgres_target: postgres-current
             evidence_target: postgres-current
             evidence_env: '{"SQLBRAID_POSTGRES_TARGET":"postgres-current"}'
