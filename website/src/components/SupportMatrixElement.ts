@@ -164,7 +164,7 @@ class SupportMatrixElement extends HTMLElement {
         this.rebuild();
       }
       const clickedRow = target.closest<HTMLElement>("[data-index]");
-      if (clickedRow && this.view === "driver") this.select(Number(clickedRow.dataset.index));
+      if (clickedRow) this.select(Number(clickedRow.dataset.index));
       const link = target.closest<HTMLAnchorElement>("[data-target-link]");
       if (link) {
         event.preventDefault();
@@ -271,15 +271,14 @@ class SupportMatrixElement extends HTMLElement {
     this.layer.style.height = `${this.rows.length * ROW_HEIGHT}px`;
     this.viewport.scrollTop = 0;
     this.querySelector("[data-count]")!.textContent =
-      `${this.rows.length} ${labels[this.locale].results}` +
-      (this.view === "driver" ? ` · ${labels[this.locale].hint}` : "");
+      `${this.rows.length} ${labels[this.locale].results} · ${labels[this.locale].hint}`;
     this.renderVisible();
     this.renderDetails();
     this.updateScrollEdges();
   }
 
   private select(index: number): void {
-    if (this.view !== "driver" || index < 0 || index >= this.rows.length || index === this.selected) return;
+    if (index < 0 || index >= this.rows.length || index === this.selected) return;
     this.selected = index;
     this.renderVisible();
     this.renderDetails();
@@ -288,25 +287,35 @@ class SupportMatrixElement extends HTMLElement {
   private renderDetails(): void {
     const panel = this.querySelector<HTMLElement>("[data-details]");
     if (!panel) return;
-    const row = this.view === "driver" ? this.rows[this.selected] : undefined;
+    const row = this.rows[this.selected];
     if (!row) {
       panel.hidden = true;
       panel.innerHTML = "";
       return;
     }
     const l = labels[this.locale];
-    const columns = supportMatrixColumns("driver", this.locale);
-    const cells = projectSupportMatrixRow(this.data, "driver", row, this.locale);
+    const columns = supportMatrixColumns(this.view, this.locale);
+    const cells = projectSupportMatrixRow(this.data, this.view, row, this.locale);
     const pair = (term: string, value: string) => `<div><dt>${escape(term)}</dt><dd>${escape(value)}</dd></div>`;
+    const limitsIndex = this.view === "driver" ? columns.length - 1 : -1;
     const facts = [
-      pair(labels[this.locale].status, supportMatrixStatus(row.target.status, this.locale)),
-      ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((index) => pair(columns[index]!, cells[index]!)),
+      ...(this.view === "driver" ? [pair(l.status, supportMatrixStatus(row.target.status, this.locale))] : []),
+      ...cells.flatMap((cell, index) => (index === limitsIndex ? [] : [pair(columns[index]!, cell)])),
     ].join("");
-    const limits = row.target.driver.exclusions ?? [];
-    panel.innerHTML = `<h3>${escape(cells[0])} ${escape(cells[1])} · ${escape(row.target.id)}</h3>
+    const limits = this.view === "capability" ? [] : (row.target.driver.exclusions ?? []);
+    const heading =
+      this.view === "driver"
+        ? `${cells[0]} ${cells[1]} · ${row.target.id}`
+        : this.view === "capability"
+          ? `${cells[0]} · ${row.target.id}`
+          : row.target.id;
+    panel.innerHTML = `<h3>${escape(heading)}</h3>
       <dl>${facts}</dl>
-      <h4>${escape(l.limits)}</h4>
-      ${limits.length ? `<ul>${limits.map((item) => `<li>${escape(item)}</li>`).join("")}</ul>` : `<p>${escape(l.none)}</p>`}`;
+      ${
+        this.view === "capability"
+          ? ""
+          : `<h4>${escape(l.limits)}</h4>${limits.length ? `<ul>${limits.map((item) => `<li>${escape(item)}</li>`).join("")}</ul>` : `<p>${escape(l.none)}</p>`}`
+      }`;
     panel.hidden = false;
   }
 
@@ -337,8 +346,8 @@ class SupportMatrixElement extends HTMLElement {
         const index = start + offset;
         const projected = projectSupportMatrixRow(this.data, this.view, row, this.locale);
         const cells = this.view === "driver" ? SUPPORT_MATRIX_DRIVER_GRID.map((cell) => projected[cell]!) : projected;
-        const selected = this.view === "driver" && index === this.selected;
-        return `<div role="row" aria-rowindex="${index + 2}" class="support-matrix__row support-matrix__data-row${selected ? " is-selected" : ""}"${this.view === "driver" ? ` aria-selected="${selected}"` : ""} data-row-view="${this.view}" tabindex="0" data-index="${index}" style="top:${index * ROW_HEIGHT}px">${cells.map((cell, cellIndex) => `<span role="cell" title="${escape(cell)}">${this.renderCell(cell, cellIndex, row)}</span>`).join("")}</div>`;
+        const selected = index === this.selected;
+        return `<div role="row" aria-rowindex="${index + 2}" class="support-matrix__row support-matrix__data-row${selected ? " is-selected" : ""}" aria-selected="${selected}" data-row-view="${this.view}" tabindex="0" data-index="${index}" style="top:${index * ROW_HEIGHT}px">${cells.map((cell, cellIndex) => `<span role="cell" title="${escape(cell)}">${this.renderCell(cell, cellIndex, row)}</span>`).join("")}</div>`;
       })
       .join("");
     if (focused !== undefined)
