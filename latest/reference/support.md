@@ -675,7 +675,7 @@ Exclusions: MySQL has no generic DML RETURNING capability OUT and INOUT carriers
 - Database: postgres 16.4 alpine; local Neon HTTP proxy
 - Driver: neon-http @1.2.0 neon-http-lossless-text
 - Runtime: node @22.18.0
-- Evidence: pending
+- Evidence: verified (43171a283dfc9a0f85e1bcdfcf34b6fd906aa3e9)
 - Transport: text-positional ($1..$N) over HTTP, one request per statement; stream: unsupported; routine: unsupported; bulk: remote-batch (one server-side transaction)
 Exclusions: A local HTTP proxy stands in for the Neon service; no Neon project was tested. Stateless requests: db.tx, db.session, streams, statement cancellation and routine calls are unsupported. Only bulk runs as one server-side transaction.
 
@@ -717,7 +717,7 @@ Exclusions: A local HTTP proxy stands in for the Neon service; no Neon project w
 - Database: postgres 16.4 alpine; local Neon WebSocket proxy
 - Driver: neon-serverless @1.2.0 neon-lossless-text
 - Runtime: node @22.18.0
-- Evidence: pending
+- Evidence: verified (43171a283dfc9a0f85e1bcdfcf34b6fd906aa3e9)
 - Transport: text-positional ($1..$N) over WebSocket; stream: pg-cursor; routine: unsupported; bulk: prepared-loop
 Exclusions: A local WebSocket proxy stands in for the Neon service; no Neon project was tested. Named prepared statements on a Neon pooled endpoint (PgBouncer, transaction mode) have no evidence. Routine calls are not certified for this driver.
 
@@ -831,7 +831,7 @@ Exclusions: This is Oracle Free 23.9 evidence, not Oracle Database 19c evidence 
 - Database: postgres 18.3 PGlite WASM
 - Driver: pglite @0.5.8 pglite-lossless-text
 - Runtime: node @22.18.0
-- Evidence: pending
+- Evidence: verified (43171a283dfc9a0f85e1bcdfcf34b6fd906aa3e9)
 - Transport: text-positional ($1..$N), in process; stream: unsupported; routine: unsupported; bulk: prepared-loop
 Exclusions: One serialized executor owns the PGlite instance; the application must not call the instance during db.tx. Streaming, statement cancellation and routine calls are unsupported. The browser runtime is not covered.
 
@@ -972,7 +972,7 @@ Exclusions: Only this exact Deno runtime, driver, database and representation pr
 - Database: postgres 16.4 alpine
 - Driver: postgres-js @3.4.9 postgres-js-lossless-text
 - Runtime: node @22.18.0
-- Evidence: pending
+- Evidence: verified (43171a283dfc9a0f85e1bcdfcf34b6fd906aa3e9)
 - Transport: text-positional ($1..$N) on a reserved connection; stream: postgres.js cursor; routine: unsupported; bulk: prepared-loop
 Exclusions: The client must spread postgresJsOptions(); the adapter rejects other clients. A discarded lease runs ROLLBACK and DISCARD ALL because postgres.js does not expose the physical connection. Statement cancellation and routine calls are unsupported.
 
