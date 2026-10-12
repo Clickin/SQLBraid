@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { execFile as execFileCallback } from "node:child_process";
+import { execFile as execFileCallback, spawn } from "node:child_process";
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -200,6 +201,75 @@ async function startMysql() {
   return { url: container.getConnectionUri(), stop: () => container.stop() };
 }
 
+async function freePort() {
+  return new Promise((resolvePort, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      server.close(() => resolvePort(port));
+    });
+  });
+}
+
+async function checkNextApp(base) {
+  const names = async (path) => (await (await fetch(base + path)).json()).map((row) => row.name);
+  // A missing `q` must not evaluate `filter.q!.trim()`. This needs the SQLBraid loader.
+  assert.equal((await names("/api/products")).length, 5);
+  assert.deepEqual(await names("/api/products?category=coffee&inStock=true&sort=price"), [
+    "Espresso beans 1kg",
+    "Hand grinder",
+  ]);
+  assert.deepEqual(await names("/api/products?q=mug"), ["Ceramic mug"]);
+  assert.deepEqual(await names("/api/products?maxPrice=20&sort=price"), ["Filter paper", "Ceramic mug"]);
+  const filter = (await (await fetch(`${base}/api/products?q=Filter`)).json())[0];
+  assert.equal(typeof filter.priceCents, "string");
+  const post = (body) =>
+    fetch(`${base}/api/restock`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const restocked = await post({ id: 2, amount: 5 });
+  assert.equal(restocked.status, 200);
+  assert.equal((await restocked.json()).stock, "5");
+  assert.equal((await post({ id: 999, amount: 5 })).status, 404);
+  assert.equal((await post({ id: 2, amount: -1 })).status, 400);
+  const html = await (await fetch(`${base}/?category=kitchen&inStock=on`)).text();
+  assert.ok(html.includes("Ceramic mug") && html.includes("Milk jug") && !html.includes("Hand grinder"));
+}
+
+async function nextExample(name, directory, bundler) {
+  const next = join(directory, "node_modules/next/dist/bin/next");
+  const environment = { ...process.env, NEXT_TELEMETRY_DISABLED: "1" };
+  await run(process.execPath, [next, "build", `--${bundler}`], directory, environment);
+  const port = await freePort();
+  const child = spawn(process.execPath, [next, "start", "--hostname", "127.0.0.1", "--port", String(port)], {
+    cwd: directory,
+    env: environment,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let log = "";
+  child.stdout.on("data", (data) => (log += data));
+  child.stderr.on("data", (data) => (log += data));
+  try {
+    const base = `http://127.0.0.1:${port}`;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await fetch(`${base}/api/products`);
+        break;
+      } catch (error) {
+        assert.ok(attempt < 60, `Next.js did not start:\n${log}`, { cause: error });
+        await new Promise((done) => setTimeout(done, 500));
+      }
+    }
+    await checkNextApp(base);
+    console.info(`PASS ${name} Next.js ${bundler} build and server`);
+  } finally {
+    child.kill();
+  }
+}
+
 let postgres;
 let mysql;
 try {
@@ -208,10 +278,13 @@ try {
   const codegen = await installExample("codegen", tarballs);
   const postgresExample = await installExample("postgres", tarballs);
   const mysqlExample = await installExample("mysql", tarballs);
+  const bookstore = await installExample("bookstore-api", tarballs);
 
   for (const path of ["website/src/content/docs/getting-started/sqlite.md", "README.md"]) {
     const quickstart = await readFile(join(root, path), "utf8");
-    const source = /```ts\n([\s\S]*?)```/.exec(quickstart)?.[1];
+    const source = [...quickstart.matchAll(/```ts\n([\s\S]*?)```/g)]
+      .map((match) => match[1])
+      .find((block) => block.includes("createNodeSqliteDatabase"));
     assert.ok(source, `${path} must contain a runnable SQLite quickstart`);
     await writeFile(join(sqlite, "src/docs-quickstart.ts"), source);
     await run(
@@ -234,10 +307,21 @@ try {
   await compileAndRun("sqlite", sqlite);
   await runCodegen(codegen);
 
+  for (const bundler of ["webpack", "turbopack"]) {
+    const nextDirectory = await installExample("nextjs-webpack", tarballs);
+    await nextExample("nextjs-webpack", nextDirectory, bundler);
+    await rm(nextDirectory, { recursive: true, force: true });
+  }
+
   postgres = await startPostgres();
   await compileAndRun("postgres", postgresExample, { SQLBRAID_POSTGRES_URL: postgres.url });
   const openTelemetry = await installExample("opentelemetry-slow-query", tarballs);
   await compileAndRun("opentelemetry-slow-query", openTelemetry, { SQLBRAID_POSTGRES_URL: postgres.url });
+
+  await tsc(bookstore, ["--project", "tsconfig.json", "--noEmit", "--pretty", "false"]);
+  const smoke = await run(process.execPath, ["src/smoke.ts"], bookstore, { SQLBRAID_POSTGRES_URL: postgres.url });
+  process.stdout.write(smoke.stdout);
+  console.info("PASS bookstore-api migrations, search, transaction and stream");
 
   mysql = await startMysql();
   await compileAndRun("mysql", mysqlExample, { SQLBRAID_MYSQL_URL: mysql.url });

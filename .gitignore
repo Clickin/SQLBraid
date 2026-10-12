@@ -12,3 +12,6 @@ pnpm-debug.log*
 
 # Temporary documentation snippet type-check workspaces
 tests/.doc-snippets-*/
+
+# Next.js build output (examples)
+.next/
