@@ -53,9 +53,9 @@ const query = sql.rows<UserRow>`
 const query = sql.rows<UserRow>`
   SELECT id, name FROM users
   /*@braid choose*/
-    /*@braid when ${sort === "name"}*/ ORDER BY name /*@braid end*/
-    /*@braid when ${sort === "created"}*/ ORDER BY created_at DESC /*@braid end*/
-    /*@braid otherwise*/ ORDER BY id /*@braid end*/
+    /*@braid when ${sort === "name"}*/ ORDER BY name
+    /*@braid when ${sort === "created"}*/ ORDER BY created_at DESC
+    /*@braid otherwise*/ ORDER BY id
   /*@braid end*/
 `;
 ```

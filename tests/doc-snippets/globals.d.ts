@@ -57,6 +57,8 @@ declare global {
   const AccountSchema: S<{ id: string }>;
 
   const accountId: number, accountNumber: number;
+  const tableName: string;
+  const ids: readonly number[];
   const row: { id: string };
   const events: Core.RowQuery<{ id: number; payload: string }>;
   const sqlbraid: typeof import("@sqlbraid/vite").default;
