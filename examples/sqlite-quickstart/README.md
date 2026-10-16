@@ -14,7 +14,7 @@ The gate packs each SQLBraid package and installs the tarballs into a clean
 temporary project. Then it runs the equivalent of these commands:
 
 ```bash
-npm install --save sqlbraid
+npm install --save sqlbraid @sqlbraid/sqlite
 npm install --save-dev @sqlbraid/cli
 npx sqlbraid build --file src/index.ts --out-file build/index.js
 node build/index.js

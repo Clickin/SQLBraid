@@ -3,10 +3,11 @@ title: Vite integration
 description: Lower SQLBraid guarded templates in Vite 8 without taking over TypeScript or TSX transforms.
 ---
 
-Install the Vite plugin together with the SQLBraid dialect package of your application:
+Install the Vite plugin together with the SQLBraid dialect package of your application.
+The following command uses SQLite:
 
 ```bash
-npm install sqlbraid @sqlbraid/vite
+npm install sqlbraid @sqlbraid/sqlite @sqlbraid/vite
 ```
 
 Add the framework-neutral plugin before the normal Vite transforms:

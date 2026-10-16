@@ -1,11 +1,14 @@
 # SQLBraid public API audit
 
-This inventory records the stable public boundary of SQLBraid 1.x. It classifies
+This inventory records the stable public boundary of SQLBraid. It classifies
 the API and is a compatibility reference. It is not a publication claim and not a
 support claim.
 
-Packages have independent versions. The optional `@sqlbraid/migrate@0.1.0`
-surface is pre-1.0; listing it here does not give it the 1.x compatibility
+Packages have independent versions. In `sqlbraid` 2.0.0, the facade moved its
+seven dialect and adapter packages to optional peer dependencies while keeping
+its exported subpaths and query APIs unchanged; the `@sqlbraid/*` runtime and
+tooling packages remain on the 1.x line. The optional `@sqlbraid/migrate@0.1.0`
+surface is pre-1.0; listing it here does not give it the stable compatibility
 guarantee of the `sqlbraid` facade.
 
 SQLBraid 1.0.0 is GA. The exact-SHA records below are kept as the provenance of
@@ -232,8 +235,13 @@ interfaces and runtime constructors. It does not select a dialect.
 - The dialect-only subpaths `/postgres`, `/mysql`, `/sqlite`, `/oracle` and
   `/mssql` support custom adapters.
 
-The facade has no dependency on the CLI, database drivers, metadata, codegen,
-tooling, compiler, editor, Vite or Webpack.
+The facade keeps only `@sqlbraid/core`, `@sqlbraid/runtime` and
+`@sqlbraid/template` as hard dependencies. It declares the seven dialect and
+adapter packages (`@sqlbraid/bun-sql`, `@sqlbraid/mariadb`, `@sqlbraid/mssql`,
+`@sqlbraid/mysql`, `@sqlbraid/oracle`, `@sqlbraid/postgres` and
+`@sqlbraid/sqlite`) as optional peer dependencies. The facade has no dependency
+on the CLI, database drivers, metadata, codegen, tooling, compiler, editor,
+Vite or Webpack.
 
 **Advanced:** `sqlbraid/compiled` exposes `capture` and
 `assertDirectiveCondition` from `@sqlbraid/template` for lowering that the

@@ -422,12 +422,19 @@ importers:
 
   packages/sqlbraid:
     dependencies:
-      '@sqlbraid/bun-sql':
-        specifier: workspace:^1.0.0
-        version: link:../bun-sql
       '@sqlbraid/core':
         specifier: workspace:^1.0.0
         version: link:../core
+      '@sqlbraid/runtime':
+        specifier: workspace:^1.0.0
+        version: link:../runtime
+      '@sqlbraid/template':
+        specifier: workspace:^1.0.0
+        version: link:../template
+    devDependencies:
+      '@sqlbraid/bun-sql':
+        specifier: workspace:^1.0.0
+        version: link:../bun-sql
       '@sqlbraid/mariadb':
         specifier: workspace:^1.0.0
         version: link:../mariadb
@@ -443,15 +450,9 @@ importers:
       '@sqlbraid/postgres':
         specifier: workspace:^1.0.0
         version: link:../postgres
-      '@sqlbraid/runtime':
-        specifier: workspace:^1.0.0
-        version: link:../runtime
       '@sqlbraid/sqlite':
         specifier: workspace:^1.0.0
         version: link:../sqlite
-      '@sqlbraid/template':
-        specifier: workspace:^1.0.0
-        version: link:../template
 
   packages/sqlite:
     dependencies:

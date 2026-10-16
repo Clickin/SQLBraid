@@ -3,10 +3,10 @@ title: PostgreSQL quickstart
 description: Connect SQLBraid to pg with either a direct client or an explicit pool.
 ---
 
-Install the SQLBraid runtime facade and the PostgreSQL driver together:
+Install the SQLBraid runtime facade, the PostgreSQL dialect package and the `pg` driver together:
 
 ```bash
-npm install sqlbraid pg
+npm install sqlbraid @sqlbraid/postgres pg
 ```
 
 ## Direct physical client

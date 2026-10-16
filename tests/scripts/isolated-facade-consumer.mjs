@@ -15,9 +15,9 @@ for (const file of readdirSync(packageDir))
     const manifest = JSON.parse(execFileSync("tar", ["-xOf", path, "package/package.json"], { encoding: "utf8" }));
     tarballs.set(manifest.name, `file:${path}`);
   }
-for (const name of ["sqlbraid", "@sqlbraid/compiler", "@sqlbraid/vite"])
+for (const name of ["sqlbraid", "@sqlbraid/sqlite", "@sqlbraid/compiler", "@sqlbraid/vite"])
   if (!tarballs.has(name)) throw new Error(`Missing candidate tarball: ${name}`);
-const dependencies = { sqlbraid: tarballs.get("sqlbraid") };
+const dependencies = { sqlbraid: tarballs.get("sqlbraid"), "@sqlbraid/sqlite": tarballs.get("@sqlbraid/sqlite") };
 const devDependencies = {
   "@sqlbraid/compiler": tarballs.get("@sqlbraid/compiler"),
   "@sqlbraid/vite": tarballs.get("@sqlbraid/vite"),

@@ -62,16 +62,14 @@ const requiredPackageNames = new Set([
   "webpack",
   "bun-sql",
 ]);
-const facadeRuntimeDependencies = [
+const facadeRuntimeDependencies = ["@sqlbraid/core", "@sqlbraid/runtime", "@sqlbraid/template"];
+const facadeDialectPeers = [
   "@sqlbraid/bun-sql",
-  "@sqlbraid/core",
   "@sqlbraid/mariadb",
   "@sqlbraid/mssql",
   "@sqlbraid/mysql",
   "@sqlbraid/oracle",
   "@sqlbraid/postgres",
-  "@sqlbraid/runtime",
-  "@sqlbraid/template",
   "@sqlbraid/sqlite",
 ];
 const packedContainers = [];
@@ -326,17 +324,22 @@ try {
       }
     }
     if (manifest.name === "sqlbraid") {
-      const dependencyNames = Object.keys(manifest.dependencies ?? {}).sort();
-      if (
-        JSON.stringify(dependencyNames) !== JSON.stringify(facadeRuntimeDependencies.toSorted()) ||
-        manifest.bin !== undefined ||
-        Object.keys(manifest.peerDependencies ?? {}).length ||
-        Object.keys(manifest.optionalDependencies ?? {}).length
-      ) {
-        throw new Error(
-          "The unscoped sqlbraid package must expose only first-party runtime dependencies and no CLI/bin or driver peers.",
-        );
+      assert.deepEqual(
+        Object.keys(manifest.dependencies ?? {}).sort(),
+        facadeRuntimeDependencies,
+        "The sqlbraid facade must have only dialect-neutral runtime dependencies.",
+      );
+      assert.deepEqual(Object.keys(manifest.peerDependencies ?? {}).sort(), facadeDialectPeers);
+      assert.deepEqual(
+        manifest.peerDependenciesMeta,
+        Object.fromEntries(facadeDialectPeers.map((name) => [name, { optional: true }])),
+        "Every sqlbraid dialect peer must be optional.",
+      );
+      for (const name of facadeDialectPeers) {
+        assert.equal(manifest.devDependencies?.[name], manifest.peerDependencies[name]);
       }
+      assert.equal(manifest.bin, undefined, "The sqlbraid facade must not expose a CLI.");
+      assert.deepEqual(Object.keys(manifest.optionalDependencies ?? {}), []);
     }
     if (
       manifest.name === "@sqlbraid/sqlite" &&
@@ -641,16 +644,14 @@ try {
   await run("npm", ["install", "--ignore-scripts"], consumer);
   const runtimeConsumer = join(temp, "runtime-consumer");
   await mkdir(runtimeConsumer);
-  await writeFile(
-    join(runtimeConsumer, "package.json"),
-    JSON.stringify({
-      name: "sqlbraid-runtime-consumer",
-      private: true,
-      type: "module",
-      dependencies: { sqlbraid: dependencies.sqlbraid },
-      overrides: Object.fromEntries(Object.entries(dependencies).filter(([name]) => name !== "sqlbraid")),
-    }),
-  );
+  const runtimeConsumerManifest = {
+    name: "sqlbraid-runtime-consumer",
+    private: true,
+    type: "module",
+    dependencies: { sqlbraid: dependencies.sqlbraid },
+    overrides: Object.fromEntries(Object.entries(dependencies).filter(([name]) => name !== "sqlbraid")),
+  };
+  await writeFile(join(runtimeConsumer, "package.json"), JSON.stringify(runtimeConsumerManifest));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], runtimeConsumer);
   const unscopedManifest = JSON.parse(
     await readFile(join(runtimeConsumer, "node_modules/sqlbraid/package.json"), "utf8"),
@@ -663,22 +664,11 @@ try {
     throw new Error("Unscoped sqlbraid is not a runtime-only facade.");
   }
   const runtimeConsumerPackages = await readdir(join(runtimeConsumer, "node_modules/@sqlbraid"));
-  if (
-    [
-      "metadata",
-      "codegen",
-      "tooling",
-      "compiler",
-      "vite",
-      "webpack",
-      "cli",
-      "language-server",
-      "operations",
-      "opentelemetry",
-    ].some((name) => runtimeConsumerPackages.includes(name))
-  ) {
-    throw new Error("Installing the unscoped sqlbraid package pulled in development tooling or optional integrations.");
-  }
+  assert.deepEqual(
+    runtimeConsumerPackages.sort(),
+    ["core", "runtime", "template"],
+    "Installing sqlbraid alone must not install dialects, tooling, or optional integrations.",
+  );
   const packedTopLevelPackages = await readdir(join(runtimeConsumer, "node_modules"));
   if (
     ["oracledb", "tedious", "pg", "mysql2", "mariadb", "better-sqlite3", "@libsql"].some((name) =>
@@ -687,15 +677,34 @@ try {
   ) {
     throw new Error("Installing the unscoped sqlbraid package pulled in a database driver.");
   }
+  await run(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      [
+        'import assert from "node:assert/strict";',
+        'import * as facadeRoot from "sqlbraid";',
+        'import "sqlbraid/compiled";',
+        'assert.equal("sql" in facadeRoot, false);',
+        'assert.equal(typeof facadeRoot.createDatabase, "function");',
+      ].join("\n"),
+    ],
+    runtimeConsumer,
+  );
+  console.info("PASS packed sqlbraid standalone consumer without dialects, CLI, tooling, or drivers");
+  runtimeConsumerManifest.dependencies["@sqlbraid/sqlite"] = dependencies["@sqlbraid/sqlite"];
+  delete runtimeConsumerManifest.overrides["@sqlbraid/sqlite"];
+  await writeFile(join(runtimeConsumer, "package.json"), JSON.stringify(runtimeConsumerManifest));
+  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], runtimeConsumer);
   await writeFile(
     join(runtimeConsumer, "index.mjs"),
     [
       'import assert from "node:assert/strict";',
-      'import * as facadeRoot from "sqlbraid";',
+      'import { createDatabase } from "sqlbraid";',
       'import { DatabaseSync } from "node:sqlite";',
       'import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";',
-      'assert.equal("sql" in facadeRoot, false);',
-      'assert.equal(typeof facadeRoot.createDatabase, "function");',
+      'assert.equal(typeof createDatabase, "function");',
       'const native = new DatabaseSync(":memory:");',
       "try {",
       '  native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");',
@@ -706,7 +715,7 @@ try {
     ].join("\n"),
   );
   await run(process.execPath, ["index.mjs"], runtimeConsumer);
-  console.info("PASS packed canonical sqlbraid runtime consumer without CLI, tooling, or drivers");
+  console.info("PASS packed sqlbraid/node-sqlite consumer with explicitly installed @sqlbraid/sqlite");
   const cliConsumer = join(temp, "cli-consumer");
   await mkdir(cliConsumer);
   await writeFile(

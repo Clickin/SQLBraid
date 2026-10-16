@@ -3,10 +3,10 @@ title: Oracle 빠른 시작
 description: Oracle 파라미터 힌트를 명시하면서 SQLBraid를 Thin 모드의 node-oracledb에 연결합니다.
 ---
 
-SQLBraid 런타임 파사드와 Oracle 드라이버를 함께 설치하세요.
+SQLBraid 런타임 파사드, Oracle 방언 패키지, `oracledb` 드라이버를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid oracledb
+npm install sqlbraid @sqlbraid/oracle oracledb
 ```
 
 방언 루트는 `oracledb`를 import하지 않습니다. Node 어댑터는 드라이버 하위 경로에 있습니다.

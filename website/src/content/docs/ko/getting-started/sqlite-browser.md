@@ -7,10 +7,10 @@ SQLBraid에서 SQLite는 하나의 방언입니다. 실행 드라이버와 런�
 
 ## SQLite WASM
 
-브라우저나 워커 리소스를 가진 애플리케이션에 SQLite 패키지와 공식 WASM 런타임을 설치하세요.
+브라우저나 워커 리소스를 가진 애플리케이션에 SQLBraid 런타임 파사드, SQLite 패키지, 공식 WASM 런타임을 함께 설치하세요.
 
 ```bash
-npm install sqlbraid @sqlite.org/sqlite-wasm
+npm install sqlbraid @sqlbraid/sqlite @sqlite.org/sqlite-wasm
 ```
 
 현재 realm의 OO1 스타일 객체로 직접 연결 데이터베이스를 하나 만드세요.
@@ -34,6 +34,12 @@ INTEGER 저장 값은 정규 십진 문자열로 노출됩니다. WASM 어댑터
 이것은 풀이 아니라 직접 연결 리소스입니다. 트랜잭션이나 스트림이 리소스를 쓰는 동안 충돌하는 루트 작업은 거부됩니다. SQLBraid는 불완전한 async-context 폴리필에 기대지 않습니다.
 
 ## Cloudflare D1
+
+파사드와 SQLite 패키지를 설치하세요. D1에는 WASM 런타임이 필요 없습니다.
+
+```bash
+npm install sqlbraid @sqlbraid/sqlite
+```
 
 D1도 SQLite입니다. 구조적 바인딩 인터페이스를 쓰므로 런타임에 Cloudflare 타입 패키지가 필요 없습니다.
 

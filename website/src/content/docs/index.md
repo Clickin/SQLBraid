@@ -34,4 +34,4 @@ For how SQLBraid handles 64-bit integers, exact decimals, JSON, and dates across
 
 ## Launch documentation
 
-The 1.x public API is stable and follows Semantic Versioning. Because database drivers differ in what they support, check the [runtime and driver support matrix](/SQLBraid/reference/support/) for your exact database, driver, and runtime combination, along with the [release notes](/SQLBraid/release/notes/) and [current limitations](/SQLBraid/release/limitations/).
+The public API is stable and follows Semantic Versioning (`sqlbraid` 2.x and `@sqlbraid/*` 1.x). Because database drivers differ in what they support, check the [runtime and driver support matrix](/SQLBraid/reference/support/) for your exact database, driver, and runtime combination, along with the [release notes](/SQLBraid/release/notes/) and [current limitations](/SQLBraid/release/limitations/).

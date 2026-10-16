@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@sqlbraid/sqlite": "1.0.0",
     "sqlbraid": "1.0.0"
   },
   "devDependencies": {

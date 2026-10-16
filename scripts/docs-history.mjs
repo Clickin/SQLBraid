@@ -216,7 +216,9 @@ export async function assertReleaseSource({ rootDirectory = root, version, commi
     throw new Error(`Release documentation version must be a SemVer: ${version}`);
   }
   if (!commit) throw new Error("Release documentation requires the checked-out commit SHA.");
-  const manifest = JSON.parse(await readFile(join(rootDirectory, "package.json"), "utf8"));
+  const facadeManifestPath = join(rootDirectory, "packages", "sqlbraid", "package.json");
+  const manifestPath = (await exists(facadeManifestPath)) ? facadeManifestPath : join(rootDirectory, "package.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   if (manifest.version !== version)
     throw new Error(`Release docs version ${version} differs from package version ${manifest.version}.`);
   const head = await git(rootDirectory, ["rev-parse", "HEAD"]);

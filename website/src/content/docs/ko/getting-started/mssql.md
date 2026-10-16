@@ -3,10 +3,10 @@ title: SQL Server 빠른 시작
 description: 결정적인 SQL Server 파라미터 힌트와 함께 SQLBraid를 Tedious에 연결합니다.
 ---
 
-SQLBraid 런타임 파사드와 Tedious를 함께 설치하세요.
+SQLBraid 런타임 파사드, SQL Server 방언 패키지, Tedious를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid tedious
+npm install sqlbraid @sqlbraid/mssql tedious
 ```
 
 방언 루트는 SQL Server 방언과 힌트 팩토리를 제공합니다. Node 드라이버 어댑터는 `/tedious`에 있습니다.

@@ -3,10 +3,10 @@ title: MySQL 빠른 시작
 description: 직접 연결이나 명시적인 풀로 SQLBraid를 mysql2에 연결합니다.
 ---
 
-SQLBraid 런타임 파사드와 MySQL 드라이버를 함께 설치하세요.
+SQLBraid 런타임 파사드, MySQL 방언 패키지, `mysql2` 드라이버를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid mysql2
+npm install sqlbraid @sqlbraid/mysql mysql2
 ```
 
 ## 물리 커넥션에 직접 연결하기

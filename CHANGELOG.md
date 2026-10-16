@@ -8,6 +8,29 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 ## Unreleased
 
+### Breaking changes
+
+- `sqlbraid`: remove hard dependencies on all seven dialect and adapter packages.
+  Previously, installing `sqlbraid` installed every dialect and adapter package, even when the application used only one database.
+  These unused packages increased downloads and the installed `node_modules` footprint.
+  Bundle tree-shaking does not prevent dependency installation. Gzipped bundle size and installed package size measure different costs.
+- Keep only `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template` as hard dependencies.
+  Make `@sqlbraid/bun-sql`, `@sqlbraid/mariadb`, `@sqlbraid/mssql`, `@sqlbraid/mysql`, `@sqlbraid/oracle`,
+  `@sqlbraid/postgres` and `@sqlbraid/sqlite` optional peers.
+  Install only the dialect or adapter packages that the application uses, plus the required external driver.
+- Existing import subpaths and query APIs stay unchanged, but existing projects must explicitly install their selected dialect package.
+  For example, `sqlbraid/pg` requires `@sqlbraid/postgres`, and `sqlbraid/node-sqlite` requires `@sqlbraid/sqlite`:
+
+  ```sh
+  # PostgreSQL
+  npm install sqlbraid @sqlbraid/postgres pg
+
+  # SQLite with node:sqlite
+  npm install sqlbraid @sqlbraid/sqlite
+  ```
+
+  This breaking installation change applies only to `sqlbraid`. Other packages do not need a major version increase for this change.
+
 ### Added
 
 - `@sqlbraid/postgres` 1.1.0: four optional adapter subpaths. All four use the lossless text profile and have the

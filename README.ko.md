@@ -43,7 +43,7 @@ SQLBraid를 만들면서 겪은 가장 큰 장벽은 **JDBC에 해당하는 표�
 Node.js 22.18 이상에서는 내장 `node:sqlite` 모듈을 사용하므로 별도의 데이터베이스 서버 없이 바로 실행해 볼 수 있습니다.
 
 ```sh
-npm install sqlbraid
+npm install sqlbraid @sqlbraid/sqlite
 ```
 
 아래 코드를 `quickstart.mts`로 저장하고 `node quickstart.mts`로 실행합니다.
@@ -81,7 +81,7 @@ try {
 커넥션 풀은 사용하는 드라이버(`pg` 등)로 직접 생성하여 주입합니다. SQLBraid는 개별 작업마다 연결 하나를 대여하고, 트랜잭션 동안에는 동일한 연결을 고정합니다.
 
 ```sh
-npm install sqlbraid pg
+npm install sqlbraid @sqlbraid/postgres pg
 ```
 
 ```ts
@@ -237,7 +237,21 @@ const result = await db.tx(async (tx) =>
 
 ## 지원 드라이버
 
-`sqlbraid`와 대상 드라이버 패키지를 함께 설치한 뒤 해당하는 하위 경로를 import합니다(`postgres.js`, Neon, PGlite 어댑터는 `@sqlbraid/postgres` 패키지를 설치하세요). **Official**은 CI에서 지정된 드라이버 버전과 런타임을 직접 검증함을 의미하며, **Compatible**은 동일 API 규격으로 동작하지만 특정 버전이 고정 인증되지는 않았음을 뜻합니다.
+`sqlbraid`, 아래의 해당 방언 또는 어댑터 패키지, 대상 드라이버 패키지를 함께 설치하세요. 내장 드라이버와 Cloudflare D1 바인딩은 별도 드라이버 패키지가 필요하지 않습니다.
+
+| 데이터베이스 또는 어댑터 | 필요한 패키지        |
+| ------------------------ | -------------------- |
+| PostgreSQL               | `@sqlbraid/postgres` |
+| MySQL                    | `@sqlbraid/mysql`    |
+| MariaDB                  | `@sqlbraid/mariadb`  |
+| SQLite                   | `@sqlbraid/sqlite`   |
+| Oracle                   | `@sqlbraid/oracle`   |
+| SQL Server               | `@sqlbraid/mssql`    |
+| Bun.SQL                  | `@sqlbraid/bun-sql`  |
+
+이 일곱 패키지는 `sqlbraid`의 선택적 피어 의존성입니다. 사용하는 패키지는 각각 명시적으로 설치하세요. 아래의 해당 파사드 하위 경로를 import하거나 `@sqlbraid/postgres/pg`, `@sqlbraid/sqlite/node-sqlite` 같은 방언 패키지 하위 경로를 직접 import할 수 있습니다.
+
+**Official**은 CI에서 지정된 드라이버 버전과 런타임을 직접 검증함을 의미하며, **Compatible**은 동일 API 규격으로 동작하지만 특정 버전이 고정 인증되지는 않았음을 뜻합니다.
 
 | 데이터베이스                       | 드라이버                               | import 경로                      | 지원 수준  |
 | ---------------------------------- | -------------------------------------- | -------------------------------- | ---------- |
@@ -285,7 +299,7 @@ const result = await db.tx(async (tx) =>
 ## 요구 사항 및 상태
 
 - **런타임 요구 사항:** 런타임 패키지(`sqlbraid` 및 드라이버 어댑터)는 Node.js 16.20.2 이상을 지원합니다(각 DB 드라이버의 최소 요구 버전 적용, `node:sqlite` 및 CLI/빌드 도구는 Node.js 22.18 이상 필요). 활성 LTS 버전 사용을 권장합니다.
-- **현재 상태:** 버전 1.x. 공개 API는 안정화되어 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
+- **현재 상태:** `sqlbraid` 2.x 및 `@sqlbraid/*` 1.x. 공개 API는 안정화되어 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
 
 ## 개발 방식 및 AI 활용
 

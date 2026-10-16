@@ -43,7 +43,7 @@ Because of that, SQLBraid needed not only a MyBatis-style dynamic SQL processor,
 On Node.js 22.18 or newer, you can run SQLBraid immediately with the built-in `node:sqlite` module—no database server required.
 
 ```sh
-npm install sqlbraid
+npm install sqlbraid @sqlbraid/sqlite
 ```
 
 Save the code below as `quickstart.mts` and run `node quickstart.mts`:
@@ -81,7 +81,7 @@ try {
 You create the connection pool with your driver (`pg`, `mysql2`, etc.) and pass it to SQLBraid. SQLBraid leases one connection per operation or pins a single connection across a transaction.
 
 ```sh
-npm install sqlbraid pg
+npm install sqlbraid @sqlbraid/postgres pg
 ```
 
 ```ts
@@ -237,7 +237,21 @@ Check the [Support matrix](https://clickin.github.io/SQLBraid/latest/reference/s
 
 ## Supported Drivers
 
-Install `sqlbraid` alongside your target driver package and import the matching subpath (for `postgres.js`, Neon, and PGlite adapters, install `@sqlbraid/postgres`). **Official** means CI tests that exact driver version and runtime against a real database; **Compatible** means the adapter follows the same API contract without a pinned certified target.
+Install `sqlbraid`, the matching dialect or adapter package below, and your driver package. Built-in drivers and Cloudflare D1 bindings need no driver package.
+
+| Database or adapter | Required package     |
+| ------------------- | -------------------- |
+| PostgreSQL          | `@sqlbraid/postgres` |
+| MySQL               | `@sqlbraid/mysql`    |
+| MariaDB             | `@sqlbraid/mariadb`  |
+| SQLite              | `@sqlbraid/sqlite`   |
+| Oracle              | `@sqlbraid/oracle`   |
+| SQL Server          | `@sqlbraid/mssql`    |
+| Bun.SQL             | `@sqlbraid/bun-sql`  |
+
+These seven packages are optional peers of `sqlbraid`; install each package you use explicitly. Import the matching facade subpath below, or use direct dialect imports such as `@sqlbraid/postgres/pg` and `@sqlbraid/sqlite/node-sqlite`.
+
+**Official** means CI tests that exact driver version and runtime against a real database; **Compatible** means the adapter follows the same API requirements without a pinned certified target.
 
 | Database                           | Driver                                 | Import path                      | Support    |
 | ---------------------------------- | -------------------------------------- | -------------------------------- | ---------- |
@@ -285,7 +299,7 @@ Every example project is integration-tested in CI against the packed release tar
 ## Requirements & Status
 
 - **Runtime requirements:** Runtime packages (`sqlbraid` and driver adapters) support Node.js 16.20.2 or newer (subject to each driver's own minimum Node version; `node:sqlite` and CLI/build tools require Node.js 22.18+). Active LTS releases are recommended.
-- **Current status:** Version 1.x. The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
+- **Current status:** `sqlbraid` 2.x and `@sqlbraid/*` 1.x. The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
 
 ## Development and AI Usage
 

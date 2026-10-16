@@ -26,6 +26,7 @@ if (!process.env.SQLBRAID_WEBPACK_CONSUMER) {
   }
   const dependencies = {
     sqlbraid: overrides.sqlbraid,
+    "@sqlbraid/sqlite": overrides["@sqlbraid/sqlite"],
     "@sqlbraid/webpack": overrides["@sqlbraid/webpack"],
     "@sqlbraid/compiler": overrides["@sqlbraid/compiler"],
   };
@@ -43,6 +44,7 @@ if (!process.env.SQLBRAID_WEBPACK_CONSUMER) {
   ])
     dependencies[name] = versions[name];
   assert.ok(dependencies["@sqlbraid/webpack"]);
+  assert.ok(dependencies["@sqlbraid/sqlite"], "Missing packed @sqlbraid/sqlite");
   writeFileSync(join(consumer, "package.json"), JSON.stringify({ private: true, type: "module", dependencies }));
   writeFileSync(
     join(consumer, "pnpm-workspace.yaml"),

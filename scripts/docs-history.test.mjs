@@ -114,6 +114,23 @@ test("release archives require the exact tagged source commit", async () => {
     assertReleaseSource({ rootDirectory: source.directory, version: "1.2.4", commit: source.commit, ref: "v1.2.4" }),
     /differs from package version/u,
   );
+  await mkdir(join(source.directory, "packages", "sqlbraid"), { recursive: true });
+  await writeFile(
+    join(source.directory, "packages", "sqlbraid", "package.json"),
+    '{"name":"sqlbraid","version":"2.0.0"}\n',
+  );
+  await git(source.directory, "add", "packages/sqlbraid/package.json");
+  await git(source.directory, "commit", "-qm", "bump facade to 2.0.0");
+  const v2Commit = (
+    await execFileAsync("git", ["-C", source.directory, "rev-parse", "HEAD"], { encoding: "utf8" })
+  ).stdout.trim();
+  await git(source.directory, "tag", "v2.0.0");
+  await assertReleaseSource({
+    rootDirectory: source.directory,
+    version: "2.0.0",
+    commit: v2Commit,
+    ref: "refs/tags/v2.0.0",
+  });
   assert.equal((await readVersions(history)).stable, "1.2.3");
   await rm(source.directory, { recursive: true, force: true });
   await rm(history, { recursive: true, force: true });

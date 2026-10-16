@@ -34,4 +34,4 @@ SQLBraid는 ORM이 아닙니다. 연관 관계를 자동으로 로딩하거나 �
 
 ## 출시 문서
 
-버전 1.x 공개 API는 안정화되어 시맨틱 버저닝을 따릅니다. 드라이버마다 지원하는 세부 기능이 다르므로, 사용하는 데이터베이스·드라이버·런타임 조합의 지원 범위는 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/), [릴리스 노트](/SQLBraid/release/notes/), [현재 제한 사항](/SQLBraid/release/limitations/)에서 확인하세요.
+공개 API는 안정화되어 시맨틱 버저닝을 따릅니다(`sqlbraid` 2.x 및 `@sqlbraid/*` 1.x). 드라이버마다 지원하는 세부 기능이 다르므로, 사용하는 데이터베이스·드라이버·런타임 조합의 지원 범위는 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/), [릴리스 노트](/SQLBraid/release/notes/), [현재 제한 사항](/SQLBraid/release/limitations/)에서 확인하세요.

@@ -3,10 +3,10 @@ title: MySQL quickstart
 description: Connect SQLBraid to mysql2 with either a direct connection or an explicit pool.
 ---
 
-Install the SQLBraid runtime facade and the MySQL driver together:
+Install the SQLBraid runtime facade, the MySQL dialect package and the `mysql2` driver together:
 
 ```bash
-npm install sqlbraid mysql2
+npm install sqlbraid @sqlbraid/mysql mysql2
 ```
 
 ## Direct physical connection

@@ -3,10 +3,10 @@ title: MariaDB 빠른 시작
 description: MariaDB 문법을 명시적으로 쓰면서 SQLBraid를 MariaDB Connector/Node.js에 연결합니다.
 ---
 
-SQLBraid 런타임 파사드와 공식 Connector/Node.js 드라이버를 설치하세요.
+SQLBraid 런타임 파사드, MariaDB 방언 패키지, 공식 Connector/Node.js 드라이버를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid mariadb
+npm install sqlbraid @sqlbraid/mariadb mariadb
 ```
 
 연결된 커넥션이나 명시적인 풀 팩토리와 함께 `/mariadb` 어댑터 하위 경로를 쓰세요.

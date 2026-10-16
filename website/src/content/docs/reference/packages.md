@@ -27,6 +27,12 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/cli`             | Optional codegen, inspect, diagnostics, drift and `migrate` commands                                                                                         |
 | `@sqlbraid/language-server` | Standard stdio LSP integration                                                                                                                               |
 
+`sqlbraid` installs only `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template` as dependencies.
+The seven dialect and adapter packages in the table are optional peers.
+Install the corresponding package explicitly before importing a dialect or adapter subpath.
+For example, `sqlbraid/pg` requires `@sqlbraid/postgres`, and `sqlbraid/node-sqlite` requires `@sqlbraid/sqlite`.
+All facade subpaths remain supported. Direct imports from `@sqlbraid/*` remain supported too.
+
 Install `sqlbraid` in application code. Then use a subpath that combines a driver
 and a dialect:
 `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
@@ -34,6 +40,12 @@ and a dialect:
 or `sqlbraid/tedious`. For Bun.SQL, use the `sqlbraid/bun-sql` adapter, which
 supports many dialects. Import `sql` from the root of the selected dialect, and
 give that dialect explicitly:
+
+For the Bun.SQL PostgreSQL example, install both the adapter and the dialect:
+
+```bash
+npm install sqlbraid @sqlbraid/bun-sql @sqlbraid/postgres
+```
 
 ```ts
 import { createBunSqlDatabase } from "sqlbraid/bun-sql";

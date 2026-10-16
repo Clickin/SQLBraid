@@ -120,7 +120,10 @@ async function installExample(name, tarballs) {
     assert.ok(packed, `missing packed dependency ${packageName}`);
     included.add(packageName);
     for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {
-      for (const dependency of Object.keys(packed.manifest[field] ?? {})) include(dependency);
+      for (const dependency of Object.keys(packed.manifest[field] ?? {})) {
+        if (field === "peerDependencies" && packed.manifest.peerDependenciesMeta?.[dependency]?.optional) continue;
+        include(dependency);
+      }
     }
   }
 
