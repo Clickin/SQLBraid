@@ -2,10 +2,10 @@
 
 > 직접 클라이언트나 명시적인 풀로 SQLBraid를 pg에 연결합니다.
 
-SQLBraid 런타임 파사드와 PostgreSQL 드라이버를 함께 설치하세요.
+SQLBraid 런타임 파사드, PostgreSQL 방언 패키지, `pg` 드라이버를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid pg
+npm install sqlbraid @sqlbraid/postgres pg
 ```
 
 ## 물리 클라이언트에 직접 연결하기

@@ -2,10 +2,10 @@
 
 > Connect SQLBraid to MariaDB Connector/Node.js while keeping MariaDB syntax explicit.
 
-Install the SQLBraid runtime facade and the official Connector/Node.js driver:
+Install the SQLBraid runtime facade, the MariaDB dialect package and the official Connector/Node.js driver together:
 
 ```bash
-npm install sqlbraid mariadb
+npm install sqlbraid @sqlbraid/mariadb mariadb
 ```
 
 Use the `/mariadb` adapter subpath with a connected connection or with an explicit

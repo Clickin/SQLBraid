@@ -36,7 +36,7 @@ The [runtime and driver support matrix](/SQLBraid/latest/reference/support.md) l
 mkdir braid-sqlite && cd braid-sqlite
 npm init -y
 npm pkg set type=module
-npm install sqlbraid
+npm install sqlbraid @sqlbraid/sqlite
 npm install --save-dev typescript @types/node@22
 mkdir src
 ```

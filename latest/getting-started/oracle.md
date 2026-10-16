@@ -2,10 +2,10 @@
 
 > Connect SQLBraid to node-oracledb in Thin mode with explicit Oracle parameter hints.
 
-Install the SQLBraid runtime facade and the Oracle driver together:
+Install the SQLBraid runtime facade, the Oracle dialect package and the `oracledb` driver together:
 
 ```bash
-npm install sqlbraid oracledb
+npm install sqlbraid @sqlbraid/oracle oracledb
 ```
 
 The portable root does not import `oracledb`. The driver subpath owns the Node adapter:

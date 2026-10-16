@@ -30,7 +30,7 @@ Deno 2.9.3에서는 `node:sqlite` 이터레이터가 SQLite step 오류를 정�
 mkdir braid-sqlite && cd braid-sqlite
 npm init -y
 npm pkg set type=module
-npm install sqlbraid
+npm install sqlbraid @sqlbraid/sqlite
 npm install --save-dev typescript @types/node@22
 mkdir src
 ```

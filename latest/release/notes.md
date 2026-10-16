@@ -1,12 +1,28 @@
-# 1.0.0 release notes
+# Release notes
 
-> The SQLBraid 1.0.0 GA interfaces and their capability and evidence boundaries.
+> The SQLBraid GA interfaces, the 2.0.0 facade dependency boundary and their capability and evidence boundaries.
 
-This is the SQLBraid 1.0.0 GA documentation. GA makes the public interfaces
+This page records the SQLBraid GA release line. GA makes the public interfaces
 stable. It does not make each capability available on each driver.
 
 The [runtime and driver support matrix](/SQLBraid/latest/reference/support.md) lists
 the supported combinations of database, driver, profile, runtime and capability.
+
+## 2.0.0 facade dependency boundary
+
+`sqlbraid` 2.0.0 moves the seven dialect and adapter packages
+(`@sqlbraid/bun-sql`, `@sqlbraid/mariadb`, `@sqlbraid/mssql`, `@sqlbraid/mysql`,
+`@sqlbraid/oracle`, `@sqlbraid/postgres` and `@sqlbraid/sqlite`) from hard
+dependencies to optional peer dependencies. The `sqlbraid` facade now keeps only
+`@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template` as hard
+dependencies.
+
+- Install the `@sqlbraid/*` dialect or adapter package that matches each
+  `sqlbraid/*` subpath you import (for example,
+  `npm install sqlbraid @sqlbraid/postgres pg` for `sqlbraid/pg`).
+- All `sqlbraid` export subpaths, query APIs and runtime semantics stay
+  unchanged from 1.0.x, and the `@sqlbraid/*` packages stay on the 1.x release
+  line.
 
 ## What 1.0.0 includes
 

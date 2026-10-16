@@ -3,9 +3,10 @@
 > TypeScript·TSX 변환은 그대로 두고, Vite 8에서 SQLBraid 조건부 템플릿을 변환합니다.
 
 애플리케이션의 SQLBraid 방언 패키지와 함께 Vite 플러그인을 설치하세요.
+다음 명령은 SQLite를 사용합니다.
 
 ```bash
-npm install sqlbraid @sqlbraid/vite
+npm install sqlbraid @sqlbraid/sqlite @sqlbraid/vite
 ```
 
 프레임워크와 무관한 이 플러그인을 일반 Vite 변환보다 앞에 추가하세요.

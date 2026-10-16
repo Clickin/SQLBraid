@@ -26,7 +26,19 @@
 | `@sqlbraid/cli`             | 선택 사항인 코드 생성, 검사, 진단, 변경 비교, `migrate` 명령                                                              |
 | `@sqlbraid/language-server` | 표준 stdio LSP 연동                                                                                                       |
 
+`sqlbraid`는 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`만 의존성으로 설치합니다.
+표에 있는 일곱 방언·어댑터 패키지는 선택적 피어 의존성입니다.
+방언이나 어댑터 하위 경로를 import하기 전에 해당 패키지를 명시적으로 설치하세요.
+예를 들어 `sqlbraid/pg`에는 `@sqlbraid/postgres`가, `sqlbraid/node-sqlite`에는 `@sqlbraid/sqlite`가 필요합니다.
+모든 파사드 하위 경로는 계속 지원합니다. `@sqlbraid/*`에서 직접 import하는 방식도 계속 지원합니다.
+
 애플리케이션 코드에는 `sqlbraid`를 설치하세요. 그리고 드라이버와 방언을 묶은 하위 경로를 쓰세요. `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`, `sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`, `sqlbraid/tedious`가 있습니다. Bun.SQL에는 여러 방언을 지원하는 `sqlbraid/bun-sql` 어댑터를 쓰세요. 고른 방언의 루트에서 `sql`을 import하고, 그 방언을 명시적으로 넘기세요.
+
+다음 Bun.SQL PostgreSQL 예제에는 어댑터와 방언을 모두 설치하세요.
+
+```bash
+npm install sqlbraid @sqlbraid/bun-sql @sqlbraid/postgres
+```
 
 ```ts
 import { createBunSqlDatabase } from "sqlbraid/bun-sql";
