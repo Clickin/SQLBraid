@@ -74,12 +74,11 @@ The pipeline is:
 driver row -> dialect TypePolicy normalization -> plain row -> query schema -> execution schema -> application model
 ```
 
-`DatabaseResultValidationError` uses the code `BRAID_RESULT_VALIDATION`. It reports the stage (query or execution) and the row index. Its message does not contain raw rows or binds. Its `issues` property holds the issues of the schema library without change. Some libraries put the input value in each issue. If rows can contain personal data, do not log `issues` or the complete error object without redaction. Mapping is one row to one row. SQLBraid does not hydrate relations, keep identity maps or assemble object graphs.
+`DatabaseResultValidationError` (code `BRAID_RESULT_VALIDATION`) reports the validation stage (`query` or `execution`) and the failing row index. Its message never includes raw row values or bind parameters, while its `issues` property preserves the validator's issue list verbatim. Because some validation libraries attach the raw input value to each issue, redact `issues` before logging if rows contain sensitive data. Result mapping always transforms one row into one value—SQLBraid does not hydrate relations, maintain identity maps, or assemble object graphs.
 
-The input side is smaller in 1.0.0. This is intentional.
+Input parameter handling is intentionally minimal:
 
-- Ordinary value interpolation stays a value that the driver binds. There is no
-  universal input codec framework for applications yet.
-- The fidelity of exact numeric binds is a separate driver capability.
-- Ordinary `undefined` IN values fail before acquisition. `null` means SQL `NULL`.
-- The driver stays responsible for its own JSON, temporal and binary conventions.
+- Ordinary `${value}` interpolations are passed directly to the driver as bound parameters; SQLBraid does not include a custom input-codec layer.
+- Exact numeric bind fidelity depends on the target driver's capabilities.
+- `undefined` IN parameters fail before connection acquisition (`BRAID_BIND_VALUE_UNSUPPORTED`), while `null` binds as SQL `NULL`.
+- JSON, date/time, and binary input values follow the target driver's native binding conventions.

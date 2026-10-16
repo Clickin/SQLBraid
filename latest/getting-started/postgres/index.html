@@ -180,17 +180,7 @@ acquisition. <code dir="auto">null</code> is SQL <code dir="auto">NULL</code>.</
 <li>Arrays, domains, ranges, multiranges and composites are unclassified
 containers. This is also true when their scalar element types are exact.</li>
 </ul>
-<p><code dir="auto">db.environment()</code> reports the selected profile (for example,
-<code dir="auto">pg-lossless-text</code>) and the id and hash of the TypePolicy. It reads the server
-setting <code dir="auto">extra_float_digits</code>, but it does not report the value. If the value is
-greater than 0, <code dir="auto">numeric.approximate-float</code> is <code dir="auto">guaranteed</code>. If not, it is
-<code dir="auto">guarded</code> with the condition <code dir="auto">pg.extra-float-digits</code>. Do not read the report as
-an unconditional fidelity guarantee. The <a href="/SQLBraid/latest/reference/support/">runtime and driver support
-matrix</a> records labels for each exact tuple of
-database, driver, profile, runtime and capability, with its revision and
-workflow evidence. A neighboring version or a package installation is not
-certification. The final exact-SHA Runtime, Docs and Release gates and an
-explicit release authorization stay separate requirements.</p>
+<p><code dir="auto">db.environment()</code> reports the selected profile (for example, <code dir="auto">pg-lossless-text</code>) along with the <code dir="auto">id</code> and <code dir="auto">hash</code> of its <code dir="auto">TypePolicy</code>. It checks the server setting <code dir="auto">extra_float_digits</code> without exposing the raw setting value: when <code dir="auto">extra_float_digits &gt; 0</code>, <code dir="auto">numeric.approximate-float</code> is reported as <code dir="auto">guaranteed</code>; otherwise it is <code dir="auto">guarded</code> with condition <code dir="auto">pg.extra-float-digits</code>. See the <a href="/SQLBraid/latest/reference/support/">runtime and driver support matrix</a> for the tested database, driver, profile, and runtime combinations.</p>
 <ul>
 <li><code dir="auto">pg-cursor</code> supplies the native pull stream. A missing peer gives
 <code dir="auto">BRAID_STREAM_UNSUPPORTED</code>.</li>

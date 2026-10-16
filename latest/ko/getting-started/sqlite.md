@@ -20,8 +20,8 @@ Deno 2.9.3에서는 `node:sqlite` 이터레이터가 SQLite step 오류를 정�
 
 공개 `Database` API는 모든 어댑터에서 비동기입니다. `Awaitable<T>`는 물리 `QueryExecutor` SPI의 타입일 뿐입니다. 동기 어댑터가 Promise로 감싸지 않고 결과를 그대로 반환할 수 있게 해 줍니다. better-sqlite3를 논블로킹으로 만들지는 않습니다.
 
-:::note 검증 상태
-[런타임·드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)는 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합마다 등급을 기록하고, 해당 리비전과 워크플로 근거를 함께 남깁니다. 비슷한 버전이나 패키지 설치만으로는 인증이 되지 않습니다. 정확한 SHA에 대한 Runtime, Docs, Release 최종 게이트와 명시적인 릴리스 승인은 별도 요구 사항입니다. 이 페이지가 npm 배포를 승인하지는 않습니다.
+:::note 지원 매트릭스
+[런타임·드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)에서 데이터베이스, 드라이버, 표현 방식 프로필, 런타임, 기능별 테스트 조합과 CI 검증 상태를 확인할 수 있습니다.
 :::
 
 ## 1. 프로젝트 만들기

@@ -106,7 +106,7 @@ OpenTelemetry 뒤에 등록한 옵저버는, 텔레메트리가 이미 성공 sp
 
 ## 느린 쿼리 조사
 
-지연 시간은 OTel 히스토그램으로 찾으세요. 물리 실행 시간은 일반 SQLBraid 옵저버로 기록하세요. `query:result.durationMs`는 드라이버 실행 구간입니다. 논리 span과 히스토그램의 구간과는 일부러 다르게 잡았습니다.
+지연 시간 추이는 OTel 히스토그램으로 확인하고, 순수 드라이버 I/O 소요 시간은 일반 SQLBraid 옵저버로 기록할 수 있습니다. `query:result.durationMs`는 드라이버 실행 구간만 측정하며, OTel 스팬과 히스토그램은 결과 매핑을 포함한 전체 논리 작업 시간을 측정합니다.
 
 ```ts
 const slowQueries: ExecutionObserver = {

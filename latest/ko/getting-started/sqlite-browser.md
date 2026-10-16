@@ -51,7 +51,7 @@ D1은 타입 정보가 없는 JavaScript 숫자를 노출합니다. guarded 프�
 
 네이티브 D1 배치는 루트 벌크보다 강한 트랜잭션 동작을 가질 수 있습니다. 하지만 SQLBraid의 공통 규칙은 아닙니다. 루트 벌크는 트랜잭션이 아니며, 자동 분할에 대한 공통 보장도 없습니다.
 
-[런타임·드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)는 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합마다 등급을 기록하고, 해당 리비전과 워크플로 근거를 함께 남깁니다. 비슷한 버전이나 패키지 설치만으로는 인증이 되지 않습니다. 정확한 SHA에 대한 Runtime, Docs, Release 최종 게이트와 명시적인 릴리스 승인은 별도 요구 사항입니다. D1은 Compatible 등급에 머뭅니다. 관리형 SQLite 버전은 보고되지 않습니다. 어떤 브라우저 게이트도 OPFS 영구 저장, SharedArrayBuffer, 원격 운영 환경 지원, npm 배포를 주장하지 않습니다.
+SQLite WASM과 Cloudflare D1의 세부 기능 지원 여부는 [런타임·드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)에서 확인할 수 있습니다. Cloudflare D1은 Worker 바인딩이 내부 SQLite 버전을 노출하지 않으므로 Compatible 등급으로 분류됩니다.
 
 ## 브라우저와 Worker의 표현 방식 프로필
 

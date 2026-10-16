@@ -136,9 +136,7 @@ previous query.
 ## Slow-query investigation
 
 Use the OTel histogram to find latency. Use a plain SQLBraid observer to log the
-physical execution duration. `query:result.durationMs` is the interval of the
-driver execution. It is different from the boundary of the logical span and the
-histogram on purpose:
+physical execution duration. `query:result.durationMs` measures driver I/O time only, whereas the OpenTelemetry span and histogram cover the full logical operation (including result mapping):
 
 ```ts
 const slowQueries: ExecutionObserver = {

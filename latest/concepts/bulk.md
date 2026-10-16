@@ -2,9 +2,7 @@
 
 > Execute one command shape with many value sets without hiding driver capabilities.
 
-`db.bulk(inputs, factory)` is the SQLBraid throughput primitive for homogeneous
-DML. It is different from `db.batch(queries)` on purpose. `db.batch(queries)`
-executes a heterogeneous list of queries.
+`db.bulk(inputs, factory)` executes one DML command shape across many parameter sets. Unlike `db.batch(queries)`, which runs a list of different statements sequentially, `db.bulk` requires every item to share the same rendered SQL structure.
 
 ```ts
 const result = await db.bulk(

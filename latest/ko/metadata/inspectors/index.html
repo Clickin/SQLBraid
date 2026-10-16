@@ -85,7 +85,7 @@
 <li><code dir="auto">createOracleInspector</code> (<code dir="auto">@sqlbraid/oracle/inspector</code>)</li>
 <li><code dir="auto">createMssqlInspector</code> (<code dir="auto">@sqlbraid/mssql/inspector</code>)</li>
 </ul>
-<p>인스펙터 하위 경로는 일부러 방언 루트와 분리했습니다.</p>
+<p>인스펙터를 <code dir="auto">/inspector</code> 하위 경로로 분리해 두었기 때문에, 런타임 데이터베이스 코드에는 스키마 조회 관련 코드가 포함되지 않습니다.</p>
 <p>스냅샷 형식은 다음과 같습니다.</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="json"><code><div class="ec-line"><div class="code"><span style="--0:#D6DEEB;--1:#403F53">{ </span><span style="--0:#7FDBCA;--1:#096E72">"format"</span><span style="--0:#D6DEEB;--1:#403F53">: </span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#C789D6;--1:#7C5686">sqlbraid-metadata</span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#D6DEEB;--1:#403F53">, </span><span style="--0:#7FDBCA;--1:#096E72">"formatVersion"</span><span style="--0:#D6DEEB;--1:#403F53">: </span><span style="--0:#F78C6C;--1:#AA0982">1</span><span style="--0:#D6DEEB;--1:#403F53"> }</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="클립보드로 복사" data-copied="복사 완료!" data-code="{ &quot;format&quot;: &quot;sqlbraid-metadata&quot;, &quot;formatVersion&quot;: 1 }"><div></div></button></div></figure></div>
 <p>스냅샷 형식은 네임스페이스, 타입, 릴레이션, 열, 제약, 인덱스, 루틴, 서버 근거, 수집 메타데이터를 표현할 수 있습니다.</p>

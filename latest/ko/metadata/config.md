@@ -43,4 +43,4 @@ sqlbraid codegen --json
 
 설정 파일은 CLI가 실행하는 신뢰된 Node 코드입니다. 샌드박스가 아닙니다. 스키마 변경을 사람이 검토해야 한다면 메타데이터와 생성된 출력을 버전 관리에 넣으세요.
 
-선택한 TypePolicy는 표현 방식 프로필입니다. 겉모양만 바꾸는 codegen 옵션이 아닙니다. 런타임과 이 설정에서 같은 PostgreSQL, mysql2, MariaDB 프로필 설명 객체를 쓰세요. 드라이버용 선언이 좁혀 주지 않는 한, 네이티브 JSON 최상위 값은 일부러 `unknown`으로 남습니다. 출력 타입을 직접 재정의하면 생성되는 TypeScript만 바뀝니다. 런타임 디코딩은 바뀌지 않습니다.
+`TypePolicy`는 데이터베이스 컬럼 타입이 TypeScript 타입으로 매핑되는 규칙을 정의합니다. 런타임 데이터베이스 생성 시 사용한 PostgreSQL, mysql2, MariaDB 프로필 설명 객체를 코드 생성 설정에도 동일하게 전달하세요. 네이티브 JSON 컬럼은 별도로 타입을 지정하지 않으면 안전을 위해 `unknown`으로 생성되며, 타입 재정의(override)는 생성되는 TypeScript 선언만 바꿀 뿐 런타임 디코딩 동작은 바꾸지 않습니다.

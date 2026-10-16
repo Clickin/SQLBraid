@@ -30,7 +30,7 @@ All first-party dialects export dedicated inspectors from their `/inspector` sub
 - `createOracleInspector` (`@sqlbraid/oracle/inspector`);
 - `createMssqlInspector` (`@sqlbraid/mssql/inspector`).
 
-The inspector subpaths are separate from the dialect roots on purpose.
+Keeping inspectors under `/inspector` subpaths ensures that runtime database imports stay free of schema-inspection code.
 
 Snapshots use:
 

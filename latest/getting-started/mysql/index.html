@@ -104,22 +104,13 @@ releases the connection.</p>
 the extra OUT carrier result of the protocol. Thus, SQLBraid does not guess a
 carrier row. Stored functions cannot emit result sets.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="mysql2-representation-profile">mysql2 representation profile</h2><a class="sl-anchor-link" href="#mysql2-representation-profile"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>Section titled “mysql2 representation profile”</span></a></div>
-<p>This is an explicit configuration profile. It is not an implicit assumption.</p>
+<p>Use an explicit representation profile so the runtime and <code dir="auto">@sqlbraid/codegen</code> share the same type rules:</p>
 <ul>
-<li><code dir="auto">@sqlbraid/mysql</code> exports <code dir="auto">typePolicyForProfile({ json, temporal })</code> and
-immutable <code dir="auto">representationProfiles</code>.</li>
-<li>The default <code dir="auto">mysql2-lossless-text</code> descriptor uses the fidelity-first options
-below.</li>
-<li><code dir="auto">mysql2-native</code> is a separate convenience profile with native JSON and
-temporal results.</li>
-<li>The runtime and codegen must select the same descriptor.</li>
+<li><code dir="auto">@sqlbraid/mysql</code> exports <code dir="auto">typePolicyForProfile({ json, temporal })</code> and immutable <code dir="auto">representationProfiles</code> descriptors.</li>
+<li><code dir="auto">mysql2-lossless-text</code> (the default) uses the exact-text options listed in the table below.</li>
+<li><code dir="auto">mysql2-native</code> is a separate convenience profile that keeps native JSON and <code dir="auto">Date</code> outputs.</li>
 </ul>
-<p>The <a href="/SQLBraid/latest/reference/support/">runtime and driver support matrix</a> records
-labels for each exact tuple of database, driver, profile, runtime and
-capability, with its revision and workflow evidence. A neighboring version or a
-package installation is not certification. The final exact-SHA Runtime, Docs
-and Release gates and an explicit release authorization stay separate
-requirements.</p>
+<p>See the <a href="/SQLBraid/latest/reference/support/">runtime and driver support matrix</a> for the tested combinations of database, driver, profile, and runtime.</p>
 <table>
 <thead>
 <tr>

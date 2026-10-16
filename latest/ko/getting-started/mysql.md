@@ -84,14 +84,13 @@ const result = await db.call(
 
 ## mysql2 표현 방식 프로필
 
-이것은 명시적인 설정 프로필입니다. 암묵적인 가정이 아닙니다.
+런타임과 `@sqlbraid/codegen`이 동일한 타입 규칙을 사용하도록 명시적 표현 방식 프로필을 지정합니다.
 
-- `@sqlbraid/mysql`은 `typePolicyForProfile({ json, temporal })`과 변경할 수 없는 `representationProfiles`를 export합니다.
-- 기본 `mysql2-lossless-text` 설명 객체는 아래의 정확도 우선 옵션을 씁니다.
-- `mysql2-native`는 네이티브 JSON과 날짜·시간 결과를 쓰는 별도의 편의 프로필입니다.
-- 런타임과 코드 생성은 같은 설명 객체를 골라야 합니다.
+- `@sqlbraid/mysql`은 `typePolicyForProfile({ json, temporal })`과 불변 `representationProfiles` 설명 객체를 export합니다.
+- 기본 `mysql2-lossless-text` 프로필은 아래 표의 정밀도 우선 옵션을 사용합니다.
+- `mysql2-native`는 네이티브 JSON 및 `Date` 결과를 그대로 반환하는 별도 편의 프로필입니다.
 
-[런타임·드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)는 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합마다 등급을 기록하고, 해당 리비전과 워크플로 근거를 함께 남깁니다. 비슷한 버전이나 패키지 설치만으로는 인증이 되지 않습니다. 정확한 SHA에 대한 Runtime, Docs, Release 최종 게이트와 명시적인 릴리스 승인은 별도 요구 사항입니다.
+데이터베이스, 드라이버, 프로필, 런타임별 검증 상태는 [런타임·드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)를 참고하세요.
 
 | mysql2 옵션               | `mysql2-lossless-text` | 효과                                                                                   |
 | ------------------------- | ---------------------- | -------------------------------------------------------------------------------------- |

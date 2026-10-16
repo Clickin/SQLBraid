@@ -32,4 +32,4 @@ const columns = { name: sql.ident("name"), created: sql.ident("created_at") } as
 const order = columns[sortKey as keyof typeof columns] ?? columns.name;
 ```
 
-`sql.raw`는 일부러 눈에 띄게 남겨 두었습니다. SQLBraid는 임의의 SQL 텍스트가 신뢰할 만한지 증명할 수 없습니다.
+`sql.raw`는 신뢰할 수 없는 외부 입력이 실수로 SQL 원문에 섞이지 않도록 별도 함수로 분리되어 있습니다.

@@ -7,7 +7,7 @@ This index belongs to the latest documentation snapshot at https://clickin.githu
 Assume ordinary SQL knowledge. Use these documents for SQLBraid-specific APIs, guarantees, limits, and database/driver behavior rather than generic SQL syntax.
 
 ## Start here
-- [SQLBraid](https://clickin.github.io/SQLBraid/latest/index.md): Write SQL. Keep TypeScript. Skip the query-builder translation layer.
+- [SQLBraid](https://clickin.github.io/SQLBraid/latest/index.md): Write plain SQL in TypeScript, with type safety and no query builder.
 - [SQL tags and result kinds](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags.md): Declare what a SQLBraid statement returns without hiding the SQL.
 - [Safe binds](https://clickin.github.io/SQLBraid/latest/concepts/safe-binds.md): Keep values as driver parameters and make structural SQL explicit.
 - [Structural SQL fragments](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments.md): Make identifiers, lists, joins and trusted raw SQL visible in the API.
@@ -67,7 +67,7 @@ Assume ordinary SQL knowledge. Use these documents for SQLBraid-specific APIs, g
 - [Troubleshooting](https://clickin.github.io/SQLBraid/latest/reference/troubleshooting.md): Correct the most common mistakes in setup and at runtime boundaries.
 
 ## Release
-- [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations.md): The things that 1.0.0 GA does not promise, on purpose.
+- [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations.md): Capabilities and driver behaviors that SQLBraid 1.x does not support or emulate.
 - [1.0.0 release notes](https://clickin.github.io/SQLBraid/latest/release/notes.md): The SQLBraid 1.0.0 GA interfaces and their capability and evidence boundaries.
 - [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap.md): Current behavior, and candidates that need their own design and evidence.
 

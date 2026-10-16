@@ -63,7 +63,7 @@ SQLBraid는 풀 리스를 반환할 때 커넥션의 세션 상태를 초기화�
 
 ## 트랜잭션 옵션
 
-어디서나 쓸 수 있는 옵션은 일부러 정해 두었습니다.
+공통으로 사용할 수 있는 트랜잭션 옵션은 다음과 같습니다.
 
 ```ts
 type TransactionIsolation = "read-uncommitted" | "read-committed" | "repeatable-read" | "serializable";

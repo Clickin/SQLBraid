@@ -85,7 +85,7 @@
 <li><code dir="auto">createOracleInspector</code> (<code dir="auto">@sqlbraid/oracle/inspector</code>);</li>
 <li><code dir="auto">createMssqlInspector</code> (<code dir="auto">@sqlbraid/mssql/inspector</code>).</li>
 </ul>
-<p>The inspector subpaths are separate from the dialect roots on purpose.</p>
+<p>Keeping inspectors under <code dir="auto">/inspector</code> subpaths ensures that runtime database imports stay free of schema-inspection code.</p>
 <p>Snapshots use:</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="json"><code><div class="ec-line"><div class="code"><span style="--0:#D6DEEB;--1:#403F53">{ </span><span style="--0:#7FDBCA;--1:#096E72">"format"</span><span style="--0:#D6DEEB;--1:#403F53">: </span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#C789D6;--1:#7C5686">sqlbraid-metadata</span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#D6DEEB;--1:#403F53">, </span><span style="--0:#7FDBCA;--1:#096E72">"formatVersion"</span><span style="--0:#D6DEEB;--1:#403F53">: </span><span style="--0:#F78C6C;--1:#AA0982">1</span><span style="--0:#D6DEEB;--1:#403F53"> }</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="{ &quot;format&quot;: &quot;sqlbraid-metadata&quot;, &quot;formatVersion&quot;: 1 }"><div></div></button></div></figure></div>
 <p>The snapshot format can represent namespaces, types, relations, columns, constraints, indexes, routines, server evidence and capture metadata.</p>

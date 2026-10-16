@@ -97,22 +97,13 @@ carrier row. Stored functions cannot emit result sets.
 
 ## mysql2 representation profile
 
-This is an explicit configuration profile. It is not an implicit assumption.
+Use an explicit representation profile so the runtime and `@sqlbraid/codegen` share the same type rules:
 
-- `@sqlbraid/mysql` exports `typePolicyForProfile({ json, temporal })` and
-  immutable `representationProfiles`.
-- The default `mysql2-lossless-text` descriptor uses the fidelity-first options
-  below.
-- `mysql2-native` is a separate convenience profile with native JSON and
-  temporal results.
-- The runtime and codegen must select the same descriptor.
+- `@sqlbraid/mysql` exports `typePolicyForProfile({ json, temporal })` and immutable `representationProfiles` descriptors.
+- `mysql2-lossless-text` (the default) uses the exact-text options listed in the table below.
+- `mysql2-native` is a separate convenience profile that keeps native JSON and `Date` outputs.
 
-The [runtime and driver support matrix](/SQLBraid/latest/reference/support.md) records
-labels for each exact tuple of database, driver, profile, runtime and
-capability, with its revision and workflow evidence. A neighboring version or a
-package installation is not certification. The final exact-SHA Runtime, Docs
-and Release gates and an explicit release authorization stay separate
-requirements.
+See the [runtime and driver support matrix](/SQLBraid/latest/reference/support.md) for the tested combinations of database, driver, profile, and runtime.
 
 | mysql2 option             | `mysql2-lossless-text` | Effect                                                                                  |
 | ------------------------- | ---------------------- | --------------------------------------------------------------------------------------- |
