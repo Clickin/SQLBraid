@@ -22,7 +22,7 @@ body:
     attributes:
       label: Package and import subpath
       description: Include the package name and subpath involved.
-      placeholder: sqlbraid/node-sqlite
+      placeholder: "@sqlbraid/sqlite/node-sqlite"
     validations:
       required: true
   - type: input

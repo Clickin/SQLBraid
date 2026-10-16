@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import type { Database } from "sqlbraid";
-import { sql } from "sqlbraid/pg";
+import { sql } from "@sqlbraid/postgres";
 
 // The schema maps one database row to one application value. Exact integers arrive
 // as strings, so the schema turns them into numbers that are safe for this domain.

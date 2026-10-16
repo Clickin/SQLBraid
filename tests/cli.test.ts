@@ -22,7 +22,7 @@ test("CLI version matches the package manifest", async () => {
   assert.equal(result.stdout.trim(), manifest.version);
 });
 
-test("CLI manifest follows a local facade re-export through the project checker", async () => {
+test("CLI manifest follows a local dialect re-export through the project checker", async () => {
   const directory = await mkdtemp(join(testRoot, ".sqlbraid-cli-"));
   try {
     const bridge = join(directory, "bridge.ts");
@@ -507,7 +507,7 @@ test("CLI inspect never runs a config above the current directory", async () => 
   }
 }, 15_000);
 
-test("CLI inspect JSON consumes a facade query with metadata-backed defaults", async () => {
+test("CLI inspect JSON consumes a dialect query with metadata-backed defaults", async () => {
   const directory = await mkdtemp(join(testRoot, ".sqlbraid-cli-"));
   const native = new DatabaseSync(":memory:");
   try {
@@ -537,7 +537,7 @@ test("CLI inspect JSON consumes a facade query with metadata-backed defaults", a
       })};\n`,
     );
     const file = join(directory, "query.ts");
-    const source = 'import { sql } from "sqlbraid/sqlite"; export const query = sql`SELECT id FROM main.users`;';
+    const source = 'import { sql } from "@sqlbraid/sqlite"; export const query = sql`SELECT id FROM main.users`;';
     await writeFile(file, source);
     const relationColumn = source.indexOf("main.users") + "main.".length + 1;
     const inspected = await exec(
@@ -622,7 +622,7 @@ test("programmatic inspector snapshots feed the CLI codegen recipe", async () =>
   }
 }, 15_000);
 
-test("CLI facade prebuild executes lazy branch interpolation from generated output", async () => {
+test("CLI dialect prebuild executes lazy branch interpolation from generated output", async () => {
   const directory = await mkdtemp(join(testRoot, ".sqlbraid-cli-"));
   try {
     const file = join(directory, "query.ts");
@@ -632,7 +632,7 @@ test("CLI facade prebuild executes lazy branch interpolation from generated outp
     await writeFile(
       file,
       `
-      import { sql } from "sqlbraid/sqlite";
+      import { sql } from "@sqlbraid/sqlite";
       export function run(include: boolean) {
         let calls = 0;
         const query = sql\`SELECT 1 /*@braid if \${include}*/ AND id = \${(() => { calls += 1; return 7; })()} /*@braid end*/\`;

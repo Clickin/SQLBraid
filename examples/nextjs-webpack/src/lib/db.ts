@@ -1,6 +1,6 @@
 import "server-only";
 import { DatabaseSync } from "node:sqlite";
-import { createNodeSqliteDatabase } from "sqlbraid/node-sqlite";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 
 // One in-memory database for the server process. The globalThis cache keeps it
 // across hot reloads in development.

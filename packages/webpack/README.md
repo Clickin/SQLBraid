@@ -4,7 +4,8 @@ A Webpack loader for guarded SQLBraid templates. It calls `@sqlbraid/compiler` d
 It does not include the migration features of `@sqlbraid/migrate/vite`.
 
 ```sh
-npm install --save-dev @sqlbraid/webpack
+pnpm add --save-dev @sqlbraid/webpack
+pnpm add @sqlbraid/template
 ```
 
 Use Node.js 22.18.0 or later for this build tool. Application runtime requirements do not change.

@@ -7,6 +7,17 @@ The GA target is stable public interfaces. It is not universal driver
 capabilities. This preparation does not claim fresh final certification. It does
 not authorize tagging, staging, approval or publication.
 
+## 2.0.0 preparation
+
+The current cutover aligns all publishable first-party packages and the VS Code
+extension at `2.0.0`. It removes driver and dialect facade subpaths and their
+optional peers. Applications import dialects and adapters from their owning
+`@sqlbraid/*` packages. Only `sqlbraid` and `sqlbraid/compiled` remain.
+
+The 1.x candidate versions, release plans and exact-SHA evidence below are
+historical records. They do not certify or define the package set of 2.0.0.
+This preparation does not authorize publication, tags or pushes.
+
 - Prereleases stage under `next`.
 - Stable releases stage under `latest`.
 - Stage approval by a human is a separate maintainer action.

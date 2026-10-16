@@ -2,7 +2,8 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { createMigrator } from "@sqlbraid/migrate";
 import { loadMigrations } from "@sqlbraid/migrate/node";
-import { createPgPoolDatabase, dialect } from "sqlbraid/pg";
+import { dialect } from "@sqlbraid/postgres";
+import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";
 
 // SQLBraid does not create the pool. The application owns it and closes it.
 export async function openDatabase(connectionString: string) {

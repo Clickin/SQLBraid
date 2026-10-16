@@ -67,7 +67,7 @@ const query = sql.rows<UserRow>`
 **이 보장은 SQLBraid 컴파일러로 변환했을 때만 성립합니다.** 일반 JavaScript, `tsc`, 런타임 태그 호출은 태그를 호출하기 전에 모든 `${...}`를 평가합니다. 분기를 지연 평가하려면 다음 순서를 따르세요.
 
 1. `@sqlbraid/cli`를 설치합니다.
-2. `npx sqlbraid build --file src/query.ts --out-file build/query.js`로 조건부 소스를 빌드합니다.
+2. `pnpm exec sqlbraid build --file src/query.ts --out-file build/query.js`로 조건부 소스를 빌드합니다.
 3. 생성된 JavaScript를 실행합니다.
 
 변환 후에는 조건부 보간이 해당 분기가 활성일 때만 평가됩니다. 비용이 크거나, 상태를 바꾸거나, 현재 요청에서는 유효하지 않은 값을 분기에서 읽을 때 중요합니다.

@@ -63,14 +63,23 @@ const requiredPackageNames = new Set([
   "bun-sql",
 ]);
 const facadeRuntimeDependencies = ["@sqlbraid/core", "@sqlbraid/runtime", "@sqlbraid/template"];
-const facadeDialectPeers = [
-  "@sqlbraid/bun-sql",
-  "@sqlbraid/mariadb",
-  "@sqlbraid/mssql",
-  "@sqlbraid/mysql",
-  "@sqlbraid/oracle",
-  "@sqlbraid/postgres",
-  "@sqlbraid/sqlite",
+const removedFacadeSubpaths = [
+  "pg",
+  "mysql2",
+  "mariadb",
+  "node-sqlite",
+  "better-sqlite3",
+  "libsql",
+  "sqlite-wasm",
+  "d1",
+  "oracledb",
+  "tedious",
+  "bun-sql",
+  "postgres",
+  "mysql",
+  "sqlite",
+  "oracle",
+  "mssql",
 ];
 const packedContainers = [];
 
@@ -329,15 +338,10 @@ try {
         facadeRuntimeDependencies,
         "The sqlbraid facade must have only dialect-neutral runtime dependencies.",
       );
-      assert.deepEqual(Object.keys(manifest.peerDependencies ?? {}).sort(), facadeDialectPeers);
-      assert.deepEqual(
-        manifest.peerDependenciesMeta,
-        Object.fromEntries(facadeDialectPeers.map((name) => [name, { optional: true }])),
-        "Every sqlbraid dialect peer must be optional.",
-      );
-      for (const name of facadeDialectPeers) {
-        assert.equal(manifest.devDependencies?.[name], manifest.peerDependencies[name]);
-      }
+      assert.deepEqual(Object.keys(manifest.exports).sort(), [".", "./compiled"]);
+      assert.deepEqual(Object.keys(manifest.peerDependencies ?? {}), []);
+      assert.deepEqual(Object.keys(manifest.peerDependenciesMeta ?? {}), []);
+      assert.deepEqual(Object.keys(manifest.devDependencies ?? {}), []);
       assert.equal(manifest.bin, undefined, "The sqlbraid facade must not expose a CLI.");
       assert.deepEqual(Object.keys(manifest.optionalDependencies ?? {}), []);
     }
@@ -685,9 +689,12 @@ try {
       [
         'import assert from "node:assert/strict";',
         'import * as facadeRoot from "sqlbraid";',
-        'import "sqlbraid/compiled";',
+        'import * as compiled from "sqlbraid/compiled";',
         'assert.equal("sql" in facadeRoot, false);',
         'assert.equal(typeof facadeRoot.createDatabase, "function");',
+        'assert.equal(typeof compiled.capture, "function");',
+        'assert.equal(typeof compiled.assertDirectiveCondition, "function");',
+        `for (const subpath of ${JSON.stringify(removedFacadeSubpaths)}) await assert.rejects(import("sqlbraid/" + subpath), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });`,
       ].join("\n"),
     ],
     runtimeConsumer,
@@ -703,7 +710,8 @@ try {
       'import assert from "node:assert/strict";',
       'import { createDatabase } from "sqlbraid";',
       'import { DatabaseSync } from "node:sqlite";',
-      'import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";',
+      'import { sql } from "@sqlbraid/sqlite";',
+      'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
       'assert.equal(typeof createDatabase, "function");',
       'const native = new DatabaseSync(":memory:");',
       "try {",
@@ -715,7 +723,7 @@ try {
     ].join("\n"),
   );
   await run(process.execPath, ["index.mjs"], runtimeConsumer);
-  console.info("PASS packed sqlbraid/node-sqlite consumer with explicitly installed @sqlbraid/sqlite");
+  console.info("PASS packed sqlbraid consumer with explicitly installed @sqlbraid/sqlite/node-sqlite");
   const cliConsumer = join(temp, "cli-consumer");
   await mkdir(cliConsumer);
   await writeFile(
@@ -807,27 +815,11 @@ try {
       'import { sql as oracle } from "@sqlbraid/oracle";',
       'import { sql as mssql } from "@sqlbraid/mssql";',
       'import { createDatabase as facadeCreateDatabase } from "sqlbraid";',
-      'import { createPgDatabase as facadePg, sql as facadePgSql } from "sqlbraid/pg";',
-      'import { createMysql2Database as facadeMysql, sql as facadeMysqlSql } from "sqlbraid/mysql2";',
-      'import { createMariaDbDatabase as facadeMariaDb, sql as facadeMariaDbSql } from "sqlbraid/mariadb";',
-      'import { createNodeSqliteDatabase as facadeNodeSqlite, sql as facadeSqliteSql } from "sqlbraid/node-sqlite";',
-      'import { createBetterSqlite3Database as facadeBetterSqlite3, sql as facadeBetterSqlite3Sql } from "sqlbraid/better-sqlite3";',
-      'import { createLibsqlDatabase as facadeLibsql, sql as facadeLibsqlSql } from "sqlbraid/libsql";',
-      'import { createSqliteWasmDatabase as facadeWasm, sql as facadeWasmSql } from "sqlbraid/sqlite-wasm";',
-      'import { createD1Database as facadeD1, sql as facadeD1Sql } from "sqlbraid/d1";',
-      'import { sql as facadeMssqlSql } from "sqlbraid/mssql";',
-      'import { createBunSqlDatabase as facadeBun } from "sqlbraid/bun-sql";',
-      'import { sql as facadePostgresSql } from "sqlbraid/postgres";',
-      'import { sql as facadeMysqlDialectSql } from "sqlbraid/mysql";',
-      'import { sql as facadeMariaDbDialectSql } from "sqlbraid/mariadb";',
-      'import { sql as facadeSqliteDialectSql } from "sqlbraid/sqlite";',
-      'import { sql as facadeOracleSql } from "sqlbraid/oracle";',
-      'import { sql as facadeMssqlDialectSql } from "sqlbraid/mssql";',
+      'import { createBunSqlDatabase } from "@sqlbraid/bun-sql";',
       'import { createLanguageService, startStdioLanguageServer } from "@sqlbraid/language-server";',
       'for (const [name, tag] of [["postgres", pg], ["mysql", mysql], ["mariadb", mariadb], ["sqlite", sqlite], ["oracle", oracle], ["mssql", mssql]]) { const rendered = tag`SELECT ${1}`.render(); if (rendered.segments.join("") !== "SELECT " || rendered.parameters[0]?.value !== 1) throw new Error(`${name} root failed`); }',
       'if ([createPgDatabase, createMysql2Database, createMariaDbDatabase, createNodeSqliteDatabase, createBetterSqlite3Database, createLibsqlDatabase, createSqliteWasmDatabase, createD1Database, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("packed subpath failed");',
-      'if ([facadeCreateDatabase, facadePg, facadeMysql, facadeMariaDb, facadeNodeSqlite, facadeBetterSqlite3, facadeLibsql, facadeWasm, facadeD1, facadeBun].some((value) => typeof value !== "function")) throw new Error("packed sqlbraid facade failed");',
-      'for (const tag of [facadePgSql, facadeMysqlSql, facadeMariaDbSql, facadeBetterSqlite3Sql, facadeLibsqlSql, facadeWasmSql, facadePostgresSql, facadeMysqlDialectSql, facadeMariaDbDialectSql, facadeSqliteDialectSql, facadeOracleSql, facadeMssqlSql, facadeMssqlDialectSql]) { if (typeof tag !== "function") throw new Error("packed sqlbraid dialect export failed"); }',
+      'if ([facadeCreateDatabase, createBunSqlDatabase].some((value) => typeof value !== "function")) throw new Error("packed runtime exports failed");',
       'if (defineConfig({})?.codegen !== undefined) throw new Error("packed config helper failed");',
     ].join("\n"),
   );
@@ -850,26 +842,30 @@ try {
     consumer,
   );
   await writeFile(
-    join(consumer, "facade-drivers.mjs"),
+    join(consumer, "node-drivers.mjs"),
     [
-      'import { createOracledbDatabase } from "sqlbraid/oracledb";',
-      'import { createTediousDatabase } from "sqlbraid/tedious";',
-      'if (typeof createOracledbDatabase !== "function" || typeof createTediousDatabase !== "function") throw new Error("packed Node driver facades failed");',
+      'import { createOracledbDatabase } from "@sqlbraid/oracle/oracledb";',
+      'import { createTediousDatabase } from "@sqlbraid/mssql/tedious";',
+      'if (typeof createOracledbDatabase !== "function" || typeof createTediousDatabase !== "function") throw new Error("packed Node driver adapters failed");',
     ].join("\n"),
   );
-  await run(process.execPath, ["facade-drivers.mjs"], consumer);
-  const facadePackageDir = join(consumer, "node_modules/sqlbraid");
-  for (const file of ["dist/index.js", "dist/sqlite-wasm.js", "dist/d1.js"]) {
-    const text = await readFile(join(facadePackageDir, file), "utf8");
+  await run(process.execPath, ["node-drivers.mjs"], consumer);
+  for (const file of [
+    "sqlbraid/dist/index.js",
+    "sqlbraid/dist/compiled.js",
+    "@sqlbraid/sqlite/dist/wasm.js",
+    "@sqlbraid/sqlite/dist/d1.js",
+  ]) {
+    const text = await readFile(join(consumer, "node_modules", file), "utf8");
     if (
       /(?:node:|@sqlbraid\/(?:cli|metadata|codegen|tooling|compiler|vite|webpack|language-server|operations))/u.test(
         text,
       )
     ) {
-      throw new Error(`Browser/Worker-safe sqlbraid entrypoint imports Node/tooling code: ${file}`);
+      throw new Error(`Browser/Worker-safe entrypoint imports Node/tooling code: ${file}`);
     }
   }
-  console.info("PASS packed browser/Worker-safe sqlbraid entrypoints without Node-only tooling imports");
+  console.info("PASS packed browser/Worker-safe entrypoints without Node-only tooling imports");
   const packedDatabaseEnv = { ...process.env };
   packedDatabaseEnv.SQLBRAID_ORACLE_URL ??=
     packedDatabaseEnv.SQLBRAID_ORACLE_CONNECTION_STRING ?? packedDatabaseEnv.ORACLE_URL;
@@ -984,21 +980,14 @@ try {
       'import { sql as sqlite } from "@sqlbraid/sqlite";',
       'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
       'import { createDatabase as facadeCreateDatabase, type Query as FacadeQuery } from "sqlbraid";',
-      'import { createPgDatabase as facadePg, type PgClientLike } from "sqlbraid/pg";',
-      'import { createMysql2Database as facadeMysql, type Mysql2ConnectionLike } from "sqlbraid/mysql2";',
-      'import { createMariaDbDatabase as facadeMariaDb, type MariaDbConnectionLike } from "sqlbraid/mariadb";',
-      'import { createNodeSqliteDatabase as facadeNodeSqlite, type SqliteDatabaseLike } from "sqlbraid/node-sqlite";',
-      'import { createSqliteWasmDatabase as facadeWasm, type SqliteWasmDatabaseLike } from "sqlbraid/sqlite-wasm";',
-      'import { createD1Database as facadeD1, type D1DatabaseLike } from "sqlbraid/d1";',
-      'import { createOracledbDatabase as facadeOracle, type OracleConnectionLike as FacadeOracleConnectionLike } from "sqlbraid/oracledb";',
-      'import { createTediousDatabase as facadeMssql, type TediousConnectionLike as FacadeTediousConnectionLike } from "sqlbraid/tedious";',
-      'import { createBunSqlDatabase as facadeBun, type BunSqlClient } from "sqlbraid/bun-sql";',
-      'import { sql as facadePostgresSql } from "sqlbraid/postgres";',
-      'import { sql as facadeMysqlSql } from "sqlbraid/mysql";',
-      'import { sql as facadeMariaDbSql } from "sqlbraid/mariadb";',
-      'import { sql as facadeSqliteSql } from "sqlbraid/sqlite";',
-      'import { sql as facadeOracleSql } from "sqlbraid/oracle";',
-      'import { sql as facadeMssqlSql } from "sqlbraid/mssql";',
+      'import type { PgClientLike } from "@sqlbraid/postgres/pg";',
+      'import type { Mysql2ConnectionLike } from "@sqlbraid/mysql/mysql2";',
+      'import { createMariaDbDatabase, type MariaDbConnectionLike } from "@sqlbraid/mariadb/mariadb";',
+      'import type { SqliteDatabaseLike } from "@sqlbraid/sqlite/node-sqlite";',
+      'import { createSqliteWasmDatabase, type SqliteWasmDatabaseLike } from "@sqlbraid/sqlite/wasm";',
+      'import { createD1Database, type D1DatabaseLike } from "@sqlbraid/sqlite/d1";',
+      'import { createBunSqlDatabase, type BunSqlClient } from "@sqlbraid/bun-sql";',
+      'import { sql as mariaDbSql } from "@sqlbraid/mariadb";',
       'import { createVirtualOverlay } from "@sqlbraid/compiler";',
       'import { createLanguageService } from "@sqlbraid/language-server";',
       'import type { Database, StandardSchemaV1, RowsExecutionResult, CommandExecutionResult, QueryExecutionResult, RowQuery } from "@sqlbraid/core";',
@@ -1045,11 +1034,10 @@ try {
       'db.all(rowQuery, { schema: { "~standard": { version: 1, vendor: "bad", validate: () => ({ value: { id: 1 } }) } } });',
       "const queries = [pg`SELECT ${1}`, mysql`SELECT ${1}`, sqlite`SELECT ${1}`];",
       "void [queries, rows, command, unknown, validated, batch, DatabaseResultKindError, DatabaseResultValidationError, createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createOracledbDatabase, createTediousDatabase, createVirtualOverlay, createLanguageService];",
-      "declare const pgClientLike: PgClientLike, mysqlConnectionLike: Mysql2ConnectionLike, mariaConnectionLike: MariaDbConnectionLike, sqliteDatabaseLike: SqliteDatabaseLike, wasmDatabaseLike: SqliteWasmDatabaseLike, d1DatabaseLike: D1DatabaseLike, oracleConnectionLike: FacadeOracleConnectionLike, tediousConnectionLike: FacadeTediousConnectionLike, bunClientLike: BunSqlClient;",
-      "const facadeQuery: FacadeQuery = facadePostgresSql`SELECT 1`;",
-      "facadeCreateDatabase; facadePg; facadeMysql; facadeMariaDb; facadeNodeSqlite; facadeWasm; facadeD1; facadeOracle; facadeMssql; facadeBun;",
-      "facadeMysqlSql; facadeMariaDbSql; facadeSqliteSql; facadeOracleSql; facadeMssqlSql;",
-      "void [pgClientLike, mysqlConnectionLike, mariaConnectionLike, sqliteDatabaseLike, wasmDatabaseLike, d1DatabaseLike, oracleConnectionLike, tediousConnectionLike, bunClientLike, facadeQuery];",
+      "declare const pgClientLike: PgClientLike, mysqlConnectionLike: Mysql2ConnectionLike, mariaConnectionLike: MariaDbConnectionLike, sqliteDatabaseLike: SqliteDatabaseLike, wasmDatabaseLike: SqliteWasmDatabaseLike, d1DatabaseLike: D1DatabaseLike, bunClientLike: BunSqlClient;",
+      "const facadeQuery: FacadeQuery = pg`SELECT 1`;",
+      "void [facadeCreateDatabase, createMariaDbDatabase, createSqliteWasmDatabase, createD1Database, createBunSqlDatabase, mariaDbSql];",
+      "void [pgClientLike, mysqlConnectionLike, mariaConnectionLike, sqliteDatabaseLike, wasmDatabaseLike, d1DatabaseLike, bunClientLike, facadeQuery];",
     ].join("\n"),
   );
   await run(

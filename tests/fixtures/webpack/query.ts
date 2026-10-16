@@ -1,4 +1,4 @@
-import { sql } from 'sqlbraid/sqlite';
+import { sql } from '@sqlbraid/sqlite';
 
 export const marker = 'initial';
 export function probe(value?: { id: number }) {

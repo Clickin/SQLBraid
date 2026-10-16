@@ -46,7 +46,7 @@ function invoke(source: string, options: unknown = {}, map?: unknown, file = "/s
   });
 }
 const source =
-  '"use client";\nimport { sql } from "sqlbraid/sqlite";\nexport const query = sql`SELECT 1 /*@braid if ${false}*/ , ${missing()} /*@braid end*/`;';
+  '"use client";\nimport { sql } from "@sqlbraid/sqlite";\nexport const query = sql`SELECT 1 /*@braid if ${false}*/ , ${missing()} /*@braid end*/`;';
 
 test("loader preserves prologues, compiler output, maps and passthrough identity", async () => {
   const result = await invoke(source);
@@ -86,7 +86,7 @@ test("loader rejects options and reports compiler errors with original file loca
       assert.rejects(invoke(source, options), /option|tagExport|moduleSpecifiers/i),
     ),
   );
-  const invalid = 'import { sql } from "sqlbraid/sqlite";\nconst q = sql`SELECT 1 /*@braid otherwise*/`;';
+  const invalid = 'import { sql } from "@sqlbraid/sqlite";\nconst q = sql`SELECT 1 /*@braid otherwise*/`;';
   await assert.rejects(invoke(invalid), (error: unknown) => {
     assert.ok(error instanceof Error && "errors" in error && Array.isArray(error.errors));
     assert.match(error.errors[0].message, /BRAID_STRUCTURE.*\/src\/query.ts:2:/);
@@ -109,7 +109,7 @@ test("loader rejects options and reports compiler errors with original file loca
       return true;
     },
   );
-  const custom = await invoke(source.replace("sqlbraid/sqlite", "@app/sql"), {
+  const custom = await invoke(source.replace("@sqlbraid/sqlite", "@app/sql"), {
     moduleSpecifiers: ["@app/sql"],
     tagExport: "sql",
   });

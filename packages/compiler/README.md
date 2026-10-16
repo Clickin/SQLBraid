@@ -3,7 +3,8 @@
 Compiler APIs for analyzing and lowering SQLBraid tagged templates.
 
 ```sh
-npm install @sqlbraid/compiler
+pnpm add @sqlbraid/compiler
+pnpm add @sqlbraid/template
 ```
 
 Use this package in build tools or custom pipelines. It lowers structural directives and generates diagnostics and source maps. If you use Vite, use `@sqlbraid/vite`.

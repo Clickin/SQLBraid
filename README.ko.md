@@ -43,14 +43,15 @@ SQLBraid를 만들면서 겪은 가장 큰 장벽은 **JDBC에 해당하는 표�
 Node.js 22.18 이상에서는 내장 `node:sqlite` 모듈을 사용하므로 별도의 데이터베이스 서버 없이 바로 실행해 볼 수 있습니다.
 
 ```sh
-npm install sqlbraid @sqlbraid/sqlite
+pnpm add sqlbraid @sqlbraid/sqlite
 ```
 
 아래 코드를 `quickstart.mts`로 저장하고 `node quickstart.mts`로 실행합니다.
 
 ```ts
 import { DatabaseSync } from "node:sqlite";
-import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { sql } from "@sqlbraid/sqlite";
 
 interface UserRow {
   id: string;
@@ -81,12 +82,13 @@ try {
 커넥션 풀은 사용하는 드라이버(`pg` 등)로 직접 생성하여 주입합니다. SQLBraid는 개별 작업마다 연결 하나를 대여하고, 트랜잭션 동안에는 동일한 연결을 고정합니다.
 
 ```sh
-npm install sqlbraid @sqlbraid/postgres pg
+pnpm add sqlbraid @sqlbraid/postgres pg
 ```
 
 ```ts
 import { Pool } from "pg";
-import { createPgPoolDatabase, sql } from "sqlbraid/pg";
+import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";
+import { sql } from "@sqlbraid/postgres";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = createPgPoolDatabase(pool);
@@ -138,6 +140,8 @@ sql.rows<User>`
 - **무빌드 런타임 실행과 선택적 컴파일러:** 모든 지시어는 별도의 빌드 과정 없이 런타임에 바로 동작합니다. 비활성화된 `/*@braid if ...*/` 분기 내부의 `${...}` 표현식 평가 자체를 건너뛰고(지연 평가) 싶다면 선택적으로 컴파일러 플러그인(`@sqlbraid/vite`, `@sqlbraid/webpack`, `@sqlbraid/cli`)을 적용할 수 있습니다. 컴파일러는 표현식의 평가 시점만 지연 함수(thunk)로 감싸며, 최종 SQL 조립은 여전히 런타임에 수행합니다([동적 `@braid` 지시어](https://clickin.github.io/SQLBraid/latest/ko/concepts/dynamic-braid/#컴파일러가-하는-일) 참고).
 - **동적 식별자 및 쿼리 조각:** 테이블명, 컬럼 목록, 하위 쿼리 조각처럼 SQL 구조 자체를 동적으로 조합해야 할 때는 명시적 헬퍼(`sql.ident`, `sql.list`, `sql.join`, `sql.fragment`)를 사용합니다([구조적 SQL 조각](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/) 참고).
 
+컴파일러를 쓴다면 `@sqlbraid/template`을 직접 런타임 의존성으로 설치하세요. 생성된 코드가 이 패키지의 헬퍼를 import합니다.
+
 ## 반환 타입 선언과 스키마 검증
 
 쿼리의 성격에 따라 결과 종류를 명시적으로 선언합니다. 행 집합을 조회할 때는 `sql.rows<T>`, `INSERT`/`UPDATE`/`DELETE` 명령에는 `sql.command`, 저장 프로시저 호출에는 `sql.call`을 사용합니다. 데이터베이스가 선언한 것과 다른 결과 종류를 반환하면 예외를 발생시킵니다([SQL 태그와 결과 종류](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/) 참고). `sql.rows<T>`의 `T`는 TypeScript 타입 선언이며, 실제 행의 필드와 값을 런타임에 검증하려면 Standard Schema를 전달합니다.
@@ -169,7 +173,7 @@ END $$;
 
 ```ts
 import type { RoutineCallResult } from "sqlbraid";
-import { postgresParameter, sql } from "sqlbraid/pg";
+import { postgresParameter, sql } from "@sqlbraid/postgres";
 
 interface UserRow {
   id: string;
@@ -190,7 +194,7 @@ console.log(result.resultSets[0].rows); // UserRow[]: [{ id: "1", name: "Ada" }]
 `RoutineCallResult<Output, Sets, ReturnValue>`는 스칼라 `OUT` 값의 타입, 결과 집합별 행 타입 튜플, 반환값 타입을 차례로 선언합니다. `sql.rows`와 마찬가지로 Standard Schema를 전달해 검증 및 변환할 수도 있습니다.
 
 ```ts
-import { postgresParameter, sql } from "sqlbraid/pg";
+import { postgresParameter, sql } from "@sqlbraid/postgres";
 
 const result = await db.tx(async (tx) =>
   tx.call(
@@ -249,27 +253,29 @@ const result = await db.tx(async (tx) =>
 | SQL Server               | `@sqlbraid/mssql`    |
 | Bun.SQL                  | `@sqlbraid/bun-sql`  |
 
-이 일곱 패키지는 `sqlbraid`의 선택적 피어 의존성입니다. 사용하는 패키지는 각각 명시적으로 설치하세요. 아래의 해당 파사드 하위 경로를 import하거나 `@sqlbraid/postgres/pg`, `@sqlbraid/sqlite/node-sqlite` 같은 방언 패키지 하위 경로를 직접 import할 수 있습니다.
+`sqlbraid`는 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`만 의존하며 방언·어댑터 피어 의존성은 없습니다. 사용하는 패키지를 명시적으로 설치하세요. `sql`과 방언 힌트는 패키지 루트에서, 생성 함수는 아래 어댑터 경로에서 import하세요.
+
+2.0.0에서는 드라이버·방언 파사드 하위 경로를 제거합니다. 배포 대상인 모든 자체 패키지와 VS Code 확장이 함께 `2.0.0`으로 올라갑니다.
 
 **Official**은 CI에서 지정된 드라이버 버전과 런타임을 직접 검증함을 의미하며, **Compatible**은 동일 API 규격으로 동작하지만 특정 버전이 고정 인증되지는 않았음을 뜻합니다.
 
-| 데이터베이스                       | 드라이버                               | import 경로                      | 지원 수준  |
-| ---------------------------------- | -------------------------------------- | -------------------------------- | ---------- |
-| PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    | Official   |
-| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` | Compatible |
-| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`        | Compatible |
-| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`   | Compatible |
-| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`      | Compatible |
-| MySQL                              | `mysql2`                               | `sqlbraid/mysql2`                | Official   |
-| MariaDB                            | `mariadb`                              | `sqlbraid/mariadb`               | Official   |
-| SQLite                             | `node:sqlite`                          | `sqlbraid/node-sqlite`           | Official   |
-| SQLite                             | `better-sqlite3`                       | `sqlbraid/better-sqlite3`        | Compatible |
-| SQLite                             | `@libsql/client` (libSQL)              | `sqlbraid/libsql`                | Compatible |
-| SQLite                             | `@sqlite.org/sqlite-wasm` (브라우저)   | `sqlbraid/sqlite-wasm`           | Official   |
-| SQLite                             | Cloudflare D1 바인딩                   | `sqlbraid/d1`                    | Compatible |
-| Oracle                             | `oracledb` (Thin)                      | `sqlbraid/oracledb`              | Official   |
-| SQL Server                         | `tedious`                              | `sqlbraid/tedious`               | Official   |
-| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (Bun 내장)                     | `sqlbraid/bun-sql`               | Official   |
+| 데이터베이스                       | 드라이버                               | import 경로                       | 지원 수준  |
+| ---------------------------------- | -------------------------------------- | --------------------------------- | ---------- |
+| PostgreSQL                         | `pg`                                   | `@sqlbraid/postgres/pg`           | Official   |
+| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js`  | Compatible |
+| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`         | Compatible |
+| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`    | Compatible |
+| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`       | Compatible |
+| MySQL                              | `mysql2`                               | `@sqlbraid/mysql/mysql2`          | Official   |
+| MariaDB                            | `mariadb`                              | `@sqlbraid/mariadb/mariadb`       | Official   |
+| SQLite                             | `node:sqlite`                          | `@sqlbraid/sqlite/node-sqlite`    | Official   |
+| SQLite                             | `better-sqlite3`                       | `@sqlbraid/sqlite/better-sqlite3` | Compatible |
+| SQLite                             | `@libsql/client` (libSQL)              | `@sqlbraid/sqlite/libsql`         | Compatible |
+| SQLite                             | `@sqlite.org/sqlite-wasm` (브라우저)   | `@sqlbraid/sqlite/wasm`           | Official   |
+| SQLite                             | Cloudflare D1 바인딩                   | `@sqlbraid/sqlite/d1`             | Compatible |
+| Oracle                             | `oracledb` (Thin)                      | `@sqlbraid/oracle/oracledb`       | Official   |
+| SQL Server                         | `tedious`                              | `@sqlbraid/mssql/tedious`         | Official   |
+| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (Bun 내장)                     | `@sqlbraid/bun-sql`               | Official   |
 
 ## 선택적 개발 도구
 

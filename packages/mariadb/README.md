@@ -3,7 +3,7 @@
 MariaDB dialect and official MariaDB Connector/Node.js adapters for SQLBraid.
 
 ```sh
-npm install @sqlbraid/mariadb mariadb
+pnpm add @sqlbraid/mariadb mariadb
 ```
 
 Use this package through the `@sqlbraid/mariadb/mariadb` adapter. Give it a connected Connector/Node.js connection or pool.

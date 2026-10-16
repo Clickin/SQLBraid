@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/cli",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "description": "SQLBraid command-line tools for inspecting projects and generating typed models",
   "keywords": [
     "cli",
@@ -40,18 +40,18 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/codegen": "workspace:^1.0.0",
-    "@sqlbraid/compiler": "workspace:^1.0.0",
-    "@sqlbraid/core": "workspace:^1.0.0",
-    "@sqlbraid/metadata": "workspace:^1.0.0",
-    "@sqlbraid/operations": "workspace:^1.0.0",
-    "@sqlbraid/tooling": "workspace:^1.0.3"
+    "@sqlbraid/codegen": "workspace:^2.0.0",
+    "@sqlbraid/compiler": "workspace:^2.0.0",
+    "@sqlbraid/core": "workspace:^2.0.0",
+    "@sqlbraid/metadata": "workspace:^2.0.0",
+    "@sqlbraid/operations": "workspace:^2.0.0",
+    "@sqlbraid/tooling": "workspace:^2.0.0"
   },
   "devDependencies": {
-    "@sqlbraid/migrate": "workspace:^0.1.0"
+    "@sqlbraid/migrate": "workspace:^2.0.0"
   },
   "peerDependencies": {
-    "@sqlbraid/migrate": "workspace:^0.1.0"
+    "@sqlbraid/migrate": "workspace:^2.0.0"
   },
   "peerDependenciesMeta": {
     "@sqlbraid/migrate": {

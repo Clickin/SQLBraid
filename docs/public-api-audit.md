@@ -4,12 +4,10 @@ This inventory records the stable public boundary of SQLBraid. It classifies
 the API and is a compatibility reference. It is not a publication claim and not a
 support claim.
 
-Packages have independent versions. In `sqlbraid` 2.0.0, the facade moved its
-seven dialect and adapter packages to optional peer dependencies while keeping
-its exported subpaths and query APIs unchanged; the `@sqlbraid/*` runtime and
-tooling packages remain on the 1.x line. The optional `@sqlbraid/migrate@0.1.0`
-surface is pre-1.0; listing it here does not give it the stable compatibility
-guarantee of the `sqlbraid` facade.
+All publishable first-party packages and the VS Code extension move together to
+2.0.0. The `sqlbraid` facade keeps only its root and `sqlbraid/compiled` entry
+points. Applications import dialects and adapters from their owning
+`@sqlbraid/*` packages. The facade has no dialect or adapter peer dependencies.
 
 SQLBraid 1.0.0 is GA. The exact-SHA records below are kept as the provenance of
 the pre-GA audit. They do not certify later revisions.
@@ -91,6 +89,9 @@ alias for prepare.
 data. The compiler and tooling read it. It records the identities of supported
 modules that export tags, and the dialect evidence. It is not an execution API
 and not an error API.
+In 2.0.0, the catalog contains `@sqlbraid/template` and the six dialect roots.
+Driver facade entries and the `helperFamily` field are removed.
+The compiler imports generated helpers directly from `@sqlbraid/template`.
 
 `Database` exposes `execute`, `all`, `one`, `maybeOne`, `call`, `batch`, `bulk`,
 `prepare`, `stream`, `session` and `tx`. All execution operations take trailing
@@ -226,28 +227,20 @@ metadata.types
 **Application:** the canonical runtime facade. The root re-exports common
 interfaces and runtime constructors. It does not select a dialect.
 
-- The subpaths that combine a driver and a dialect use the matching adapter:
-  `/pg`, `/mysql2`, `/mariadb`, `/node-sqlite`, `/better-sqlite3`, `/libsql`,
-  `/sqlite-wasm`, `/d1`, `/oracledb` and `/tedious`.
-- The `/bun-sql` subpath is a Bun.SQL adapter for many dialects. Import `sql`
-  from the root of the selected dialect, and give that dialect to
-  `createBunSqlDatabase`.
-- The dialect-only subpaths `/postgres`, `/mysql`, `/sqlite`, `/oracle` and
-  `/mssql` support custom adapters.
+Import dialect tags and parameter hints from the owning `@sqlbraid/*` root.
+Import database factories from that package's adapter subpath.
+For Bun.SQL, use `@sqlbraid/bun-sql` and explicitly select the dialect.
 
 The facade keeps only `@sqlbraid/core`, `@sqlbraid/runtime` and
-`@sqlbraid/template` as hard dependencies. It declares the seven dialect and
-adapter packages (`@sqlbraid/bun-sql`, `@sqlbraid/mariadb`, `@sqlbraid/mssql`,
-`@sqlbraid/mysql`, `@sqlbraid/oracle`, `@sqlbraid/postgres` and
-`@sqlbraid/sqlite`) as optional peer dependencies. The facade has no dependency
-on the CLI, database drivers, metadata, codegen, tooling, compiler, editor,
-Vite or Webpack.
+`@sqlbraid/template` as dependencies. It has no dialect or adapter peers.
+It has no dependency on database drivers, CLI, metadata, codegen, tooling,
+compiler, editor, Vite or Webpack.
 
 **Advanced:** `sqlbraid/compiled` exposes `capture` and
-`assertDirectiveCondition` from `@sqlbraid/template` for lowering that the
-compiler generates. It is a public entry point for generated code. It is not an
-API for applications to write queries. It does not load the compiler. Use the
-same version for the compiler and the runtime. Its string array is SQL text with
+`assertDirectiveCondition` from `@sqlbraid/template`. It remains an advanced
+entry point, but the compiler now imports helpers directly from `@sqlbraid/template`.
+Install that package as a direct runtime dependency when using compiled queries.
+This entry point does not load the compiler. Its string array is SQL text with
 the same trust as `sql.raw()`. It accepts only the template node kinds that the
 compiler emits, and other nodes fail with `BRAID_STRUCTURE`.
 
@@ -260,22 +253,6 @@ adds or removes an export also updates this inventory.
 ```json
 {
   ".": "Application",
-  "./pg": "Application",
-  "./mysql2": "Application",
-  "./mariadb": "Application",
-  "./node-sqlite": "Application",
-  "./better-sqlite3": "Application",
-  "./libsql": "Application",
-  "./sqlite-wasm": "Application",
-  "./d1": "Application",
-  "./oracledb": "Application",
-  "./tedious": "Application",
-  "./bun-sql": "Application",
-  "./postgres": "Application",
-  "./mysql": "Application",
-  "./sqlite": "Application",
-  "./oracle": "Application",
-  "./mssql": "Application",
   "./compiled": "Advanced"
 }
 ```
@@ -283,8 +260,8 @@ adds or removes an export also updates this inventory.
 <!-- /sqlbraid-facade-exports -->
 
 ```ts
-import { createBunSqlDatabase } from "sqlbraid/bun-sql";
-import { sql } from "sqlbraid/postgres";
+import { createBunSqlDatabase } from "@sqlbraid/bun-sql";
+import { sql } from "@sqlbraid/postgres";
 
 const client = new Bun.SQL(process.env.DATABASE_URL!);
 const db = createBunSqlDatabase(client, { dialect: "postgres" });
@@ -403,7 +380,7 @@ capability that the support records describe.
 
 ### Application API
 
-During the 1.x release line, these items are compatibility guarantees:
+During the 2.x release line, these items are compatibility guarantees:
 
 - documented application imports and subpaths;
 - call shapes;

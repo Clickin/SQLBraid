@@ -3,7 +3,7 @@
 SQLBraid adapter for Bun's `Bun.SQL` client.
 
 ```sh
-bun add @sqlbraid/bun-sql @sqlbraid/postgres
+pnpm add @sqlbraid/bun-sql @sqlbraid/postgres
 ```
 
 This adapter uses the native value-template transport of Bun. `Bun.SQL` does not infer the dialect. You must give the dialect explicitly, for example `"postgres"`.

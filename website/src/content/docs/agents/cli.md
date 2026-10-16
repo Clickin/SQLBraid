@@ -8,7 +8,7 @@ The CLI and the LSP server share the same tooling semantics. In CLI commands, po
 Install the optional CLI in the project that runs these commands:
 
 ```bash
-npm install --save-dev @sqlbraid/cli
+pnpm add --save-dev @sqlbraid/cli
 ```
 
 ```bash

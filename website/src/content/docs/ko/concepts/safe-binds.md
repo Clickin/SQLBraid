@@ -26,7 +26,7 @@ const query = sql.rows<UserRow>`
 데이터베이스 파라미터 타입을 명시해야 한다면 `sql.bind(value, hint)`를 쓰세요.
 
 ```ts
-import { mssqlParameter, sql } from "sqlbraid/mssql";
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
 
 const query = sql.rows<UserRow>`
   SELECT id, display_name

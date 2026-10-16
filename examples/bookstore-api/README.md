@@ -21,9 +21,9 @@ Use Node.js 22.18 or later and a PostgreSQL database that you can change. The se
 `orders` and `order_items`.
 
 ```sh
-npm install
+pnpm install
 export DATABASE_URL=postgres://user:password@localhost:5432/bookstore
-npm start
+pnpm start
 ```
 
 ```sh
@@ -40,7 +40,7 @@ An order with too little stock returns `409` and changes nothing.
 
 ## Test
 
-`npm run smoke` starts the server on a free port, calls every route, and exits.
+`pnpm run smoke` starts the server on a free port, calls every route, and exits.
 It expects an empty database, because it checks the stock and the order count.
 
 From the repository root, `pnpm run test:examples` runs it against a PostgreSQL container with packed tarballs.

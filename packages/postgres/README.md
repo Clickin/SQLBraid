@@ -3,7 +3,7 @@
 PostgreSQL dialect and `pg` adapters for SQLBraid.
 
 ```sh
-npm install @sqlbraid/postgres pg
+pnpm add @sqlbraid/postgres pg
 ```
 
 Use this package through the `@sqlbraid/postgres/pg` adapter. Give it a connected `pg` client or pool.

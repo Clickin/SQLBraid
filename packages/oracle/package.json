@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/oracle",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "SQLBraid Oracle dialect, node-oracledb adapter, and metadata inspector",
   "keywords": [
     "database",
@@ -41,17 +41,17 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:^1.0.0",
-    "@sqlbraid/runtime": "workspace:^1.0.0",
-    "@sqlbraid/template": "workspace:^1.0.0"
+    "@sqlbraid/core": "workspace:^2.0.0",
+    "@sqlbraid/runtime": "workspace:^2.0.0",
+    "@sqlbraid/template": "workspace:^2.0.0"
   },
   "devDependencies": {
-    "@sqlbraid/metadata": "workspace:^1.0.0",
+    "@sqlbraid/metadata": "workspace:^2.0.0",
     "@types/oracledb": "7.0.3",
     "oracledb": "7.0.1"
   },
   "peerDependencies": {
-    "@sqlbraid/metadata": "workspace:^1.0.0",
+    "@sqlbraid/metadata": "workspace:^2.0.0",
     "oracledb": ">=7.0.1 <8"
   },
   "peerDependenciesMeta": {

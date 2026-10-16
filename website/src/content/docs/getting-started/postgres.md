@@ -6,7 +6,7 @@ description: Connect SQLBraid to pg with either a direct client or an explicit p
 Install the SQLBraid runtime facade, the PostgreSQL dialect package and the `pg` driver together:
 
 ```bash
-npm install sqlbraid @sqlbraid/postgres pg
+pnpm add sqlbraid @sqlbraid/postgres pg
 ```
 
 ## Direct physical client
@@ -15,7 +15,8 @@ A direct factory accepts a connected `pg.Client` or `pg.PoolClient`. It does not
 
 ```ts
 import { Client } from "pg";
-import { createPgDatabase, sql } from "sqlbraid/pg";
+import { createPgDatabase } from "@sqlbraid/postgres/pg";
+import { sql } from "@sqlbraid/postgres";
 
 interface UserRow {
   id: string;
@@ -42,7 +43,8 @@ Use the pool factory when the application owns a `pg.Pool`:
 
 ```ts
 import { Pool } from "pg";
-import { createPgPoolDatabase, sql } from "sqlbraid/pg";
+import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";
+import { sql } from "@sqlbraid/postgres";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = createPgPoolDatabase(pool);
@@ -78,7 +80,7 @@ For the details of this boundary, read [direct connections and pools](/SQLBraid/
 Install `pg-cursor` only if this application uses `db.stream()`:
 
 ```bash
-npm install pg-cursor
+pnpm add pg-cursor
 ```
 
 Ordinary queries do not need this peer.
@@ -105,7 +107,7 @@ text where the driver can supply text. `@sqlbraid/postgres` exports
 exactly the same policy:
 
 ```ts
-import { typePolicyForProfile } from "sqlbraid/pg";
+import { typePolicyForProfile } from "@sqlbraid/postgres/pg";
 import { generateModels } from "@sqlbraid/codegen";
 
 const typePolicy = typePolicyForProfile({ json: "text", temporal: "text" });

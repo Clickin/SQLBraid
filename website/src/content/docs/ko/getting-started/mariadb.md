@@ -6,14 +6,15 @@ description: MariaDB 문법을 명시적으로 쓰면서 SQLBraid를 MariaDB Con
 SQLBraid 런타임 파사드, MariaDB 방언 패키지, 공식 Connector/Node.js 드라이버를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid @sqlbraid/mariadb mariadb
+pnpm add sqlbraid @sqlbraid/mariadb mariadb
 ```
 
 연결된 커넥션이나 명시적인 풀 팩토리와 함께 `/mariadb` 어댑터 하위 경로를 쓰세요.
 
 ```ts
 import mariadb from "mariadb";
-import { createMariaDbDatabase, MARIADB_LOSSLESS_TEXT, sql } from "sqlbraid/mariadb";
+import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
+import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
 
 const connection = await mariadb.createConnection({
   host: "127.0.0.1",

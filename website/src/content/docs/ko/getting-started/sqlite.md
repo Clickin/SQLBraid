@@ -9,13 +9,13 @@ description: Node 내장 SQLite 드라이버로 첫 SQLBraid 쿼리를 실행합
 
 모든 SQLite 어댑터는 SQLite 방언을 공유합니다. 하위 경로가 물리 어댑터를 고릅니다.
 
-| 하위 경로                 | 물리 경계                             | 주요 제한                                                                       |
-| ------------------------- | ------------------------------------- | ------------------------------------------------------------------------------- |
-| `sqlbraid/node-sqlite`    | Node `DatabaseSync` / `StatementSync` | 동기 물리 호출, 정확한 INTEGER 문자열, 네이티브 `iterate()` 스트림              |
-| `sqlbraid/better-sqlite3` | better-sqlite3 문장                   | 동기 호출이며 이벤트 루프를 막음, 문장 단위 `safeIntegers(true)`, 네이티브 반복 |
-| `sqlbraid/libsql`         | `@libsql/client`                      | `intMode: "string"` 필수, 대화형 트랜잭션, 세션 고정·스트림 대체 수단 없음      |
-| `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                       | OO1 문장 소유, 스트림은 async generator로 감쌈                                  |
-| `sqlbraid/d1`             | Cloudflare D1                         | 준비된 문장 바인딩, 스트리밍·콜백 트랜잭션 없음                                 |
+| 하위 경로                         | 물리 경계                             | 주요 제한                                                                       |
+| --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------- |
+| `@sqlbraid/sqlite/node-sqlite`    | Node `DatabaseSync` / `StatementSync` | 동기 물리 호출, 정확한 INTEGER 문자열, 네이티브 `iterate()` 스트림              |
+| `@sqlbraid/sqlite/better-sqlite3` | better-sqlite3 문장                   | 동기 호출이며 이벤트 루프를 막음, 문장 단위 `safeIntegers(true)`, 네이티브 반복 |
+| `@sqlbraid/sqlite/libsql`         | `@libsql/client`                      | `intMode: "string"` 필수, 대화형 트랜잭션, 세션 고정·스트림 대체 수단 없음      |
+| `@sqlbraid/sqlite/wasm`           | SQLite WASM OO1                       | OO1 문장 소유, 스트림은 async generator로 감쌈                                  |
+| `@sqlbraid/sqlite/d1`             | Cloudflare D1                         | 준비된 문장 바인딩, 스트리밍·콜백 트랜잭션 없음                                 |
 
 Deno 2.9.3에서는 `node:sqlite` 이터레이터가 SQLite step 오류를 정상 EOF로 바꿉니다. 그래서 SQLBraid는 Deno에서 스트리밍을 `BRAID_STREAM_UNSUPPORTED`로 거부합니다. 몰래 잘린 행을 반환하지 않습니다. 메모리로 읽는 쿼리와 트랜잭션은 계속 쓸 수 있습니다. Node의 네이티브 이터레이터는 영향을 받지 않습니다.
 
@@ -29,10 +29,9 @@ Deno 2.9.3에서는 `node:sqlite` 이터레이터가 SQLite step 오류를 정�
 
 ```bash
 mkdir braid-sqlite && cd braid-sqlite
-npm init -y
-npm pkg set type=module
-npm install sqlbraid @sqlbraid/sqlite
-npm install --save-dev typescript @types/node@22
+pnpm init --init-type module
+pnpm add sqlbraid @sqlbraid/sqlite
+pnpm add --save-dev typescript @types/node@22
 mkdir src
 ```
 
@@ -42,7 +41,8 @@ mkdir src
 
 ```ts
 import { DatabaseSync } from "node:sqlite";
-import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { sql } from "@sqlbraid/sqlite";
 
 interface UserRow {
   id: string;
@@ -96,8 +96,8 @@ console.log(users);
 SQLBraid 컴파일러로 TypeScript 소스를 변환해 빌드한 뒤, 출력된 JavaScript를 실행하세요.
 
 ```bash
-npm install --save-dev @sqlbraid/cli
-npx sqlbraid build --file src/index.ts --out-file build/index.js
+pnpm add --save-dev @sqlbraid/cli
+pnpm exec sqlbraid build --file src/index.ts --out-file build/index.js
 node build/index.js
 ```
 
@@ -151,7 +151,8 @@ node build/index.js
 
 ```ts
 import Database from "better-sqlite3";
-import { createBetterSqlite3Database, sql } from "sqlbraid/better-sqlite3";
+import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";
+import { sql } from "@sqlbraid/sqlite";
 
 const native = new Database(":memory:");
 const db = createBetterSqlite3Database(native);
@@ -164,7 +165,8 @@ SQLBraid는 문장마다 `safeIntegers(true)`를 적용해 정확한 INTEGER 값
 
 ```ts
 import { createClient } from "@libsql/client";
-import { createLibsqlDatabase, sql } from "sqlbraid/libsql";
+import { createLibsqlDatabase } from "@sqlbraid/sqlite/libsql";
+import { sql } from "@sqlbraid/sqlite";
 
 const client = createClient({ url: "file:app.db", intMode: "string" });
 const db = createLibsqlDatabase(client, { intMode: "string" });

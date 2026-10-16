@@ -3,7 +3,7 @@
 OpenTelemetry tracing and metrics for SQLBraid execution.
 
 ```sh
-npm install @sqlbraid/opentelemetry @opentelemetry/api
+pnpm add @sqlbraid/opentelemetry @opentelemetry/api
 ```
 
 This package adds DB client spans and the `db.client.operation.duration` metric to your execution observers.

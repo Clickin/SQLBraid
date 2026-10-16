@@ -19,7 +19,8 @@ SQLBRAID_MYSQL_URL='mysql://user:password@localhost:3306/db' pnpm run test:examp
 The installed example runs:
 
 ```bash
-npm install @sqlbraid/cli @sqlbraid/mysql mysql2
-npx sqlbraid build --file src/index.ts --out-file build/index.js
+pnpm add @sqlbraid/cli @sqlbraid/mysql mysql2
+pnpm add @sqlbraid/template
+pnpm exec sqlbraid build --file src/index.ts --out-file build/index.js
 node build/index.js
 ```

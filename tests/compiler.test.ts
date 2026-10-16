@@ -314,35 +314,33 @@ test("checker tag ownership follows the actual export, not sibling reexports or 
   }
 });
 
-test("facade lowering imports app-resolvable compiler helpers and selects facade dialects exactly", () => {
-  const source = `import { sql } from "sqlbraid/tedious"; export const query = sql\`SELECT [Bob's] WHERE id = \${1} /*@braid if \${true}*/ AND active = 1 /*@braid end*/\`;`;
-  const emitted = emitSource(source, "facade.ts", { moduleSpecifier: "sqlbraid/tedious" });
+test("dialect lowering imports app-resolvable compiler helpers and selects dialects exactly", () => {
+  const source = `import { sql } from "@sqlbraid/mssql"; export const query = sql\`SELECT [Bob's] WHERE id = \${1} /*@braid if \${true}*/ AND active = 1 /*@braid end*/\`;`;
+  const emitted = emitSource(source, "dialect.ts", { moduleSpecifier: "@sqlbraid/mssql" });
   assert.equal(emitted.diagnostics.length, 0);
-  assert.match(emitted.outputText, /from "sqlbraid\/compiled"/u);
+  assert.match(emitted.outputText, /from "@sqlbraid\/template"/u);
 });
 
-test("recognizes SQLite adapter and facade module specifiers by default", () => {
+test("recognizes SQLite dialect authoring but not adapter-only module specifiers by default", () => {
   const result = discoverQueries(
     [
       'import { sql as better } from "@sqlbraid/sqlite/better-sqlite3";',
       'import { sql as libsql } from "@sqlbraid/sqlite/libsql";',
-      'import { sql as facadeBetter } from "sqlbraid/better-sqlite3";',
-      'import { sql as facadeLibsql } from "sqlbraid/libsql";',
+      'import { sql as sqlite } from "@sqlbraid/sqlite";',
       "const first = better`SELECT 1`;",
       "const second = libsql`SELECT 2`;",
-      "const third = facadeBetter`SELECT 3`;",
-      "const fourth = facadeLibsql`SELECT 4`;",
+      "const third = sqlite`SELECT 3`;",
     ].join("\n"),
     "sqlite-adapters.ts",
     {},
   );
   assert.deepEqual(
     result.queries.map((query) => query.tagName),
-    ["facadeBetter", "facadeLibsql"],
+    ["sqlite"],
   );
   assert.deepEqual(
     result.queries.map((query) => query.moduleSpecifier),
-    ["sqlbraid/better-sqlite3", "sqlbraid/libsql"],
+    ["@sqlbraid/sqlite"],
   );
 });
 
@@ -535,10 +533,10 @@ test("checker discovers mapped rows through a re-export", () => {
   }
 }, 15_000);
 
-test("checker preserves facade identity through re-export when emitting compiled helpers", () => {
-  const directory = mkdtempSync(join(process.cwd(), ".sqlbraid-facade-reexport-"));
+test("checker preserves dialect identity through re-export when emitting compiled helpers", () => {
+  const directory = mkdtempSync(join(process.cwd(), ".sqlbraid-dialect-reexport-"));
   try {
-    writeFileSync(join(directory, "bridge.ts"), "export { sql } from 'sqlbraid/tedious';\n");
+    writeFileSync(join(directory, "bridge.ts"), "export { sql } from '@sqlbraid/mssql';\n");
     const source =
       "import { sql } from './bridge.js'; export const query = sql`SELECT 1 /*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;\n";
     const fileName = join(directory, "main.ts");
@@ -553,7 +551,7 @@ test("checker preserves facade identity through re-export when emitting compiled
           moduleResolution: "NodeNext",
           strict: true,
           baseUrl: ".",
-          paths: { "sqlbraid/*": [join(process.cwd(), "packages/sqlbraid/src/*.ts")] },
+          paths: { "@sqlbraid/mssql": [join(process.cwd(), "packages/mssql/src/index.ts")] },
         },
         include: ["*.ts"],
       }),
@@ -561,7 +559,7 @@ test("checker preserves facade identity through re-export when emitting compiled
     const context = createProjectContext(projectFile);
     const emitted = emitSource(source, fileName, { compilerOptions: context.compilerOptions });
     assert.deepEqual(emitted.diagnostics, []);
-    assert.match(emitted.outputText, /from "sqlbraid\/compiled"/u);
+    assert.match(emitted.outputText, /from "@sqlbraid\/template"/u);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

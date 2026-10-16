@@ -67,7 +67,7 @@ Rules for the attributes:
 **This guarantee requires SQLBraid compiler lowering.** Plain JavaScript, `tsc` and runtime tag calls evaluate each `${...}` before they call the tag. To get lazy branches, do these steps:
 
 1. Install `@sqlbraid/cli`.
-2. Build the guarded source with `npx sqlbraid build --file src/query.ts --out-file build/query.js`.
+2. Build the guarded source with `pnpm exec sqlbraid build --file src/query.ts --out-file build/query.js`.
 3. Run the generated JavaScript.
 
 After lowering, a guarded interpolation is captured only when its branch is active. This is important when a branch reads a value that is expensive, has state or is invalid in the current request:

@@ -9,7 +9,6 @@ import { test } from "vitest";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import { parameterizedSql, type RenderedStatement } from "@sqlbraid/core";
 import { transformSource, type SourceMap } from "@sqlbraid/compiler";
-import * as compiled from "../packages/sqlbraid/src/compiled.js";
 import sqlbraid from "@sqlbraid/vite";
 
 const execFile = promisify(execFileCallback);
@@ -18,22 +17,10 @@ const modules = [
   "@sqlbraid/template",
   "@sqlbraid/postgres",
   "@sqlbraid/mysql",
+  "@sqlbraid/mariadb",
   "@sqlbraid/sqlite",
   "@sqlbraid/oracle",
   "@sqlbraid/mssql",
-  "sqlbraid/pg",
-  "sqlbraid/mysql2",
-  "sqlbraid/mariadb",
-  "sqlbraid/node-sqlite",
-  "sqlbraid/sqlite-wasm",
-  "sqlbraid/d1",
-  "sqlbraid/oracledb",
-  "sqlbraid/tedious",
-  "sqlbraid/postgres",
-  "sqlbraid/mysql",
-  "sqlbraid/sqlite",
-  "sqlbraid/oracle",
-  "sqlbraid/mssql",
 ] as const;
 
 function offsetAt(source: string, line: number, character: number): number {
@@ -79,7 +66,6 @@ export { evaluations };`;
     new Function("require", "exports", javascript)((name: string) => {
       if (name === moduleSpecifier) return library;
       if (name === "@sqlbraid/template") return template;
-      if (name === "sqlbraid/compiled") return compiled;
       throw new Error(`Unexpected generated import ${name}`);
     }, output);
     assert.ok(output.query);
@@ -112,7 +98,6 @@ export { evaluations, schema };`;
     new Function("require", "exports", javascript)((name: string) => {
       if (name === moduleSpecifier) return library;
       if (name === "@sqlbraid/template") return template;
-      if (name === "sqlbraid/compiled") return compiled;
       throw new Error(`Unexpected generated import ${name}`);
     }, output);
     assert.ok(output.query);

@@ -15,9 +15,13 @@ for (const file of readdirSync(packageDir))
     const manifest = JSON.parse(execFileSync("tar", ["-xOf", path, "package/package.json"], { encoding: "utf8" }));
     tarballs.set(manifest.name, `file:${path}`);
   }
-for (const name of ["sqlbraid", "@sqlbraid/sqlite", "@sqlbraid/compiler", "@sqlbraid/vite"])
+for (const name of ["sqlbraid", "@sqlbraid/sqlite", "@sqlbraid/template", "@sqlbraid/compiler", "@sqlbraid/vite"])
   if (!tarballs.has(name)) throw new Error(`Missing candidate tarball: ${name}`);
-const dependencies = { sqlbraid: tarballs.get("sqlbraid"), "@sqlbraid/sqlite": tarballs.get("@sqlbraid/sqlite") };
+const dependencies = {
+  sqlbraid: tarballs.get("sqlbraid"),
+  "@sqlbraid/sqlite": tarballs.get("@sqlbraid/sqlite"),
+  "@sqlbraid/template": tarballs.get("@sqlbraid/template"),
+};
 const devDependencies = {
   "@sqlbraid/compiler": tarballs.get("@sqlbraid/compiler"),
   "@sqlbraid/vite": tarballs.get("@sqlbraid/vite"),
@@ -45,7 +49,7 @@ writeFileSync(join(consumer, ".npmrc"), "node-linker=isolated\nshamefully-hoist=
 writeFileSync(
   join(consumer, "src.ts"),
   [
-    'import { sql } from "sqlbraid/sqlite";',
+    'import { sql } from "@sqlbraid/sqlite";',
     "let calls = 0;",
     "export const query = sql.rows<{ value: number }>`SELECT [Bob's] WHERE id = ${1} /*@braid if ${(calls += 1, true)}*/ AND active = 1 /*@braid end*/`;",
     'export const schema = { "~standard": { version: 1 as const, vendor: "isolated-consumer", validate(value: unknown) { return { value: { value: String((value as { readonly value: number }).value) } }; } } };',
@@ -65,7 +69,7 @@ writeFileSync(
 );
 execFileSync("pnpm", ["install", "--ignore-scripts", "--no-frozen-lockfile"], { cwd: consumer, stdio: "inherit" });
 const resolutionProbe =
-  "try { await import('sqlbraid/compiled'); } catch (error) { process.exitCode = 2; } try { await import('@sqlbraid/template'); process.exitCode = 3; } catch {}";
+  "await import('sqlbraid'); await import('sqlbraid/compiled'); await import('@sqlbraid/template');";
 execFileSync(process.execPath, ["--input-type=module", "-e", resolutionProbe], { cwd: consumer, stdio: "inherit" });
 execFileSync("pnpm", ["exec", "vite", "build"], { cwd: consumer, stdio: "inherit" });
 execFileSync(

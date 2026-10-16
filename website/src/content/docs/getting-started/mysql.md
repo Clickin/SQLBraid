@@ -6,7 +6,7 @@ description: Connect SQLBraid to mysql2 with either a direct connection or an ex
 Install the SQLBraid runtime facade, the MySQL dialect package and the `mysql2` driver together:
 
 ```bash
-npm install sqlbraid @sqlbraid/mysql mysql2
+pnpm add sqlbraid @sqlbraid/mysql mysql2
 ```
 
 ## Direct physical connection
@@ -15,7 +15,8 @@ The direct factory accepts a connected `Connection` or `PoolConnection` object f
 
 ```ts
 import mysql from "mysql2/promise";
-import { createMysql2Database, MYSQL2_LOSSLESS_TEXT, sql } from "sqlbraid/mysql2";
+import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 
 const connection = await mysql.createConnection({
   uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
@@ -39,7 +40,8 @@ Use the pool factory for `mysql2/promise` pools:
 
 ```ts
 import mysql from "mysql2/promise";
-import { createMysql2PoolDatabase, MYSQL2_LOSSLESS_TEXT, sql } from "sqlbraid/mysql2";
+import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 
 const pool = mysql.createPool({
   uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",

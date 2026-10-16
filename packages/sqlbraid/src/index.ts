@@ -1,6 +1,6 @@
 /**
- * Application facade: shared SQLBraid contracts plus runtime factories/errors.
- * Driver/dialect-specific execution remains on the explicit facade subpaths.
+ * Shared SQLBraid types and runtime factories/errors.
+ * Import dialects and drivers from their owning @sqlbraid packages.
  */
 export * from "@sqlbraid/core";
 export {

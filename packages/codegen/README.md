@@ -3,7 +3,7 @@
 Generate TypeScript models from SQLBraid database metadata snapshots.
 
 ```sh
-npm install @sqlbraid/codegen @sqlbraid/metadata
+pnpm add @sqlbraid/codegen @sqlbraid/metadata
 ```
 
 To generate source for application models, give a validated snapshot and a matching database type policy. This package does not connect to databases.

@@ -14,26 +14,29 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   Previously, installing `sqlbraid` installed every dialect and adapter package, even when the application used only one database.
   These unused packages increased downloads and the installed `node_modules` footprint.
   Bundle tree-shaking does not prevent dependency installation. Gzipped bundle size and installed package size measure different costs.
-- Keep only `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template` as hard dependencies.
-  Make `@sqlbraid/bun-sql`, `@sqlbraid/mariadb`, `@sqlbraid/mssql`, `@sqlbraid/mysql`, `@sqlbraid/oracle`,
-  `@sqlbraid/postgres` and `@sqlbraid/sqlite` optional peers.
-  Install only the dialect or adapter packages that the application uses, plus the required external driver.
-- Existing import subpaths and query APIs stay unchanged, but existing projects must explicitly install their selected dialect package.
-  For example, `sqlbraid/pg` requires `@sqlbraid/postgres`, and `sqlbraid/node-sqlite` requires `@sqlbraid/sqlite`:
+- Keep only `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template` as dependencies.
+  Remove all driver and dialect facade subpaths and their optional peer declarations.
+  Keep only the `sqlbraid` root and `sqlbraid/compiled` entry points.
+- Import dialect tags and hints from `@sqlbraid/*` roots and factories from their adapter subpaths.
+  For PostgreSQL, use `@sqlbraid/postgres` and `@sqlbraid/postgres/pg`.
+  For Node SQLite, use `@sqlbraid/sqlite` and `@sqlbraid/sqlite/node-sqlite`.
+  Install only the packages and external drivers that the application uses:
 
   ```sh
   # PostgreSQL
-  npm install sqlbraid @sqlbraid/postgres pg
+  pnpm add sqlbraid @sqlbraid/postgres pg
 
   # SQLite with node:sqlite
-  npm install sqlbraid @sqlbraid/sqlite
+  pnpm add sqlbraid @sqlbraid/sqlite
   ```
 
-  This breaking installation change applies only to `sqlbraid`. Other packages do not need a major version increase for this change.
+  All publishable first-party packages and the VS Code extension move together to `2.0.0`.
+  This coordinated release replaces the earlier facade-only major version plan.
+  Query APIs and runtime behavior remain unchanged.
 
 ### Added
 
-- `@sqlbraid/postgres` 1.1.0: four optional adapter subpaths. All four use the lossless text profile and have the
+- `@sqlbraid/postgres` 2.0.0: four optional adapter subpaths. All four use the lossless text profile and have the
   support label Compatible. They have no verification in real applications yet.
   - `@sqlbraid/postgres/neon`: Neon over WebSocket (`@neondatabase/serverless` `Pool` and `Client`).
   - `@sqlbraid/postgres/neon-http`: Neon over HTTP. It is stateless. `db.tx`, `db.session`, streams and cancellation

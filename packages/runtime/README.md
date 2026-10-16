@@ -3,7 +3,7 @@
 The execution engine of SQLBraid. It executes DDL and DML, materializes results, and controls transactions, sessions, prepared queries and result mapping.
 
 ```sh
-npm install @sqlbraid/runtime
+pnpm add @sqlbraid/runtime
 ```
 
 This package contains the execution logic. It does not manage connections. It uses an executor or a pool from a driver adapter.

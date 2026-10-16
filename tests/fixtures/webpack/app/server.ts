@@ -1,6 +1,7 @@
 import 'server-only';
 import { DatabaseSync } from 'node:sqlite';
-import { createNodeSqliteDatabase, sql } from 'sqlbraid/node-sqlite';
+import { sql } from '@sqlbraid/sqlite';
+import { createNodeSqliteDatabase } from '@sqlbraid/sqlite/node-sqlite';
 export async function execute() {
   const native = new DatabaseSync(':memory:');
   try {

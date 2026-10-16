@@ -4,8 +4,8 @@ Versioned SQL migrations and explicit startup checks for SQLBraid.
 Migrations are SQL files only. The application supplies its `Database` and dialect. Creating a database does not run migrations.
 
 ```sh
-npm install @sqlbraid/migrate
-npm install --save-dev @sqlbraid/cli
+pnpm add @sqlbraid/migrate
+pnpm add --save-dev @sqlbraid/cli
 ```
 
 Use `@sqlbraid/core` and `@sqlbraid/runtime` version `1.0.3` or later.

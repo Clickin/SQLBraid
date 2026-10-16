@@ -20,17 +20,17 @@ The database is an in-memory `node:sqlite` database that the server fills at sta
 Use Node.js 22.18 or later.
 
 ```sh
-npm install
-npm run dev          # Webpack
-npm run dev:turbopack
+pnpm install
+pnpm run dev          # Webpack
+pnpm run dev:turbopack
 ```
 
 For a production build:
 
 ```sh
-npm run build        # next build --webpack
-npm run build:turbopack
-npm start
+pnpm run build        # next build --webpack
+pnpm run build:turbopack
+pnpm start
 ```
 
 Open <http://localhost:3000/?category=coffee&inStock=on&sort=price>.

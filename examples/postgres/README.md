@@ -19,7 +19,8 @@ SQLBRAID_POSTGRES_URL='postgresql://user:password@localhost:5432/db' pnpm run te
 The installed example runs:
 
 ```bash
-npm install @sqlbraid/cli @sqlbraid/postgres pg
-npx sqlbraid build --file src/index.ts --out-file build/index.js
+pnpm add @sqlbraid/cli @sqlbraid/postgres pg
+pnpm add @sqlbraid/template
+pnpm exec sqlbraid build --file src/index.ts --out-file build/index.js
 node build/index.js
 ```

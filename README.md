@@ -43,14 +43,15 @@ Because of that, SQLBraid needed not only a MyBatis-style dynamic SQL processor,
 On Node.js 22.18 or newer, you can run SQLBraid immediately with the built-in `node:sqlite` module—no database server required.
 
 ```sh
-npm install sqlbraid @sqlbraid/sqlite
+pnpm add sqlbraid @sqlbraid/sqlite
 ```
 
 Save the code below as `quickstart.mts` and run `node quickstart.mts`:
 
 ```ts
 import { DatabaseSync } from "node:sqlite";
-import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { sql } from "@sqlbraid/sqlite";
 
 interface UserRow {
   id: string;
@@ -81,12 +82,13 @@ try {
 You create the connection pool with your driver (`pg`, `mysql2`, etc.) and pass it to SQLBraid. SQLBraid leases one connection per operation or pins a single connection across a transaction.
 
 ```sh
-npm install sqlbraid @sqlbraid/postgres pg
+pnpm add sqlbraid @sqlbraid/postgres pg
 ```
 
 ```ts
 import { Pool } from "pg";
-import { createPgPoolDatabase, sql } from "sqlbraid/pg";
+import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";
+import { sql } from "@sqlbraid/postgres";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = createPgPoolDatabase(pool);
@@ -138,6 +140,8 @@ sql.rows<User>`
 - **Zero-build runtime execution & optional compiler:** All directives work at runtime without a build step. If you want to skip evaluating `${...}` expressions inside inactive `/*@braid if ...*/` branches (lazy evaluation), add the optional compiler plugin (`@sqlbraid/vite`, `@sqlbraid/webpack`, or `@sqlbraid/cli`). The compiler only wraps expressions in thunks; final SQL assembly still happens at runtime (see [What the compiler does](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/#what-the-compiler-does)).
 - **Dynamic identifiers & SQL fragments:** When you need to compose SQL structure dynamically—table names, column lists, or reusable sub-clauses—use the explicit helpers `sql.ident`, `sql.list`, `sql.join`, and `sql.fragment` (see [Structural SQL fragments](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/)).
 
+When you use the compiler, install `@sqlbraid/template` as a direct runtime dependency. Generated code imports its helpers.
+
 ## Result Declarations & Schema Validation
 
 You declare the expected result kind for every query: `sql.rows<T>` for row sets, `sql.command` for `INSERT`/`UPDATE`/`DELETE`, and `sql.call` for stored procedures. SQLBraid throws if the database returns a different result kind than declared (see [SQL tags and result kinds](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/)). `sql.rows<T>` is a TypeScript type declaration; to validate row fields and values at runtime, pass a Standard Schema.
@@ -169,7 +173,7 @@ END $$;
 
 ```ts
 import type { RoutineCallResult } from "sqlbraid";
-import { postgresParameter, sql } from "sqlbraid/pg";
+import { postgresParameter, sql } from "@sqlbraid/postgres";
 
 interface UserRow {
   id: string;
@@ -190,7 +194,7 @@ console.log(result.resultSets[0].rows); // UserRow[]: [{ id: "1", name: "Ada" }]
 `RoutineCallResult<Output, Sets, ReturnValue>` declares the scalar `OUT` object type, the tuple of row types for each result set, and the return value type. Just like `sql.rows`, you can pass Standard Schemas to validate and transform each channel:
 
 ```ts
-import { postgresParameter, sql } from "sqlbraid/pg";
+import { postgresParameter, sql } from "@sqlbraid/postgres";
 
 const result = await db.tx(async (tx) =>
   tx.call(
@@ -249,27 +253,29 @@ Install `sqlbraid`, the matching dialect or adapter package below, and your driv
 | SQL Server          | `@sqlbraid/mssql`    |
 | Bun.SQL             | `@sqlbraid/bun-sql`  |
 
-These seven packages are optional peers of `sqlbraid`; install each package you use explicitly. Import the matching facade subpath below, or use direct dialect imports such as `@sqlbraid/postgres/pg` and `@sqlbraid/sqlite/node-sqlite`.
+`sqlbraid` depends only on `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template`, with no dialect or adapter peers. Install each package you use explicitly. Import `sql` and dialect hints from package roots, and factories from the adapter paths below.
+
+Version 2.0.0 removes driver and dialect facade subpaths. All publishable first-party packages and the VS Code extension move together to `2.0.0`.
 
 **Official** means CI tests that exact driver version and runtime against a real database; **Compatible** means the adapter follows the same API requirements without a pinned certified target.
 
-| Database                           | Driver                                 | Import path                      | Support    |
-| ---------------------------------- | -------------------------------------- | -------------------------------- | ---------- |
-| PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    | Official   |
-| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` | Compatible |
-| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`        | Compatible |
-| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`   | Compatible |
-| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`      | Compatible |
-| MySQL                              | `mysql2`                               | `sqlbraid/mysql2`                | Official   |
-| MariaDB                            | `mariadb`                              | `sqlbraid/mariadb`               | Official   |
-| SQLite                             | `node:sqlite`                          | `sqlbraid/node-sqlite`           | Official   |
-| SQLite                             | `better-sqlite3`                       | `sqlbraid/better-sqlite3`        | Compatible |
-| SQLite                             | `@libsql/client` (libSQL)              | `sqlbraid/libsql`                | Compatible |
-| SQLite                             | `@sqlite.org/sqlite-wasm` (browser)    | `sqlbraid/sqlite-wasm`           | Official   |
-| SQLite                             | Cloudflare D1 binding                  | `sqlbraid/d1`                    | Compatible |
-| Oracle                             | `oracledb` (Thin)                      | `sqlbraid/oracledb`              | Official   |
-| SQL Server                         | `tedious`                              | `sqlbraid/tedious`               | Official   |
-| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (built into Bun)               | `sqlbraid/bun-sql`               | Official   |
+| Database                           | Driver                                 | Import path                       | Support    |
+| ---------------------------------- | -------------------------------------- | --------------------------------- | ---------- |
+| PostgreSQL                         | `pg`                                   | `@sqlbraid/postgres/pg`           | Official   |
+| PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js`  | Compatible |
+| PostgreSQL                         | `@neondatabase/serverless` (WebSocket) | `@sqlbraid/postgres/neon`         | Compatible |
+| PostgreSQL                         | `@neondatabase/serverless` (HTTP)      | `@sqlbraid/postgres/neon-http`    | Compatible |
+| PostgreSQL                         | `@electric-sql/pglite`                 | `@sqlbraid/postgres/pglite`       | Compatible |
+| MySQL                              | `mysql2`                               | `@sqlbraid/mysql/mysql2`          | Official   |
+| MariaDB                            | `mariadb`                              | `@sqlbraid/mariadb/mariadb`       | Official   |
+| SQLite                             | `node:sqlite`                          | `@sqlbraid/sqlite/node-sqlite`    | Official   |
+| SQLite                             | `better-sqlite3`                       | `@sqlbraid/sqlite/better-sqlite3` | Compatible |
+| SQLite                             | `@libsql/client` (libSQL)              | `@sqlbraid/sqlite/libsql`         | Compatible |
+| SQLite                             | `@sqlite.org/sqlite-wasm` (browser)    | `@sqlbraid/sqlite/wasm`           | Official   |
+| SQLite                             | Cloudflare D1 binding                  | `@sqlbraid/sqlite/d1`             | Compatible |
+| Oracle                             | `oracledb` (Thin)                      | `@sqlbraid/oracle/oracledb`       | Official   |
+| SQL Server                         | `tedious`                              | `@sqlbraid/mssql/tedious`         | Official   |
+| PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (built into Bun)               | `@sqlbraid/bun-sql`               | Official   |
 
 ## Optional Tooling
 

@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@sqlbraid/sqlite": "1.0.0",
-    "sqlbraid": "1.0.0"
+    "@sqlbraid/sqlite": "2.0.0",
+    "sqlbraid": "2.0.0"
   },
   "devDependencies": {
-    "@sqlbraid/cli": "1.0.0",
+    "@sqlbraid/cli": "2.0.0",
     "@types/node": "22.20.1",
     "typescript": "5.9.3"
   },

@@ -6,14 +6,15 @@ description: Oracle 파라미터 힌트를 명시하면서 SQLBraid를 Thin 모�
 SQLBraid 런타임 파사드, Oracle 방언 패키지, `oracledb` 드라이버를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid @sqlbraid/oracle oracledb
+pnpm add sqlbraid @sqlbraid/oracle oracledb
 ```
 
 방언 루트는 `oracledb`를 import하지 않습니다. Node 어댑터는 드라이버 하위 경로에 있습니다.
 
 ```ts
 import oracledb from "oracledb";
-import { createOracledbDatabase, oracleParameter, sql } from "sqlbraid/oracledb";
+import { createOracledbDatabase } from "@sqlbraid/oracle/oracledb";
+import { oracleParameter, sql } from "@sqlbraid/oracle";
 
 interface UserRow {
   id: string;

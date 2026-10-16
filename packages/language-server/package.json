@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/language-server",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "description": "SQLBraid language server for SQL-aware TypeScript tooling",
   "keywords": [
     "database",
@@ -39,10 +39,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/compiler": "workspace:^1.0.0",
-    "@sqlbraid/core": "workspace:^1.0.0",
-    "@sqlbraid/metadata": "workspace:^1.0.0",
-    "@sqlbraid/tooling": "workspace:^1.0.3",
+    "@sqlbraid/compiler": "workspace:^2.0.0",
+    "@sqlbraid/core": "workspace:^2.0.0",
+    "@sqlbraid/metadata": "workspace:^2.0.0",
+    "@sqlbraid/tooling": "workspace:^2.0.0",
     "vscode-languageserver": "9.0.1",
     "vscode-languageserver-textdocument": "1.0.12"
   },

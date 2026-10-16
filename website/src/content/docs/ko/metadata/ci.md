@@ -8,7 +8,7 @@ description: 생성된 모델을 항상 최신으로 유지합니다. 파생 파
 이 명령을 실행하기 전에 선택 사항인 CLI를 설치하세요.
 
 ```bash
-npm install --save-dev @sqlbraid/cli
+pnpm add --save-dev @sqlbraid/cli
 ```
 
 ```bash

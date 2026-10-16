@@ -27,70 +27,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./pg": {
-      "types": "./dist/pg.d.ts",
-      "import": "./dist/pg.js"
-    },
-    "./mysql2": {
-      "types": "./dist/mysql2.d.ts",
-      "import": "./dist/mysql2.js"
-    },
-    "./mariadb": {
-      "types": "./dist/mariadb.d.ts",
-      "import": "./dist/mariadb.js"
-    },
-    "./node-sqlite": {
-      "types": "./dist/node-sqlite.d.ts",
-      "import": "./dist/node-sqlite.js"
-    },
-    "./better-sqlite3": {
-      "types": "./dist/better-sqlite3.d.ts",
-      "import": "./dist/better-sqlite3.js"
-    },
-    "./libsql": {
-      "types": "./dist/libsql.d.ts",
-      "import": "./dist/libsql.js"
-    },
-    "./sqlite-wasm": {
-      "types": "./dist/sqlite-wasm.d.ts",
-      "import": "./dist/sqlite-wasm.js"
-    },
-    "./d1": {
-      "types": "./dist/d1.d.ts",
-      "import": "./dist/d1.js"
-    },
-    "./oracledb": {
-      "types": "./dist/oracledb.d.ts",
-      "import": "./dist/oracledb.js"
-    },
-    "./tedious": {
-      "types": "./dist/tedious.d.ts",
-      "import": "./dist/tedious.js"
-    },
-    "./bun-sql": {
-      "types": "./dist/bun-sql.d.ts",
-      "import": "./dist/bun-sql.js"
-    },
-    "./postgres": {
-      "types": "./dist/postgres.d.ts",
-      "import": "./dist/postgres.js"
-    },
-    "./mysql": {
-      "types": "./dist/mysql.d.ts",
-      "import": "./dist/mysql.js"
-    },
-    "./sqlite": {
-      "types": "./dist/sqlite.d.ts",
-      "import": "./dist/sqlite.js"
-    },
-    "./oracle": {
-      "types": "./dist/oracle.d.ts",
-      "import": "./dist/oracle.js"
-    },
-    "./mssql": {
-      "types": "./dist/mssql.d.ts",
-      "import": "./dist/mssql.js"
-    },
     "./compiled": {
       "types": "./dist/compiled.d.ts",
       "import": "./dist/compiled.js"
@@ -100,50 +36,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:^1.0.0",
-    "@sqlbraid/runtime": "workspace:^1.0.0",
-    "@sqlbraid/template": "workspace:^1.0.0"
-  },
-  "devDependencies": {
-    "@sqlbraid/bun-sql": "workspace:^1.0.0",
-    "@sqlbraid/mariadb": "workspace:^1.0.0",
-    "@sqlbraid/mssql": "workspace:^1.0.0",
-    "@sqlbraid/mysql": "workspace:^1.0.0",
-    "@sqlbraid/oracle": "workspace:^1.0.0",
-    "@sqlbraid/postgres": "workspace:^1.0.0",
-    "@sqlbraid/sqlite": "workspace:^1.0.0"
-  },
-  "peerDependencies": {
-    "@sqlbraid/bun-sql": "workspace:^1.0.0",
-    "@sqlbraid/mariadb": "workspace:^1.0.0",
-    "@sqlbraid/mssql": "workspace:^1.0.0",
-    "@sqlbraid/mysql": "workspace:^1.0.0",
-    "@sqlbraid/oracle": "workspace:^1.0.0",
-    "@sqlbraid/postgres": "workspace:^1.0.0",
-    "@sqlbraid/sqlite": "workspace:^1.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@sqlbraid/bun-sql": {
-      "optional": true
-    },
-    "@sqlbraid/mariadb": {
-      "optional": true
-    },
-    "@sqlbraid/mssql": {
-      "optional": true
-    },
-    "@sqlbraid/mysql": {
-      "optional": true
-    },
-    "@sqlbraid/oracle": {
-      "optional": true
-    },
-    "@sqlbraid/postgres": {
-      "optional": true
-    },
-    "@sqlbraid/sqlite": {
-      "optional": true
-    }
+    "@sqlbraid/core": "workspace:^2.0.0",
+    "@sqlbraid/runtime": "workspace:^2.0.0",
+    "@sqlbraid/template": "workspace:^2.0.0"
   },
   "engines": {
     "node": ">=16.20.2"

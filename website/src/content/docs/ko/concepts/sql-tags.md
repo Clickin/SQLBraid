@@ -6,7 +6,7 @@ description: SQL을 감추지 않고, SQLBraid 문장이 무엇을 반환하는�
 SQLBraid 태그는 SQL을 담은 일반 TypeScript입니다. 방언 패키지는 설정된 `sql` 태그를 export합니다.
 
 ```ts
-import { sql } from "sqlbraid/postgres";
+import { sql } from "@sqlbraid/postgres";
 
 const users = sql.rows<{ id: string; name: string }>`
   SELECT id, name FROM users

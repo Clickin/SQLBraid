@@ -7,8 +7,10 @@ Install the Vite plugin together with the SQLBraid dialect package of your appli
 The following command uses SQLite:
 
 ```bash
-npm install sqlbraid @sqlbraid/sqlite @sqlbraid/vite
+pnpm add sqlbraid @sqlbraid/sqlite @sqlbraid/template @sqlbraid/vite
 ```
+
+Generated code imports helpers from `@sqlbraid/template`. Keep it as a direct runtime dependency of the application.
 
 Add the framework-neutral plugin before the normal Vite transforms:
 
@@ -21,7 +23,7 @@ export default defineConfig({
 });
 ```
 
-`@sqlbraid/vite` targets Vite 8 and runs as a pre-transform. It recognizes SQLBraid tags that are imported from the granular `@sqlbraid/*` dialect roots and from the matching `sqlbraid/*` facade subpaths. If an application wraps a tag, configure custom tags:
+`@sqlbraid/vite` targets Vite 8 and runs as a pre-transform. It recognizes tags imported from `@sqlbraid/*` dialect roots and `@sqlbraid/template`. If an application wraps a tag, configure custom tags:
 
 ```ts
 sqlbraid({

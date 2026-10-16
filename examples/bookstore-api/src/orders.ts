@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import type { Database } from "sqlbraid";
-import { sql } from "sqlbraid/pg";
+import { sql } from "@sqlbraid/postgres";
 import { SafeInteger } from "./books.ts";
 
 export interface OrderLine {

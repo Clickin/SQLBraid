@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "sqlbraid/node-sqlite";
+import { sql } from "@sqlbraid/sqlite";
 import { getDb } from "./db";
 
 // SQLBraid returns exact integers as strings. The SQL alias sets the key name.

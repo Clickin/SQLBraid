@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/core",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "description": "Core SQLBraid types and SQL template interfaces for typed database applications",
   "keywords": [
     "database",

@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { AUTHORING_MODULE_CATALOG, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
+import type { TemplateIr, TemplateNode } from "@sqlbraid/core";
 import { hasGuard, mappedRowsCall, range } from "./discovery.js";
 import type {
   CompileDiagnostic,
@@ -626,18 +626,11 @@ export function createLoweringPlan(
           ]
         : []),
     ];
-    const helperModule = discovered.queries.some(
-      (query) =>
-        AUTHORING_MODULE_CATALOG.find((entry) => entry.moduleSpecifier === query.moduleSpecifier)?.helperFamily ===
-        "facade",
-    )
-      ? "sqlbraid/compiled"
-      : "@sqlbraid/template";
     prefix.push(
       factory.createImportDeclaration(
         undefined,
         factory.createImportClause(false, undefined, factory.createNamedImports(imports)),
-        factory.createStringLiteral(helperModule),
+        factory.createStringLiteral("@sqlbraid/template"),
         undefined,
       ),
     );

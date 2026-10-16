@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/tooling",
-  "version": "1.0.3",
+  "version": "2.0.0",
   "description": "SQLBraid Node-first semantic tooling shared by the CLI and language server",
   "keywords": [
     "database",
@@ -32,10 +32,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/codegen": "workspace:^1.0.0",
-    "@sqlbraid/compiler": "workspace:^1.0.0",
-    "@sqlbraid/core": "workspace:^1.0.0",
-    "@sqlbraid/metadata": "workspace:^1.0.0",
+    "@sqlbraid/codegen": "workspace:^2.0.0",
+    "@sqlbraid/compiler": "workspace:^2.0.0",
+    "@sqlbraid/core": "workspace:^2.0.0",
+    "@sqlbraid/metadata": "workspace:^2.0.0",
     "typescript": "5.9.3"
   },
   "engines": {

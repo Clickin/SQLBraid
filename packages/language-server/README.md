@@ -3,7 +3,7 @@
 SQL-aware Language Server Protocol (LSP) support for TypeScript.
 
 ```sh
-npm install @sqlbraid/language-server
+pnpm add @sqlbraid/language-server
 ```
 
 Run `sqlbraid-language-server` as a stdio server. It gives diagnostics, hover, completion and symbol navigation in your editor.

@@ -11,10 +11,10 @@ pnpm run test:examples
 The packed project runs these commands:
 
 ```bash
-npm install @sqlbraid/cli @sqlbraid/codegen @sqlbraid/sqlite
-npx sqlbraid codegen
-npx tsc --project tsconfig.json --noEmit
-npx sqlbraid codegen --check
+pnpm add @sqlbraid/cli @sqlbraid/codegen @sqlbraid/sqlite
+pnpm exec sqlbraid codegen
+pnpm exec tsc --project tsconfig.json --noEmit
+pnpm exec sqlbraid codegen --check
 ```
 
 The last command, `--check`, proves that the generated model is deterministic.

@@ -1,6 +1,6 @@
 ---
 title: Release notes
-description: The SQLBraid GA interfaces, the 2.0.0 facade dependency boundary and their capability and evidence boundaries.
+description: The coordinated SQLBraid 2.0.0 release, direct driver imports and capability boundaries.
 ---
 
 This page records the SQLBraid GA release line. GA makes the public interfaces
@@ -9,21 +9,20 @@ stable. It does not make each capability available on each driver.
 The [runtime and driver support matrix](/SQLBraid/reference/support/) lists
 the supported combinations of database, driver, profile, runtime and capability.
 
-## 2.0.0 facade dependency boundary
+## Coordinated 2.0.0 release
 
-`sqlbraid` 2.0.0 moves the seven dialect and adapter packages
-(`@sqlbraid/bun-sql`, `@sqlbraid/mariadb`, `@sqlbraid/mssql`, `@sqlbraid/mysql`,
-`@sqlbraid/oracle`, `@sqlbraid/postgres` and `@sqlbraid/sqlite`) from hard
-dependencies to optional peer dependencies. The `sqlbraid` facade now keeps only
-`@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template` as hard
-dependencies.
+All publishable first-party packages and the VS Code extension move together to `2.0.0`.
+This replaces the earlier plan to raise only the facade's major version.
 
-- Install the `@sqlbraid/*` dialect or adapter package that matches each
-  `sqlbraid/*` subpath you import (for example,
-  `npm install sqlbraid @sqlbraid/postgres pg` for `sqlbraid/pg`).
-- All `sqlbraid` export subpaths, query APIs and runtime semantics stay
-  unchanged from 1.0.x, and the `@sqlbraid/*` packages stay on the 1.x release
-  line.
+`sqlbraid` keeps only its root and `sqlbraid/compiled` entry points.
+Its only dependencies are `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template`.
+It has no dialect or adapter dependencies, including optional peers.
+
+- Install the dialect or adapter package and external driver that your application uses.
+- Import `sql` and dialect hints from the owning `@sqlbraid/*` root.
+- Import database factories from the adapter subpath, such as `@sqlbraid/postgres/pg`.
+- Replace all driver and dialect facade imports. The old subpaths are removed, with no compatibility aliases.
+- Query APIs and runtime behavior remain unchanged.
 
 ## What 1.0.0 includes
 

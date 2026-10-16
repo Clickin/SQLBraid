@@ -293,14 +293,14 @@ test("built stdio server speaks standard LSP methods", async () => {
   }
 }, 30000);
 
-test("built stdio server discovers facade metadata with default configuration", async () => {
-  const root = await mkdtemp(join(tmpdir(), "sqlbraid-lsp-facade-"));
+test("built stdio server discovers dialect metadata with default configuration", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sqlbraid-lsp-dialect-"));
   const metadataPath = join(root, "metadata.json");
   const configPath = join(root, "sqlbraid.config.mjs");
   const sourcePath = join(root, "query.ts");
   const uri = pathToFileURL(sourcePath).href;
   const source = [
-    'import { sql } from "sqlbraid/sqlite";',
+    'import { sql } from "@sqlbraid/sqlite";',
     "type UserRow = { id: number };",
     "export const query = sql.rows<UserRow>`SELECT calculate_fee(1) AS id FROM main.users`;",
   ].join("\n");
@@ -370,7 +370,7 @@ test("built stdio server discovers facade metadata with default configuration", 
         processId: process.pid,
         rootUri: pathToFileURL(root).href,
         capabilities: {},
-        workspaceFolders: [{ uri: pathToFileURL(root).href, name: "facade" }],
+        workspaceFolders: [{ uri: pathToFileURL(root).href, name: "dialect" }],
       },
     });
     await response(reader, 1);

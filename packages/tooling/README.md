@@ -3,7 +3,7 @@
 Shared Node-first utilities for the SQLBraid CLI and language server.
 
 ```sh
-npm install @sqlbraid/tooling
+pnpm add @sqlbraid/tooling
 ```
 
 This package gives workspace tracking, configuration and SQL-aware language features, such as hover and completion, to tools. It does not execute queries.

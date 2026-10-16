@@ -7,7 +7,7 @@ SQLBraid는 특정 검증 라이브러리가 아니라 Standard Schema 프로토
 
 ```ts
 import * as v from "valibot";
-import { sql } from "sqlbraid/postgres";
+import { sql } from "@sqlbraid/postgres";
 
 const EventSchema = v.object({
   id: v.pipe(v.string(), v.transform(Number)),

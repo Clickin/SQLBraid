@@ -3,7 +3,7 @@
 MySQL dialect and `mysql2` adapters for SQLBraid.
 
 ```sh
-npm install @sqlbraid/mysql mysql2
+pnpm add @sqlbraid/mysql mysql2
 ```
 
 Use this package through the `@sqlbraid/mysql/mysql2` adapter. Give it a connected `mysql2` connection or pool.

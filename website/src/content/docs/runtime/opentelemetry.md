@@ -7,7 +7,7 @@ description: Export traces and duration metrics of SQLBraid database operations.
 Install it with the OpenTelemetry API:
 
 ```sh
-npm install @sqlbraid/opentelemetry @opentelemetry/api
+pnpm add @sqlbraid/opentelemetry @opentelemetry/api
 ```
 
 Configure the OpenTelemetry SDK, provider, exporter and reader in the

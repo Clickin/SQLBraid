@@ -7,7 +7,7 @@
       "source": "website/src/content/docs/agents/cli.md",
       "translation": "website/src/content/docs/ko/agents/cli.md",
       "translationOf": "website/src/content/docs/agents/cli.md",
-      "sourceDigest": "8c4452c7f9f1bf5e70d01a35bb14847c263a44b3847452f460132af82ff8b453"
+      "sourceDigest": "75babe478867c2ae5070a6d4adde9d1d8c0a829061d7e9b28ff70d2c627e89b2"
     },
     {
       "source": "website/src/content/docs/agents/driver-author.md",
@@ -25,7 +25,7 @@
       "source": "website/src/content/docs/agents/skill.md",
       "translation": "website/src/content/docs/ko/agents/skill.md",
       "translationOf": "website/src/content/docs/agents/skill.md",
-      "sourceDigest": "7cddcf92ff58562aed6116f9dd41051559e12ee9bf27e0b6f2467fa126e148e3"
+      "sourceDigest": "e2aee525dcf88299b56e28ebb1079c87d7a3944a1cd12246a6fbbb4e39cf51f7"
     },
     {
       "source": "website/src/content/docs/agents/vscode.md",
@@ -55,37 +55,37 @@
       "source": "website/src/content/docs/concepts/dynamic-braid.md",
       "translation": "website/src/content/docs/ko/concepts/dynamic-braid.md",
       "translationOf": "website/src/content/docs/concepts/dynamic-braid.md",
-      "sourceDigest": "b4cb06ba84afe09fdebc04ca726b6e7a7d96cb38de740d9374951ba9cc05205c"
+      "sourceDigest": "c74863dc0f0f751c46ce7ae9b1d02e421b42cf6d1dd0cb6bb57a143f5dd86fd9"
     },
     {
       "source": "website/src/content/docs/concepts/parameter-hints.md",
       "translation": "website/src/content/docs/ko/concepts/parameter-hints.md",
       "translationOf": "website/src/content/docs/concepts/parameter-hints.md",
-      "sourceDigest": "8de6f629534d4675e5aab8705337bb2e73317862623ac20b592daf5a4b003a09"
+      "sourceDigest": "e163001c68915e9d23b3f7080176e3d35cfec8585e12616195527c25488b43e0"
     },
     {
       "source": "website/src/content/docs/concepts/result-mapping.md",
       "translation": "website/src/content/docs/ko/concepts/result-mapping.md",
       "translationOf": "website/src/content/docs/concepts/result-mapping.md",
-      "sourceDigest": "438f7536a698e35a1b187be5c7b13e3edfcef3fcd6ab2a8d4f67c862b59e53e0"
+      "sourceDigest": "f0dd7e0d7d553b45d1ec04fb36263d5316315b655d5f22941d8dbb4e0d44b9d1"
     },
     {
       "source": "website/src/content/docs/concepts/routines.md",
       "translation": "website/src/content/docs/ko/concepts/routines.md",
       "translationOf": "website/src/content/docs/concepts/routines.md",
-      "sourceDigest": "7c4d9f309ec3f00ba6714c8973cd5d0c4f912b6c5a9cc2867c5fcb42a8bde737"
+      "sourceDigest": "ac6fd5e38256457272fd6d148b568f868a9c66ac05d72a5e45bca959d507a186"
     },
     {
       "source": "website/src/content/docs/concepts/safe-binds.md",
       "translation": "website/src/content/docs/ko/concepts/safe-binds.md",
       "translationOf": "website/src/content/docs/concepts/safe-binds.md",
-      "sourceDigest": "3be8efd2a5193afae01b8aa2935d1d2347c836732474062239fe8b148a893d06"
+      "sourceDigest": "0a3e649a6b6ed4ff699d1e53f9e24d75315db9735e0ba1c7717d09f6d9ae73d6"
     },
     {
       "source": "website/src/content/docs/concepts/sql-tags.md",
       "translation": "website/src/content/docs/ko/concepts/sql-tags.md",
       "translationOf": "website/src/content/docs/concepts/sql-tags.md",
-      "sourceDigest": "834626448adaf9fbfaa7a3ce9024f5f5f6c63a271b6e7cb158464b94e472e280"
+      "sourceDigest": "b2c2c1fcc7a38c828c093920dafffb3d815af3afdf84609a775b4141a24dbed2"
     },
     {
       "source": "website/src/content/docs/concepts/structural-fragments.md",
@@ -97,49 +97,49 @@
       "source": "website/src/content/docs/getting-started/mariadb.md",
       "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
       "translationOf": "website/src/content/docs/getting-started/mariadb.md",
-      "sourceDigest": "83802e3aa3ae2053ea41005504601b74b3028d54f6e729c7629022e17766a2d9"
+      "sourceDigest": "8b0216863897466470c2a074fe2ad136ebf2b2a365d0f4a359f1c68a1c941d8b"
     },
     {
       "source": "website/src/content/docs/getting-started/mssql.md",
       "translation": "website/src/content/docs/ko/getting-started/mssql.md",
       "translationOf": "website/src/content/docs/getting-started/mssql.md",
-      "sourceDigest": "e9ae7d5a8a957de86bf38dcf7ca15050c321a39a10ecb79994c7f4e664a2f6d6"
+      "sourceDigest": "5faf66efd7842dbe5af8b573c16bf367d05e02bb9fe135a91698e9ed31b27996"
     },
     {
       "source": "website/src/content/docs/getting-started/mysql.md",
       "translation": "website/src/content/docs/ko/getting-started/mysql.md",
       "translationOf": "website/src/content/docs/getting-started/mysql.md",
-      "sourceDigest": "18bb4182a1dcae68890d05a19b70fc582fe6a95e8ca6bdfdb050833acb9ffcb9"
+      "sourceDigest": "547cab4f8dab1047508424bc39d4428d6ca9fcc65ae7db899fe0adebf3b2f90d"
     },
     {
       "source": "website/src/content/docs/getting-started/oracle.md",
       "translation": "website/src/content/docs/ko/getting-started/oracle.md",
       "translationOf": "website/src/content/docs/getting-started/oracle.md",
-      "sourceDigest": "bf1ec2575fd8bdadd3f9d489d9d286f329b228d1d574ee97278d75945fffe1a4"
+      "sourceDigest": "c4f98991173bf58dd8cb278f5b7d3ff7da41e8e1e34609bf9c601e878a32f8bf"
     },
     {
       "source": "website/src/content/docs/getting-started/postgres.md",
       "translation": "website/src/content/docs/ko/getting-started/postgres.md",
       "translationOf": "website/src/content/docs/getting-started/postgres.md",
-      "sourceDigest": "bb19a552bdc563284fb27c211aea7643022f006f17e6c168f16e5abb82b413ca"
+      "sourceDigest": "b6996c34ac66823ac7e369bb0f55ce2053098d7500d897dab331dbbe90968da1"
     },
     {
       "source": "website/src/content/docs/getting-started/sqlite-browser.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite-browser.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite-browser.md",
-      "sourceDigest": "1890cd740be86d9d5ebaba86c2db0323f85f2140def8dcdb5fabd6164351f6c9"
+      "sourceDigest": "9dce005deb149fba5b088e81cf606946d99fdd358b0439794e367cf6dd16372a"
     },
     {
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "0d15d25d94a018af294a271cc1708054216c57344e6261447015cc5a9e808358"
+      "sourceDigest": "d8347299769de66c0ac8b296180553c86ad5028cd42ffeeab0ba4e121a0c356e"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",
       "translation": "website/src/content/docs/ko/getting-started/vite.md",
       "translationOf": "website/src/content/docs/getting-started/vite.md",
-      "sourceDigest": "49fdf9ba128074288876fb3d153949eb8a107d49455eb9fd394c260af81d6a02"
+      "sourceDigest": "795051281db8b81929a07730ac0362cb8178093af421d9d00d2238a7418fa8a6"
     },
     {
       "source": "website/src/content/docs/index.md",
@@ -157,7 +157,7 @@
       "source": "website/src/content/docs/metadata/ci.md",
       "translation": "website/src/content/docs/ko/metadata/ci.md",
       "translationOf": "website/src/content/docs/metadata/ci.md",
-      "sourceDigest": "d373d936d5d961856f03ae359f37a5c8f979ee542737877abf64def6c8e112f1"
+      "sourceDigest": "4914b17650cca149757e1dcd7c5c9de3514fbc29ecb1742745d87c41d4b94afb"
     },
     {
       "source": "website/src/content/docs/metadata/config.md",
@@ -169,7 +169,7 @@
       "source": "website/src/content/docs/metadata/inspectors.md",
       "translation": "website/src/content/docs/ko/metadata/inspectors.md",
       "translationOf": "website/src/content/docs/metadata/inspectors.md",
-      "sourceDigest": "90be359cc8d7f43e10e3494444c3e61915cf76fe2892d19777648742b55a5714"
+      "sourceDigest": "ef9669113934ff4c2ca006d13cf0e1dea3f2dcc72362e9c27165164230bb400f"
     },
     {
       "source": "website/src/content/docs/metadata/models.md",
@@ -199,7 +199,7 @@
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "24e01864c6e0a042d53e4cebb4c38969241880b6f30d1c9c9c14a986844e840d"
+      "sourceDigest": "6b6902fa713712d8b137185ac2ebbe076e285c48cfc3efd5d2adadd9ce8a9352"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
@@ -223,7 +223,7 @@
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "d2840758f74ba9696b96af31bbcebe70e64314fa529802b88755b74cd46ff389"
+      "sourceDigest": "d48cfc4a3b8793f5d90c2223861863cbf6612b7933186d45f1ac12083d822dd6"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",
@@ -247,7 +247,7 @@
       "source": "website/src/content/docs/runtime/opentelemetry.md",
       "translation": "website/src/content/docs/ko/runtime/opentelemetry.md",
       "translationOf": "website/src/content/docs/runtime/opentelemetry.md",
-      "sourceDigest": "6dd719897c24639b9ad887c9e16455361033a7f14965f6a537c22fd61dab894f"
+      "sourceDigest": "946a5a3d0b479f4767f27d81c3ede3cb68937da8d5ccf60dbbef994dcce36740"
     },
     {
       "source": "website/src/content/docs/runtime/prepared.md",

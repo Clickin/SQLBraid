@@ -13,7 +13,7 @@ const query = sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`;
 When the database type is important, wrap the value with `sql.bind(value, hint)`:
 
 ```ts
-import { sql, oracleParameter } from "sqlbraid/oracle";
+import { sql, oracleParameter } from "@sqlbraid/oracle";
 
 const query = sql.rows<UserRow>`
   SELECT id, name
@@ -39,7 +39,7 @@ Without a hint, the adapter can use its documented driver inference. With a hint
 The SQL Server root exports factories for the types that the Tedious adapter supports:
 
 ```ts
-import { mssqlParameter, sql } from "sqlbraid/mssql";
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
 
 const query = sql.rows<UserRow>`
   SELECT id, display_name

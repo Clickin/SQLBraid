@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { serve } from "@hono/node-server";
-import { sql } from "sqlbraid/pg";
+import { sql } from "@sqlbraid/postgres";
 import { openDatabase } from "./database.ts";
 import { createApp } from "./server.ts";
 

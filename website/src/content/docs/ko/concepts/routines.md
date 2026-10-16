@@ -16,7 +16,7 @@ description: 출력 값, 반환 값, 서로 다른 결과 집합을 명시적으
 쿼리 경계에 Standard Schema 검증기를 연결하세요.
 
 ```ts
-import { mssqlParameter, sql } from "sqlbraid/mssql";
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
 
 const refresh = sql.call({
   procedure: {
