@@ -1,6 +1,6 @@
 ---
 title: Current limitations
-description: The things that 1.0.0 GA does not promise, on purpose.
+description: Capabilities and driver behaviors that SQLBraid 1.x does not support or emulate.
 ---
 
 - **Support applies to specific combinations of database, driver and runtime.** The [runtime and driver support matrix](/SQLBraid/reference/support/) is the authoritative source. It records the exact tuple of database, driver, profile, runtime and capability, and its tested versions.
@@ -29,6 +29,4 @@ description: The things that 1.0.0 GA does not promise, on purpose.
 - **Custom drivers are not release support.** Implement `QueryExecutor`/`ConnectionProvider` and supply independent exact evidence.
 - **Tooling is Node-first.** The compiler, CLI, LSP, metadata and codegen, and the Vite integration have separate build and runtime concerns. Do not put drivers that are only for Node into browser bundles.
 
-These boundaries are intentional. They are not hidden fallback behavior. Read [routine
-calls](/SQLBraid/concepts/routines/), [streaming](/SQLBraid/runtime/streaming/),
-[transactions](/SQLBraid/runtime/transactions/) and the [support matrix](/SQLBraid/reference/support/).
+For details on each area, see [routine calls](/SQLBraid/concepts/routines/), [streaming](/SQLBraid/runtime/streaming/), [transactions](/SQLBraid/runtime/transactions/), and the [support matrix](/SQLBraid/reference/support/).

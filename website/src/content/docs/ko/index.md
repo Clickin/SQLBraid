@@ -1,10 +1,10 @@
 ---
 title: SQLBraid
-description: SQL은 직접 쓰고, TypeScript 타입은 그대로 지킵니다. 쿼리 빌더로 옮겨 적는 과정이 필요 없습니다.
+description: 쿼리 빌더 없이 SQL을 순수 SQL로, 하지만 타입 안전하게.
 template: splash
 hero:
   title: SQL은 그대로, TypeScript는 그대로.
-  tagline: SQLBraid는 PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server를 위한 안전한 바인딩, 읽기 쉬운 동적 SQL, 명시적인 결과 선언, 작은 런타임을 제공합니다. 브라우저 WASM과 D1도 지원합니다.
+  tagline: PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server, 브라우저 WASM, Cloudflare D1을 위한 안전한 파라미터 바인딩, SQL 주석 기반 동적 지시어, 명시적 결과 선언, 단일화된 실행 API를 제공합니다.
   actions:
     - text: 시작하기
       link: /SQLBraid/getting-started/sqlite/
@@ -14,13 +14,13 @@ hero:
       variant: minimal
 ---
 
-SQLBraid는 TypeScript용 SQL 중심 데이터 접근 도구입니다. SQL을 쿼리 빌더 코드로 옮겨 적을 필요가 없습니다. 운영 환경에서 필요한 경계는 분명하게 지킵니다.
+SQLBraid는 TypeScript용 SQL 중심 데이터 접근 라이브러리입니다. 쿼리 빌더 DSL이나 ORM 모델로 번역할 필요 없이 태그드 템플릿 안에 순수 SQL을 그대로 작성합니다.
 
-- **SQL이 그대로 보입니다.** 태그 템플릿 안에 일반 SQL과 데이터베이스별 기능을 그대로 씁니다.
-- **값은 항상 바인딩됩니다.** 일반 보간은 논리적인 값 파라미터가 됩니다. 플레이스홀더와 실제 전송 방식은 선택한 드라이버가 정합니다. SQL 구조를 넣을 때는 명시적인 헬퍼가 필요합니다.
-- **결과 종류를 명시합니다.** `rows`, `command`, `call` 중 하나를 선언하면 런타임 검사가 불일치를 찾아냅니다.
-- **런타임 동작을 감추지 않습니다.** 직접 연결과 풀은 서로 다른 팩토리를 씁니다. 트랜잭션은 물리 커넥션 하나를 고정합니다.
-- **도구는 선택 사항입니다.** 메타데이터, 결정적 코드 생성, LSP, CLI 검사, VS Code 지원은 런타임 의존성에 들어가지 않습니다.
+- **순수 SQL 유지:** 태그드 템플릿 안에 표준 SQL과 각 데이터베이스의 고유 기능을 그대로 작성합니다.
+- **안전한 파라미터 바인딩:** 일반 `${value}` 보간은 항상 바인딩 파라미터로 분리되며, 드라이버 어댑터가 각 DB 규격(`$1`, `?`, `:1`, `@p1`)에 맞춰 플레이스홀더를 생성합니다. 동적 식별자나 조건 조각에는 명시적 헬퍼(`sql.ident`, `sql.list`, `sql.join`, `sql.fragment`)를 사용합니다.
+- **명시적인 결과 선언:** `sql.rows<T>`, `sql.command`, `sql.call`로 반환 형태를 선언하거나 Standard Schema(Zod, Valibot, ArkType 등)를 연결해 런타임 검증과 변환을 수행합니다.
+- **투명한 커넥션 관리:** 단일 연결과 커넥션 풀은 서로 다른 팩토리 함수를 사용하며, `db.tx`는 트랜잭션 동안 단일 물리 커넥션을 고정합니다.
+- **선택적 도구 생태계:** 스키마 코드 생성, SQL 마이그레이션, 빌드 타임 지시어 컴파일러(Vite, Webpack/Next.js), LSP 및 VS Code 확장은 기본 런타임의 의존성이 아닌 선택적 패키지이며 외부 런타임 의존성을 추가하지 않습니다.
 
 :::tip SQLite로 시작하기
 [5분 SQLite 빠른 시작](/SQLBraid/getting-started/sqlite/)은 외부 서버 없이 실행됩니다. 브라우저와 Worker 환경은 [SQLite WASM과 D1](/SQLBraid/getting-started/sqlite-browser/)을 보세요. 서버형 데이터베이스가 필요하면 [PostgreSQL](/SQLBraid/getting-started/postgres/), [MySQL](/SQLBraid/getting-started/mysql/), [MariaDB](/SQLBraid/getting-started/mariadb/)로 넘어가세요.
@@ -28,12 +28,10 @@ SQLBraid는 TypeScript용 SQL 중심 데이터 접근 도구입니다. SQL을 �
 
 ## SQLBraid가 하지 않는 일
 
-SQLBraid는 임의의 SELECT 문에서 결과 타입을 추론하지 않습니다. 객체 그래프를 조립하지 않고, 모델 DSL 뒤로 SQL을 숨기지도 않습니다. 결과의 모양은 직접 쓴 SQL과 선언한 행 타입이 정합니다. 행을 검증하거나 변환해야 하면 Standard Schema 매핑을 쓰세요.
+SQLBraid는 ORM이 아닙니다. 연관 관계를 자동으로 로딩하거나 아이덴티티 맵을 두지 않으며, 임의의 `SELECT` 문에서 결과 타입을 추론하지도 않습니다. 반환 행 타입은 직접 선언하거나 Standard Schema로 검증하며, 테이블 모델(`Row`, `Insert`, `Update`)은 `@sqlbraid/codegen`으로 생성할 수 있습니다.
 
-데이터베이스 값과 애플리케이션 값 사이의 경계는 [데이터 표현과 값 정확도](/SQLBraid/concepts/data-representation/)에서 설명합니다. 드라이버 프로필마다 런타임이 실제로 받는 정수, 소수, JSON, 날짜·시간, 바이너리 값이 정리되어 있습니다.
+64비트 정수, 정밀 소수(`DECIMAL`), JSON, 날짜·시간 값이 드라이버별로 어떻게 전달되는지는 [데이터 표현과 값 정확도](/SQLBraid/concepts/data-representation/)를 참고하세요.
 
 ## 출시 문서
 
-1.0.0 GA로 공개 API가 안정화되었습니다. 지원하는 기능은 드라이버마다 다릅니다. 사용하는 데이터베이스, 드라이버, 런타임 조합에서 정확히 어떤 기능을 쓸 수 있는지는 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)에서 확인하세요.
-
-자세한 내용은 [릴리스 노트와 제한 사항](/SQLBraid/release/notes/)을 보세요.
+버전 1.x 공개 API는 안정화되어 시맨틱 버저닝을 따릅니다. 드라이버마다 지원하는 세부 기능이 다르므로, 사용하는 데이터베이스·드라이버·런타임 조합의 지원 범위는 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/), [릴리스 노트](/SQLBraid/release/notes/), [현재 제한 사항](/SQLBraid/release/limitations/)에서 확인하세요.

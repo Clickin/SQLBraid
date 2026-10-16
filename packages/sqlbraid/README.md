@@ -1,12 +1,10 @@
 # sqlbraid
 
-**Write SQL. Keep TypeScript. Skip the query-builder translation layer.**
+**Write plain SQL in TypeScript, with type safety and no query builder.**
 
-SQLBraid lets you write plain SQL in TypeScript with tagged templates. Values are always bound as parameters, dynamic conditions live inside the SQL itself, and you declare what each query returns.
+SQLBraid is a SQL-first data-access library for TypeScript that lets you write raw SQL inside tagged templates. Interpolated values are always separated as bound parameters, dynamic conditions inspired by MyBatis live directly inside SQL comments, and each query declares its return row type or validation schema.
 
-It works with PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL Server, on Node.js, Bun, Deno, browsers (SQLite WASM), and Cloudflare D1.
-
-Here is a query with two optional filters. A `/*@braid if ...*/` directive keeps its line only when the condition is true. `/*@braid where*/` adds `WHERE` only if a line is left, and removes the leading `AND`. The values are sent to the database as bound parameters.
+It provides one unified execution API across 6 database dialects—PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL Server—and runs on Node.js, Bun, Deno, browsers (SQLite WASM), and Cloudflare D1.
 
 ```ts
 const users = await db.all(sql.rows<User>`
@@ -17,28 +15,36 @@ const users = await db.all(sql.rows<User>`
     /*@braid if ${teamId != null}*/ AND team_id = ${teamId}  /*@braid end*/
   /*@braid end*/
 `);
-// name = null, teamId = 7  ->  (pg) SELECT id, name FROM users WHERE team_id = $1   [7]
+// Rendered SQL when name = null, teamId = 7  ->  (pg) SELECT id, name FROM users WHERE team_id = $1   [7]
 ```
 
 [Documentation](https://clickin.github.io/SQLBraid/latest/) · [5-minute quickstart](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [Interactive preview](https://clickin.github.io/SQLBraid/latest/interactive-preview/) · [Support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/)
 
-## Why I built this
+## Motivation
 
-At work I write Java, and I use MyBatis a lot. I like its approach when the team knows SQL well: you write almost any SQL you want, you keep dynamic conditions inside one statement, and you still get typed results without mapping rows by hand.
+At work, I maintain Java framework core libraries and have used iBatis/MyBatis XML SQL mappers for years. Some call that stack old-fashioned, but when a team knows SQL well, it is hard to beat: you write the exact SQL you want without restrictions, read dynamic conditions inside one query context at a glance, and get typed results without mapping rows by hand.
 
-When I looked for the same thing in TypeScript, I couldn't find it. Raw drivers are safe but dynamic `WHERE` clauses turn into string building. Query builders have great types, but I have to translate SQL I already know into a builder API. ORMs hide the SQL completely.
+When I looked for the same workflow in TypeScript, every option had a catch:
 
-SQLBraid is my attempt to bring the MyBatis style to TypeScript: SQL stays SQL, dynamic SQL stays readable, and results stay typed.
+- **Raw drivers:** Parameter binding is safe, but adding dynamic `WHERE` filters quickly turns into messy string concatenation and parameter index bookkeeping.
+- **Query builders:** Type inference is great, but you have to translate the SQL already in your head into a library-specific method-chaining DSL.
+- **ORMs:** They hide the actual SQL being executed altogether.
+
+In the AI era, there was no reason not to build the tool I actually wanted.
+
+The biggest hurdle while building SQLBraid was **the absence of JDBC**. In Java, MyBatis sits on top of the standard JDBC interfaces (`Connection`, `PreparedStatement`, `ResultSet`), so it never has to build a custom execution layer per driver. JavaScript has no standard interface across `pg`, `mysql2`, `oracledb`, `tedious`, and `node:sqlite`—connection management, placeholder syntax (`$1`, `?`, `:1`, `@p1`), transactions, streaming, and stored procedures all work differently.
+
+Because of that, SQLBraid took on a second role beyond a dynamic SQL template processor: a unified driver execution layer that wraps each database's native client under one consistent interface without hiding database-specific capabilities.
 
 ## Quickstart: SQLite
 
-Requires Node.js 22.18 or newer. This example uses the built-in `node:sqlite`, so you don't need a database server.
+On Node.js 22.18 or newer, you can run SQLBraid immediately with the built-in `node:sqlite` module—no database server required.
 
 ```sh
 npm install sqlbraid
 ```
 
-Save as `quickstart.mts` and run `node quickstart.mts`:
+Save the code below as `quickstart.mts` and run `node quickstart.mts`:
 
 ```ts
 import { DatabaseSync } from "node:sqlite";
@@ -66,11 +72,11 @@ try {
 }
 ```
 
-> **Why is `id` a string?** SQLBraid returns exact database numbers (integers, decimals) as strings by default, so large values never lose precision. Convert them in your own code or with a schema (see [data representations](https://clickin.github.io/SQLBraid/latest/concepts/data-representation/)).
+> **Why is `id` returned as a string?** JavaScript `number` loses precision on large 64-bit integers (`BIGINT`) and exact decimals (`DECIMAL`). To prevent silent rounding, SQLBraid returns exact database numeric types as strings by default. You can convert them in application code or attach a Standard Schema to transform them automatically (see [Data representations](https://clickin.github.io/SQLBraid/latest/concepts/data-representation/)).
 
-## Quickstart: PostgreSQL with a pool
+## Quickstart: PostgreSQL Connection Pool
 
-Use this when you have a PostgreSQL server. You create the `pg` pool, and SQLBraid takes one connection for each operation.
+You create the connection pool with your driver (`pg`, `mysql2`, etc.) and pass it to SQLBraid. SQLBraid leases one connection per operation or pins a single connection across a transaction.
 
 ```sh
 npm install sqlbraid pg
@@ -92,11 +98,65 @@ await db.tx(async (tx) => {
 });
 ```
 
-## Quickstart: stored procedures
+For other databases, see the getting-started guides: [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/) · [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/) · [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/) · [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/) · [Browser SQLite & Cloudflare D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/).
 
-With a query builder or a raw-SQL library, a stored procedure is usually a plain query that you read yourself. In SQLBraid you write the `CALL` statement and mark each OUT parameter. `db.call` returns the OUT values in `output`, each result set in `resultSets`, and the return value in `returnValue` when the driver gives one.
+## How It Works
 
-This example uses PostgreSQL and the `db` from the previous quickstart. The procedure returns its rows through a `refcursor` OUT parameter. PostgreSQL needs an open transaction for this, so call it inside `db.tx`.
+SQLBraid builds an executable statement from your template in three steps:
+
+1. **Directive evaluation (`/*@braid ... */`):** Directives use standard SQL block comments so editors and SQL formatters treat your query as valid SQL. SQLBraid evaluates `if`, `choose` / `when` / `otherwise`, `where`, `set`, and `trim` blocks in order, drops inactive branches, and supports multi-line and nested blocks. `where` and `set` automatically strip leading `AND`/`OR` tokens or trailing commas.
+2. **Parameter extraction (`${value}`):** Every `${value}` expression in an active branch is extracted into a bound parameter list—never concatenated into the SQL string.
+3. **Driver placeholder rendering:** You write the same `${value}` syntax everywhere, and the target driver adapter emits the native placeholders (`$1`, `?`, `:1`, `@p1`).
+
+```ts
+sql.rows<User>`
+  SELECT u.id, u.name
+  FROM users u
+  /*@braid if ${teamName != null}*/
+    JOIN teams t
+      ON t.id = u.team_id
+     AND t.name = ${teamName}
+  /*@braid end*/
+  /*@braid where*/
+    /*@braid if ${onlyActive}*/
+      AND u.active = 1
+      AND u.name IS NOT NULL
+    /*@braid end*/
+  /*@braid end*/
+  /*@braid choose*/
+    /*@braid when ${sort === "name"}*/    ORDER BY u.name
+    /*@braid when ${sort === "created"}*/ ORDER BY u.created_at DESC
+    /*@braid otherwise*/                  ORDER BY u.id
+  /*@braid end*/
+`;
+// teamName = "core", onlyActive = true  ->  ... JOIN teams t ON t.id = u.team_id AND t.name = ? WHERE u.active = 1 AND u.name IS NOT NULL ORDER BY ...
+// teamName = null,   onlyActive = false ->  SELECT u.id, u.name FROM users u ORDER BY ...
+```
+
+- **Zero-build runtime execution & optional compiler:** All directives work at runtime without a build step. If you want to skip evaluating `${...}` expressions inside inactive `/*@braid if ...*/` branches (lazy evaluation), add the optional compiler plugin (`@sqlbraid/vite`, `@sqlbraid/webpack`, or `@sqlbraid/cli`). The compiler only wraps expressions in thunks; final SQL assembly still happens at runtime (see [What the compiler does](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/#what-the-compiler-does)).
+- **Dynamic identifiers & SQL fragments:** When you need to compose SQL structure dynamically—table names, column lists, or reusable sub-clauses—use the explicit helpers `sql.ident`, `sql.list`, `sql.join`, and `sql.fragment` (see [Structural SQL fragments](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/)).
+
+## Result Declarations & Schema Validation
+
+You declare the expected return shape for every query: `sql.rows<T>` for row sets, `sql.command` for `INSERT`/`UPDATE`/`DELETE`, and `sql.call` for stored procedures. If the database returns a different result kind than declared, SQLBraid throws immediately instead of returning silently wrong data (see [SQL tags and result kinds](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/)).
+
+**Standard Schema integration (Zod, Valibot, ArkType, etc.):**
+
+Pass any Standard Schema object instead of a type argument to validate rows at runtime and transform values (for example, parsing numeric strings into `number` or `bigint`; see [Standard Schema result mapping](https://clickin.github.io/SQLBraid/latest/concepts/result-mapping/)).
+
+```ts
+const user = await db.one(sql.rows(UserSchema)`SELECT id, name FROM users WHERE id = ${id}`);
+```
+
+**Using SQLBraid from plain JavaScript:**
+
+Call `sql.rows` without a `<T>` type argument. Each returned row is a plain object whose keys match the database column names (or `AS` aliases) verbatim. SQLBraid never implicitly converts `user_id` into `userId`; write `SELECT user_id AS "userId"` in SQL when you want camelCase keys.
+
+## Stored Procedures (`db.call`)
+
+Instead of treating stored procedures as untyped raw queries, `sql.call` gives you a structured API for typed `OUT` parameters, multiple result sets, and return values.
+
+Here is a PostgreSQL example that reads rows from a `refcursor` `OUT` parameter (PostgreSQL requires an open transaction to read a cursor, so it runs inside `db.tx`):
 
 ```sql
 CREATE PROCEDURE list_active_users(OUT users refcursor) LANGUAGE plpgsql AS $$
@@ -125,9 +185,7 @@ const result = await db.tx(async (tx) =>
 console.log(result.resultSets[0].rows); // UserRow[]: [{ id: "1", name: "Ada" }]
 ```
 
-`RoutineCallResult<Output, Sets, ReturnValue>` declares the whole result. `Output` is the type of the scalar OUT values, `Sets` is a tuple with one row type for each result set, and `ReturnValue` is the return value. Each result set can have a different row type. Here the refcursor becomes a result set, so `Output` is empty.
-
-As with `sql.rows`, you can use Standard Schema instead of a type argument. The schema checks each row and can convert it. The row type is the output type of the schema:
+`RoutineCallResult<Output, Sets, ReturnValue>` declares the scalar `OUT` object type, the tuple of row types for each result set, and the return value type. Just like `sql.rows`, you can pass Standard Schemas to validate and transform each channel:
 
 ```ts
 import { postgresParameter, sql } from "sqlbraid/pg";
@@ -139,136 +197,49 @@ const result = await db.tx(async (tx) =>
     `,
   ),
 );
-// With a schema that turns id into a number: [{ id: 1, name: "Ada" }]
 ```
 
-`output` and `returnValue` accept a schema in the same way.
+See [Routine calls](https://clickin.github.io/SQLBraid/latest/concepts/routines/) and the [Support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/) for driver-specific support details.
 
-Driver support for OUT parameters, multiple result sets and return values differs. See [routine calls](https://clickin.github.io/SQLBraid/latest/concepts/routines/) and the [support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/).
+## Comparison with Other Libraries
 
-## Quickstart: other databases
+Every tool below is solid; they optimize for different trade-offs.
 
-The quickstarts above use SQLite and PostgreSQL. For the other databases, see their getting-started guides:
+|                              | SQL you write                                               | Dynamic SQL handling                                                               | Result types                                                            | Supported databases                                                 |
+| ---------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **Prisma**                   | Prisma schema & client API; `$queryRaw` for raw SQL         | Client API (skips `undefined` filters), or `Prisma.sql` / `Prisma.join` in raw SQL | Generated from schema; manual typing for raw queries                    | PostgreSQL, MySQL, SQLite, SQL Server, CockroachDB, MongoDB         |
+| **Drizzle**                  | TypeScript schema & query API; `sql` template for raw parts | Query API (`and(...)` skips `undefined`)                                           | Inferred from schema                                                    | PostgreSQL, MySQL, SQLite, SingleStore, Gel                         |
+| **Kysely**                   | Type-safe query builder; `sql` template for raw parts       | Builder method chaining (e.g., conditional `.where()`)                             | Inferred from DB interface                                              | PostgreSQL, MySQL, SQLite, SQL Server                               |
+| **postgres.js / slonik**     | Raw SQL in tagged templates                                 | Fragment composition in JS (nested `sql`, `sql.fragment`, `sql.join`)              | Declared by you                                                         | PostgreSQL                                                          |
+| **pgtyped**                  | Raw SQL files with `:name` parameters                       | Not built-in (write `:name IS NULL OR ...` in SQL)                                 | Generated at build time against a live DB                               | PostgreSQL                                                          |
+| **sqlc** (TypeScript plugin) | Raw SQL files                                               | Not built-in (write `IS NULL OR ...` in SQL)                                       | Generated from SQL and schema files                                     | PostgreSQL (`pg`, `postgres`), MySQL (`mysql2`), SQLite (`sqlite3`) |
+| **SQLBraid**                 | Raw SQL in tagged templates                                 | In-SQL comment directives (`/*@braid if ...*/`)                                    | Declared by you & validated via Standard Schema; optional table codegen | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server              |
 
-- [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/)
-- [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/)
-- [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/)
-- [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/)
-- [SQLite in the browser and D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/)
+**When SQLBraid fits well:** Teams that design queries in SQL first, queries with many optional search filters or conditional joins, or projects that need one consistent execution and stored-procedure API across multiple database engines.
 
-## How it works
+**What SQLBraid does not do:**
 
-SQLBraid reads your template, builds one statement, and gives it to the driver. Three steps:
+- **Not an ORM:** No automatic relation loading or identity maps.
+- **No arbitrary `SELECT` type inference:** You declare the return row type or pass a Standard Schema, and optionally generate table models with `@sqlbraid/codegen`.
+- **No silent SQL rewriting or feature emulation:** Calling a feature that the underlying driver does not support (such as query cancellation) throws an explicit error instead of faking it.
+- **No built-in connection pool implementation:** You pass in your driver's pool, and SQLBraid leases connections per operation or per transaction.
 
-1. **Directives pick the SQL text.** The `/*@braid ... */` directives are SQL comments, so your editor still sees normal SQL. Each `if`, `when` or `where` is evaluated in order. Inactive parts are dropped. Available directives: `if`, `choose` / `when` / `otherwise`, `where`, `set`, and `trim`.
-2. **Every `${value}` becomes a parameter.** The result is SQL text with the values kept apart. The values are never pasted into the text.
-3. **The driver writes the placeholders.** You write the same `${value}` everywhere. The driver adapter turns it into `$1`, `?`, `:1`, or `@p1`.
+## Core Execution Features
 
-```ts
-sql.rows<User>`
-  SELECT id, name FROM users
-  /*@braid choose*/
-    /*@braid when ${sort === "name"}*/    ORDER BY name
-    /*@braid when ${sort === "created"}*/ ORDER BY created_at DESC
-    /*@braid otherwise*/                  ORDER BY id
-  /*@braid end*/
-`;
-// sort = "created"  ->  SELECT id, name FROM users ORDER BY created_at DESC
-```
+- **Transactions ([`db.tx`](https://clickin.github.io/SQLBraid/latest/runtime/transactions/)):** Savepoints, isolation levels, and read-only mode
+- **Pinned sessions ([`db.session`](https://clickin.github.io/SQLBraid/latest/runtime/direct-pools/)):** Hold a single connection across multiple queries without starting a transaction
+- **Streaming ([`db.stream`](https://clickin.github.io/SQLBraid/latest/runtime/streaming/)):** Consume large result sets incrementally with automatic cursor cleanup
+- **Prepared queries & bulk DML:** [`db.prepare(...)`](https://clickin.github.io/SQLBraid/latest/runtime/prepared/) and [`db.bulk(...)`](https://clickin.github.io/SQLBraid/latest/concepts/bulk/)
+- **Stored procedures ([`db.call`](https://clickin.github.io/SQLBraid/latest/concepts/routines/)):** Typed `OUT` parameters, multiple result sets, and return values
+- **Control & observability:** Query cancellation via `AbortSignal`, [execution observers](https://clickin.github.io/SQLBraid/latest/runtime/observers/) for logging, and optional [OpenTelemetry spans and metrics](https://clickin.github.io/SQLBraid/latest/runtime/opentelemetry/)
 
-Each `if`, `where`, `set`, `trim` and `choose` opens a block, and a `/*@braid end*/` closes it. `when` and `otherwise` are closed by the `end` of their `choose`. A block can hold any number of lines, and blocks can be nested. The one-line form above is just a short case:
+Check the [Support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/) for exact support across databases, drivers, and runtimes.
 
-```ts
-sql.rows<User>`
-  SELECT u.id, u.name
-  FROM users u
-  /*@braid if ${teamName != null}*/
-    JOIN teams t
-      ON t.id = u.team_id
-     AND t.name = ${teamName}
-  /*@braid end*/
-  /*@braid where*/
-    /*@braid if ${onlyActive}*/
-      AND u.active = 1
-      AND u.name IS NOT NULL
-    /*@braid end*/
-  /*@braid end*/
-  ORDER BY u.id
-`;
-// teamName = "core", onlyActive = true  ->  ... JOIN teams t ON t.id = u.team_id AND t.name = ? WHERE u.active = 1 AND u.name IS NOT NULL ORDER BY u.id
-// teamName = null,   onlyActive = false ->  SELECT u.id, u.name FROM users u ORDER BY u.id
-```
+## Supported Drivers
 
-Directives work at runtime with no build step. If you also want inactive branches to skip evaluating their `${...}` expressions, run the optional compiler (`@sqlbraid/cli` or the Vite plugin). The compiler does not expand the SQL branches or build SQL at build time. It only changes when each `${...}` expression runs. SQL and values are still made at runtime. See [what the compiler does](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/#what-the-compiler-does).
+Install `sqlbraid` alongside your target driver package and import the matching subpath (for `postgres.js`, Neon, and PGlite adapters, install `@sqlbraid/postgres`). **Official** means CI tests that exact driver version and runtime against a real database; **Compatible** means the adapter follows the same API contract without a pinned certified target.
 
-To put SQL structure in a statement (a table name, a column list, a fragment), you use an explicit helper: `sql.ident`, `sql.list`, `sql.join`, or `sql.fragment`. See [structural fragments](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/).
-
-## What a query returns
-
-**You declare the result.** `sql.rows<T>` is for queries that return rows, `sql.command` is for INSERT/UPDATE/DELETE, and `sql.call` is for stored procedures. If the declaration doesn't match what the database returned, you get an error instead of silently wrong data.
-
-**Validate rows with any Standard Schema library** (Zod, Valibot, ArkType, ...):
-
-```ts
-const user = await db.one(sql.rows(UserSchema)`SELECT id, name FROM users WHERE id = ${id}`);
-```
-
-### Using SQLBraid from JavaScript
-
-SQLBraid works in plain JavaScript. Write `sql.rows` without the `<T>` type argument.
-
-- Each row is a plain object. Its keys are the column names or aliases that the database returns, exactly as written.
-- SQLBraid does **not** convert names. `user_id` stays `user_id`. It does not become `userId`. If you want camelCase keys, write the alias in SQL: `SELECT user_id AS "userId"` (the quoting depends on the database).
-- Values follow the same rules as in TypeScript. Exact numbers are strings, and `null` is `null`.
-
-```js
-const rows = await db.all(sql.rows`SELECT id, created_at FROM users`);
-// [{ id: "1", created_at: ... }]   (keys are the same as the SQL columns)
-```
-
-## Similar libraries
-
-Every tool below is good. They make different trade-offs.
-
-|                              | SQL you write                                                 | Dynamic SQL                                                                                            | Result types                                                           | Databases                                                           |
-| ---------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| **Prisma**                   | Prisma schema and client API; `$queryRaw` for raw SQL         | Through the client API (`undefined` filters are skipped), or `Prisma.sql` and `Prisma.join` in raw SQL | Generated from the schema; raw queries are typed by you                | PostgreSQL, MySQL, SQLite, SQL Server, CockroachDB, MongoDB         |
-| **Drizzle**                  | TypeScript schema and query API, `sql` template for raw parts | Through the query API (`and(...)` skips `undefined`)                                                   | Inferred from the schema                                               | PostgreSQL, MySQL, SQLite, SingleStore, Gel                         |
-| **Kysely**                   | Type-safe query builder; `sql` template for raw parts         | Builder method chaining, such as a conditional `.where()`                                              | Inferred from a DB interface                                           | PostgreSQL, MySQL, SQLite, SQL Server                               |
-| **postgres.js / slonik**     | Raw SQL in tagged templates                                   | Composing fragments in JS (postgres.js: nested `sql`; slonik: `sql.fragment`, `sql.join`, `sql.and`)   | Declared by you                                                        | PostgreSQL                                                          |
-| **pgtyped**                  | Raw SQL files with `:name` parameters                         | Not built in; write `:name IS NULL OR ...` in SQL                                                      | Generated by checking SQL against a live database                      | PostgreSQL                                                          |
-| **sqlc** (TypeScript plugin) | Raw SQL files                                                 | Not built in; write `IS NULL OR ...` in SQL                                                            | Generated from the SQL and schema files                                | PostgreSQL (`pg`, `postgres`), MySQL (`mysql2`), SQLite (`sqlite3`) |
-| **SQLBraid**                 | Raw SQL in tagged templates                                   | Directives inside the SQL                                                                              | Declared by you, checked at runtime; optional codegen for table models | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server              |
-
-Choose SQLBraid if you already think in SQL, your queries have many optional conditions, or you need the same API across several databases.
-
-Choose something else if you want relations loaded automatically, or result types inferred from arbitrary `SELECT` statements. SQLBraid does none of these.
-
-## What SQLBraid does not do
-
-- It is not an ORM. No relation loading, no identity map.
-- It does not infer the type of an arbitrary `SELECT`. You declare the row type, or generate table models with codegen.
-- It does not rewrite your SQL or emulate missing database features. If a driver can't do something (for example, cancel a query), you get an explicit error.
-- It does not create connection pools. You create the pool with your driver and pass it in. SQLBraid then takes one connection per operation, or one for a whole transaction.
-
-## Features
-
-- Transactions with savepoints, isolation levels, and read-only mode: `db.tx(...)`
-- Sessions that keep one connection: `db.session(...)`
-- Streaming large results: `db.stream(...)`
-- Prepared queries: `db.prepare(...)`
-- Bulk insert/update: `db.bulk(...)`
-- Stored procedures with OUT parameters and multiple result sets: `db.call(...)`
-- Cancellation with `AbortSignal`
-- Query observers for logging, plus optional OpenTelemetry spans and metrics
-
-Driver support differs. Check the [support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/) for your database, driver, and runtime.
-
-## Supported drivers
-
-Install `sqlbraid` plus your driver, then import the matching subpath. The Driver column shows the npm package to install (or the built-in module or platform API). The postgres.js, Neon and PGlite adapters come from `@sqlbraid/postgres`, so install that package instead of `sqlbraid` for them. The Support column is the label in the [support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/). **Official** means that CI tests the exact driver version and runtime. **Compatible** means that the API can work, but no exact certified target is claimed.
-
-| Database                           | Driver                                 | Import                           | Support    |
+| Database                           | Driver                                 | Import path                      | Support    |
 | ---------------------------------- | -------------------------------------- | -------------------------------- | ---------- |
 | PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    | Official   |
 | PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` | Compatible |
@@ -286,63 +257,49 @@ Install `sqlbraid` plus your driver, then import the matching subpath. The Drive
 | SQL Server                         | `tedious`                              | `sqlbraid/tedious`               | Official   |
 | PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (built into Bun)               | `sqlbraid/bun-sql`               | Official   |
 
-## Optional tooling
+## Optional Tooling
 
-None of these are runtime dependencies.
+All packages below are optional and are not dependencies of the base runtime (adding zero external runtime dependencies). See the [Package map](https://clickin.github.io/SQLBraid/latest/reference/packages/) for the full list.
 
-- **Codegen** (`@sqlbraid/codegen`, `@sqlbraid/cli`): reads your database schema and generates `Row`, `Insert`, and `Update` types. `codegen --check` can run in CI.
-- **Editor support** (`@sqlbraid/language-server`, [VS Code extension](https://marketplace.visualstudio.com/items?itemName=sqlbraid.sqlbraid-vscode)): diagnostics, completion, and hover for SQL inside templates.
-- **Vite plugin** (`@sqlbraid/vite`): runs the directive compiler in your build.
-- **Webpack, Rspack and Next.js** (`@sqlbraid/webpack`): a loader that runs the directive compiler. It works with Next.js 16 on Webpack and on Turbopack. See the [Next.js example](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack).
-- **Agent skill** ([`skills/sqlbraid`](https://github.com/Clickin/SQLBraid/tree/main/skills/sqlbraid)): a portable skill that teaches AI coding agents how to write SQLBraid queries.
-- **Migrations** (`@sqlbraid/migrate`): versioned SQL files and explicit startup checks. Migrations are plain SQL files. Creating a database does not run them. The `migrate` commands are in `@sqlbraid/cli`.
+- **Code generation (`@sqlbraid/codegen`, `@sqlbraid/cli`):** Inspects your database schema to generate `Row`, `Insert`, and `Update` types, with `codegen --check` for CI verification (see [Codegen configuration](https://clickin.github.io/SQLBraid/latest/metadata/config/)).
+- **Editor support (`@sqlbraid/language-server`, [VS Code extension](https://marketplace.visualstudio.com/items?itemName=sqlbraid.sqlbraid-vscode)):** Diagnostics, autocomplete, and hover info for SQL inside tagged templates.
+- **Vite plugin (`@sqlbraid/vite`):** Runs the directive expression compiler at build time (see [Vite integration](https://clickin.github.io/SQLBraid/latest/getting-started/vite/)).
+- **Webpack, Rspack & Next.js (`@sqlbraid/webpack`):** Directive compiler loader supporting both Webpack and Turbopack in Next.js 16 (see the [Next.js example](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack)).
+- **Migrations (`@sqlbraid/migrate`, `@sqlbraid/cli`):** Runs versioned plain-SQL migration files and explicit schema drift checks at startup.
+- **Agent skill ([`skills/sqlbraid`](https://github.com/Clickin/SQLBraid/tree/main/skills/sqlbraid)):** Portable instructions that teach AI coding agents how to write idiomatic SQLBraid queries.
 
-See the [package map](https://clickin.github.io/SQLBraid/latest/reference/packages/) for every package.
+## Entry Points
 
-## Entry points
+The root import (`sqlbraid`) is database-neutral and does not export an implicit `sql` tag. Import `sql` from a driver subpath such as `sqlbraid/pg`, or from a dialect-only subpath:
 
-The root import (`sqlbraid`) is database-neutral. It does not export an implicit `sql` tag. Import `sql` from a driver subpath such as `sqlbraid/pg`, or from a dialect-only subpath.
-
-- Driver subpaths combine a driver and a dialect: `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`, `sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb` and `sqlbraid/tedious`.
-- For Bun.SQL, use `sqlbraid/bun-sql` and select the dialect explicitly.
-- The `node:sqlite` adapter uses the module that is part of Node. It does not need a separate driver package.
-- For custom adapters, use the dialect-only subpaths: `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle` and `sqlbraid/mssql`.
-- `sqlbraid/compiled` is an advanced entry point for compiler-generated code. It is not an API for applications to write queries.
-
-See the [full package map](https://clickin.github.io/SQLBraid/latest/reference/packages/) and the [driver support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/).
+- **Driver subpaths** combine a driver and a dialect: `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`, `sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`, and `sqlbraid/tedious`.
+- **Bun.SQL:** Use `sqlbraid/bun-sql` and pass the target dialect explicitly.
+- **Dialect-only subpaths** for custom adapters: `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle`, and `sqlbraid/mssql`.
+- **`sqlbraid/compiled`:** Internal entry point emitted by the directive compiler (not for manual query authoring).
 
 ## Examples
 
-Each example is a small project that the repository tests against the packed packages.
+Every example project is integration-tested in CI against the packed release tarballs.
 
-| Example                                                                                                       | What it shows                                                                                  |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`nextjs-webpack`](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack)                     | Next.js App Router, the Webpack loader (Webpack and Turbopack), dynamic filters, a transaction |
-| [`bookstore-api`](https://github.com/Clickin/SQLBraid/tree/main/examples/bookstore-api)                       | Hono REST API on PostgreSQL: migrations, Standard Schema mapping, order transaction, streaming |
-| [`sqlite-quickstart`](https://github.com/Clickin/SQLBraid/tree/main/examples/sqlite-quickstart)               | The smallest project: `node:sqlite` and the compiler                                           |
-| [`postgres`](https://github.com/Clickin/SQLBraid/tree/main/examples/postgres)                                 | PostgreSQL client and pool                                                                     |
-| [`mysql`](https://github.com/Clickin/SQLBraid/tree/main/examples/mysql)                                       | MySQL pool                                                                                     |
-| [`codegen`](https://github.com/Clickin/SQLBraid/tree/main/examples/codegen)                                   | Generate `Row`, `Insert` and `Update` types from a metadata snapshot                           |
-| [`opentelemetry-slow-query`](https://github.com/Clickin/SQLBraid/tree/main/examples/opentelemetry-slow-query) | Query spans and duration metrics with the OpenTelemetry observer                               |
+| Example                                                                                                       | Description                                                                                     |
+| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [`nextjs-webpack`](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack)                     | Next.js App Router, Webpack/Turbopack loader setup, dynamic filters, and transactions           |
+| [`bookstore-api`](https://github.com/Clickin/SQLBraid/tree/main/examples/bookstore-api)                       | Hono REST API on PostgreSQL: migrations, Standard Schema mapping, order transactions, streaming |
+| [`sqlite-quickstart`](https://github.com/Clickin/SQLBraid/tree/main/examples/sqlite-quickstart)               | Minimal setup with built-in `node:sqlite` and the directive compiler                            |
+| [`postgres`](https://github.com/Clickin/SQLBraid/tree/main/examples/postgres)                                 | PostgreSQL direct client and connection pool usage                                              |
+| [`mysql`](https://github.com/Clickin/SQLBraid/tree/main/examples/mysql)                                       | MySQL connection pool usage                                                                     |
+| [`codegen`](https://github.com/Clickin/SQLBraid/tree/main/examples/codegen)                                   | Generating `Row`, `Insert`, and `Update` types from a metadata snapshot                         |
+| [`opentelemetry-slow-query`](https://github.com/Clickin/SQLBraid/tree/main/examples/opentelemetry-slow-query) | Collecting query spans and duration metrics with the OpenTelemetry observer                     |
 
-## Requirements
+## Requirements & Status
 
-- The runtime packages (`sqlbraid` and the driver subpaths) declare Node.js 16.20.2 or newer. Each driver has its own minimum. The `node:sqlite` adapter needs Node.js 22.18 or newer.
-- The build and editor tools (`@sqlbraid/cli`, `@sqlbraid/compiler`, `@sqlbraid/vite`, `@sqlbraid/webpack`, `@sqlbraid/language-server`) need Node.js 22.18 or newer.
-- The recommended Node.js versions are the supported LTS releases.
+- **Runtime requirements:** Runtime packages (`sqlbraid` and driver adapters) support Node.js 16.20.2 or newer (subject to each driver's own minimum Node version; `node:sqlite` and CLI/build tools require Node.js 22.18+). Active LTS releases are recommended.
+- **Current status:** Version 1.x. The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
 
-## Status
+## How This Was Built & AI Use
 
-Version 1.x. The public API is stable and follows semantic versioning. See the [release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
+I defined SQLBraid's overall architecture, dynamic directive syntax, driver abstraction boundaries, and API design based on years of building and maintaining Java/MyBatis systems. To implement the driver adapters across six database families, compiler IR verification, migration drift checks, and the cross-database test suite, I used an agent workflow—implementing with Codex and cross-reviewing edge cases and security boundaries with Claude. SQLBraid packages have zero AI runtime dependencies.
 
-## About AI use
+## Contributing & License
 
-I used AI coding assistants for parts of the implementation, test coverage across six databases, code review, and documentation. The design and API decisions are mine. SQLBraid has no AI runtime dependency.
-
-## Contributing
-
-Issues and pull requests are welcome. See [CONTRIBUTING.md](https://github.com/Clickin/SQLBraid/blob/main/CONTRIBUTING.md). For security issues, see [SECURITY.md](https://github.com/Clickin/SQLBraid/blob/main/SECURITY.md).
-
-## License
-
-[Apache-2.0](https://github.com/Clickin/SQLBraid/blob/main/LICENSE)
+Issues and pull requests are welcome (see [CONTRIBUTING.md](https://github.com/Clickin/SQLBraid/blob/main/CONTRIBUTING.md) and [SECURITY.md](https://github.com/Clickin/SQLBraid/blob/main/SECURITY.md)). Licensed under [Apache-2.0](https://github.com/Clickin/SQLBraid/blob/main/LICENSE).

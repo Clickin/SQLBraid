@@ -35,7 +35,7 @@ const users = await db.all(sql.rows<{ id: string; name: string }>`
 
 어댑터는 Connector/Node.js의 값 전용 실행, 네이티브 행 스트리밍, 그리고 `db.bulk()`를 위한 `connection.batch()` 호출 한 번(`native-bulk`)을 씁니다. 루트 벌크는 트랜잭션이 아니며, 자동 분할에 대한 공통 보장도 없습니다. 콜백 단위의 원자성이 필요하면 `db.tx()`를 쓰세요.
 
-`mysql2` 커넥션도 최선 노력 수준의 호환으로 MariaDB에서 동작할 수 있습니다. 하지만 MariaDB 프로토콜에 대한 근거는 되지 않습니다. 공식 인증 프로필은 MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0입니다. [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)는 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합마다 등급을 기록하고, 해당 리비전과 워크플로 근거를 함께 남깁니다. 비슷한 버전이나 패키지 설치만으로는 인증이 되지 않습니다. 정확한 SHA에 대한 Runtime, Docs, Release 최종 게이트와 명시적인 릴리스 승인은 별도 요구 사항입니다.
+`mysql2` 드라이버로도 MariaDB에 연결할 수 있지만, 공식 MariaDB 지원은 `mariadb`(Connector/Node.js, MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0 기준 검증) 어댑터를 사용합니다. 세부 지원 범위는 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)를 참고하세요.
 
 ## Connector/Node.js 표현 방식 프로필
 

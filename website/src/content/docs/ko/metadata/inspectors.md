@@ -31,7 +31,7 @@ console.log(hashSnapshot(metadata));
 - `createOracleInspector` (`@sqlbraid/oracle/inspector`)
 - `createMssqlInspector` (`@sqlbraid/mssql/inspector`)
 
-인스펙터 하위 경로는 일부러 방언 루트와 분리했습니다.
+인스펙터를 `/inspector` 하위 경로로 분리해 두었기 때문에, 런타임 데이터베이스 코드에는 스키마 조회 관련 코드가 포함되지 않습니다.
 
 스냅샷 형식은 다음과 같습니다.
 

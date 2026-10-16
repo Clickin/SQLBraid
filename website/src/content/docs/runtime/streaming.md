@@ -13,11 +13,7 @@ for await (const row of db.stream(sql.rows<UserRow>`
 }
 ```
 
-`db.stream()` is a real streaming path of the driver. It does not call
-`db.all()` and yield a buffered array. `db.all()` materializes a readonly array
-on purpose. It uses application memory in proportion to the row count.
-Set-returning functions and table-valued extensions are ordinary `sql.rows`
-queries.
+`db.stream()` uses the driver's native cursor or row-streaming API rather than calling `db.all()` and iterating a buffered array in memory (`db.all()` materializes the full row array at once). Set-returning functions and table-valued extensions are ordinary `sql.rows` queries.
 
 ## Ownership and cleanup
 

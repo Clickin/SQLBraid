@@ -3,9 +3,7 @@ title: 드라이버 작성자용 바인딩 가이드
 description: 값만 넘기는 경계를 지키면서 SQLBraid 어댑터를 직접 구현합니다.
 ---
 
-이 가이드는 직접 만드는 `QueryExecutor`, `ConnectionProvider`, 바인딩 어댑터를 다룹니다. 현재 API를 설명할 뿐이며, 지원 등급이나 배포 근거를 제공하지는 않습니다.
-
-지원 등급은 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)를 보세요. 각 등급은 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합 하나에만 적용되며, 해당 리비전과 워크플로 근거가 함께 기록됩니다. 비슷한 버전이나 패키지 설치만으로는 인증이 되지 않습니다. 정확한 SHA에 대한 Runtime, Docs, Release 최종 게이트와 명시적인 릴리스 승인은 별도 요구 사항입니다.
+이 가이드는 사용자 정의 `QueryExecutor`, `ConnectionProvider`, `StatementBindingAdapter`를 구현하는 방법을 설명합니다. 기본 제공 어댑터의 지원 등급은 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)를 참고하세요.
 
 물리 계층 SPI는 동기 결과를 받을 수 있습니다. 애플리케이션 API는 계속 비동기입니다.
 

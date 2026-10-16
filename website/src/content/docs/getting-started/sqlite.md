@@ -27,13 +27,8 @@ the type of the physical `QueryExecutor` SPI. It lets synchronous adapters
 return plain results without Promise wrappers. It does not make better-sqlite3
 non-blocking.
 
-:::note Verification status
-The [runtime and driver support matrix](/SQLBraid/reference/support/) records
-labels for each exact tuple of database, driver, profile, runtime and
-capability, with its revision and workflow evidence. A neighboring version or a
-package installation is not certification. The final exact-SHA Runtime, Docs
-and Release gates and an explicit release authorization stay separate
-requirements. This page does not authorize npm publication.
+:::note Support matrix
+The [runtime and driver support matrix](/SQLBraid/reference/support/) lists the tested combinations of database, driver, representation profile, runtime, and capability along with their CI verification status.
 :::
 
 ## 1. Create a project

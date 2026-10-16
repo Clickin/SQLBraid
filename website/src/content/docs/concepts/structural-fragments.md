@@ -33,4 +33,4 @@ const columns = { name: sql.ident("name"), created: sql.ident("created_at") } as
 const order = columns[sortKey as keyof typeof columns] ?? columns.name;
 ```
 
-`sql.raw` stays explicit on purpose. SQLBraid cannot prove that arbitrary SQL text is trusted.
+`sql.raw` is named explicitly so untrusted input is never interpolated as raw SQL by accident.

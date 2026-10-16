@@ -114,7 +114,7 @@ const generated = generateModels(snapshot, { typePolicy });
 - 일반 `undefined` 바인딩은 획득 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다.
 - 배열, 도메인, 범위, 다중 범위, 복합 타입은 분류되지 않은 컨테이너입니다. 원소 타입이 정확한 스칼라여도 마찬가지입니다.
 
-`db.environment()`는 선택한 프로필(예: `pg-lossless-text`)과 TypePolicy의 id·해시를 보고합니다. 서버 설정 `extra_float_digits`를 읽지만 값 자체를 보고하지는 않습니다. 값이 0보다 크면 `numeric.approximate-float`는 `guaranteed`이고, 아니면 조건 `pg.extra-float-digits`와 함께 `guarded`입니다. 이 보고를 무조건적인 정확도 보장으로 읽지 마세요. [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)는 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합마다 등급을 기록하고, 해당 리비전과 워크플로 근거를 함께 남깁니다. 비슷한 버전이나 패키지 설치만으로는 인증이 되지 않습니다. 정확한 SHA에 대한 Runtime, Docs, Release 최종 게이트와 명시적인 릴리스 승인은 별도 요구 사항입니다.
+`db.environment()`는 선택한 프로필(예: `pg-lossless-text`)과 `TypePolicy`의 `id`·`hash`를 반환합니다. 서버의 `extra_float_digits` 설정을 확인하되 설정값 자체는 노출하지 않으며, 값이 0보다 크면 `numeric.approximate-float`를 `guaranteed`로, 그렇지 않으면 `pg.extra-float-digits` 조건이 붙은 `guarded`로 보고합니다. 테스트된 데이터베이스·드라이버·프로필·런타임 조합은 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)에서 확인하세요.
 
 - `pg-cursor`가 네이티브 풀(pull) 스트림을 제공합니다. 피어 의존성이 없으면 `BRAID_STREAM_UNSUPPORTED`가 납니다.
 - 루틴 refcursor는 기존 트랜잭션이 필요하며, 메모리로 읽은 결과 집합이 됩니다.

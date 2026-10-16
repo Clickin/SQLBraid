@@ -89,7 +89,7 @@ for the stream and does not acquire another lease. If you wrap a transaction in
 
 ## Transaction options
 
-The portable options are fixed. This is intentional:
+The portable transaction options are:
 
 ```ts
 type TransactionIsolation = "read-uncommitted" | "read-committed" | "repeatable-read" | "serializable";

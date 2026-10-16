@@ -5,12 +5,12 @@ description: Learn the execution layers, resource ownership and contributor boun
 
 import ArchitectureFlow from "../../../components/ArchitectureFlow.astro";
 
-SQLBraid is a pipeline with narrow boundaries. This is intentional.
+SQLBraid separates SQL rendering, connection management, and driver execution into four layers:
 
-- The SQL text stays visible.
-- Values stay values.
-- Adapters own the physical transport.
-- The runtime owns the correctness of connections and scopes.
+- **SQL stays visible:** Tagged templates preserve the SQL you write.
+- **Values stay bound:** Interpolated values never become raw SQL text.
+- **Adapters own transport:** Each driver adapter handles its own wire protocol and placeholder format.
+- **The runtime owns connection scope:** Leases, transactions, savepoints, and streams follow strict lifecycle rules.
 
 <ArchitectureFlow />
 

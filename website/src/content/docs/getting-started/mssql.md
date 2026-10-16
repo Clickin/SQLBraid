@@ -69,13 +69,7 @@ work are `materialize` errors without driver I/O.
 
 ## Capability boundaries
 
-- The documented candidate is Tedious 20.0.0 on Node 22.18.0/Linux x64. The
-  [runtime and driver support matrix](/SQLBraid/reference/support/) records
-  labels for each exact tuple of database, driver, profile, runtime and
-  capability, with its revision and workflow evidence. A neighboring version or
-  a package installation is not certification. The final exact-SHA Runtime,
-  Docs and Release gates and an explicit release authorization stay separate
-  requirements.
+- The tested target is Tedious 20.0.0 against SQL Server 2022 CU18 Developer on Node 22.18.0 (Linux x64). See the [runtime and driver support matrix](/SQLBraid/reference/support/) for per-capability status.
 - The target uses SQL Server 2022 CU18 Developer, Linux x64. Local ARM
   emulation is outside the verification scope of this guide.
 - Common values without a hint use the Tedious inference of the adapter. Use an explicit hint for `null`, custom objects, precision and scale, lengths or SQL Server-specific types.

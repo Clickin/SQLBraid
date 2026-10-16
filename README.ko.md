@@ -2,13 +2,11 @@
 
 # SQLBraid
 
-**SQL은 그대로, TypeScript는 그대로. 쿼리 빌더 번역 계층은 건너뜁니다.**
+**쿼리 빌더 없이 SQL을 순수 SQL로, 하지만 타입 안전하게**
 
-SQLBraid로 TypeScript에서 태그드 템플릿으로 순수 SQL을 작성합니다. 값은 항상 파라미터로 바인딩합니다. 동적 조건은 SQL 안에 둡니다. 각 쿼리가 무엇을 반환하는지는 직접 선언합니다.
+SQLBraid는 TypeScript의 태그드 템플릿(tagged template) 안에 순수 SQL을 그대로 작성할 수 있게 해주는 데이터 접근 라이브러리입니다. 값은 항상 안전하게 바인딩 파라미터로 분리되며, MyBatis에서 영감을 받은 동적 조건문을 SQL 주석 안에 직접 작성하고 반환 행의 타입이나 검증 스키마를 선언할 수 있습니다.
 
-PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server를 지원합니다. Node.js, Bun, Deno, 브라우저(SQLite WASM), Cloudflare D1에서 쓸 수 있습니다.
-
-아래는 선택 조건이 두 개인 쿼리입니다. `/*@braid if ...*/` 지시어는 조건이 참일 때만 해당 줄을 남깁니다. `/*@braid where*/`는 남은 줄이 있을 때만 `WHERE`를 붙이고, 맨 앞의 `AND`를 제거합니다. 값은 바인딩된 파라미터로 데이터베이스에 전달됩니다.
+PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server 등 6개 데이터베이스 방언에 대해 단일화된 실행 API를 제공하며, Node.js, Bun, Deno, 브라우저(SQLite WASM), Cloudflare D1에서 동작합니다.
 
 ```ts
 const users = await db.all(sql.rows<User>`
@@ -19,28 +17,36 @@ const users = await db.all(sql.rows<User>`
     /*@braid if ${teamId != null}*/ AND team_id = ${teamId}  /*@braid end*/
   /*@braid end*/
 `);
-// name = null, teamId = 7  ->  (pg) SELECT id, name FROM users WHERE team_id = $1   [7]
+// SQL 렌더링 결과: name = null, teamId = 7  ->  (pg) SELECT id, name FROM users WHERE team_id = $1   [7]
 ```
 
 [문서](https://clickin.github.io/SQLBraid/latest/) · [5분 시작하기](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [인터랙티브 미리보기](https://clickin.github.io/SQLBraid/latest/interactive-preview/) · [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)
 
-## 만든 이유
+## 제작 동기
 
-회사에서는 Java를 쓰고, MyBatis를 자주 씁니다. 팀이 SQL을 잘 알 때 MyBatis의 방식이 좋습니다. 원하는 SQL을 거의 그대로 쓸 수 있습니다. 동적 조건을 하나의 문장 안에 둘 수 있습니다. 행을 직접 매핑하지 않아도 타입이 있는 결과를 얻습니다.
+직장에서 Java 기반 프레임워크 코어를 다루면서 iBatis/MyBatis 스타일의 XML SQL 매퍼를 오래 사용해 왔습니다. 오래된 스택이라고 말하는 사람도 있겠지만, 팀원들이 SQL에 익숙한 환경에서는 이 방식이 가진 효용이 매우 큽니다. 원하는 SQL을 제약 없이 그대로 작성할 수 있고, 동적 조건 분기를 하나의 쿼리 문맥 안에서 한눈에 파악할 수 있으며, 수동으로 행을 매핑하지 않아도 타입이 선언된 결과를 얻을 수 있기 때문입니다.
 
-TypeScript에서 같은 방식을 찾아봤지만 찾지 못했습니다. 순수 드라이버는 안전하지만, 동적 `WHERE` 절은 문자열 조립이 됩니다. 쿼리 빌더는 타입이 훌륭하지만, 이미 아는 SQL을 빌더 API로 다시 번역해야 합니다. ORM은 SQL을 완전히 숨깁니다.
+TypeScript 생태계에서 같은 워크플로를 찾아보았을 때 각 선택지는 아쉬운 점이 있었습니다.
 
-SQLBraid는 MyBatis 방식을 TypeScript로 가져오려는 시도입니다. SQL은 SQL로 남고, 동적 SQL은 읽기 쉽게 남고, 결과는 타입을 유지합니다.
+- **순수 드라이버(Raw drivers):** 파라미터 바인딩은 안전하지만, 동적 `WHERE` 조건이 늘어나면 곧바로 복잡한 문자열 조립과 파라미터 인덱스 계산 코드가 됩니다.
+- **쿼리 빌더(Query builders):** 타입 추론은 훌륭하지만, 이미 머릿속에 있는 SQL을 라이브러리 고유의 메서드 체이닝 DSL로 다시 번역해야 합니다.
+- **ORM:** 실행되는 실제 SQL을 완전히 숨겨버립니다.
+
+그래서 "AI 시대에 못 만들 게 없지!"라는 생각으로 직접 만들기 시작했습니다.
+
+SQLBraid를 만들면서 겪은 가장 큰 장벽은 **JDBC의 부재**였습니다. MyBatis는 Java가 제공하는 JDBC 표준 인터페이스(`Connection`, `PreparedStatement`, `ResultSet`) 위에 올라가 있어 드라이버별 실행 계층을 직접 구현할 필요가 없습니다. 반면 JavaScript 생태계에는 `pg`, `mysql2`, `oracledb`, `tedious`, `node:sqlite`를 아우르는 표준 인터페이스가 없어 커넥션 관리, 플레이스홀더 문법(`$1`, `?`, `:1`, `@p1`), 트랜잭션, 스트리밍, 저장 프로시저 처리 방식이 모두 제각각입니다.
+
+결국 SQLBraid는 처음 예상보다 한 단계 더 나아간 역할을 맡게 되었습니다. 태그드 템플릿 안에서 동작하는 동적 SQL 처리기에 더해, 각 데이터베이스의 고유 기능을 가리지 않으면서도 일관된 인터페이스로 묶어주는 드라이버 실행 추상화 계층입니다.
 
 ## 빠른 시작: SQLite
 
-Node.js 22.18 이상이 필요합니다. 이 예제는 내장 `node:sqlite`를 쓰므로 데이터베이스 서버가 필요 없습니다.
+Node.js 22.18 이상에서는 내장 `node:sqlite` 모듈을 사용하므로 별도의 데이터베이스 서버 없이 바로 실행해 볼 수 있습니다.
 
 ```sh
 npm install sqlbraid
 ```
 
-`quickstart.mts`로 저장하고 `node quickstart.mts`를 실행하세요.
+아래 코드를 `quickstart.mts`로 저장하고 `node quickstart.mts`로 실행합니다.
 
 ```ts
 import { DatabaseSync } from "node:sqlite";
@@ -68,11 +74,11 @@ try {
 }
 ```
 
-> **`id`가 왜 문자열일까요?** SQLBraid는 정확한 데이터베이스 숫자(정수, 소수)를 기본으로 문자열로 반환합니다. 큰 값이 정밀도를 잃지 않게 하기 위해서입니다. 직접 변환하거나 스키마로 변환하세요. [데이터 표현](https://clickin.github.io/SQLBraid/latest/concepts/data-representation/)을 참고하세요.
+> **왜 `id`가 문자열로 반환되나요?** JavaScript의 `number` 타입이 큰 정수(64비트 `BIGINT`)나 정밀한 소수(`DECIMAL`)에서 정밀도를 잃는 문제를 막기 위해, SQLBraid는 데이터베이스의 정확한 숫자 타입을 기본적으로 문자열로 반환합니다. 애플리케이션 코드에서 변환하거나 Standard Schema를 연결해 원하는 타입으로 자동 변환할 수 있습니다([데이터 표현](https://clickin.github.io/SQLBraid/latest/concepts/data-representation/) 참고).
 
-## 빠른 시작: 풀을 쓰는 PostgreSQL
+## 빠른 시작: PostgreSQL 커넥션 풀
 
-PostgreSQL 서버가 있을 때 쓰는 예제입니다. `pg` 풀은 직접 만들고, SQLBraid는 작업마다 연결 하나를 가져옵니다.
+커넥션 풀은 사용하는 드라이버(`pg` 등)로 직접 생성하여 주입합니다. SQLBraid는 개별 작업마다 연결 하나를 대여하고, 트랜잭션 동안에는 동일한 연결을 고정합니다.
 
 ```sh
 npm install sqlbraid pg
@@ -94,11 +100,65 @@ await db.tx(async (tx) => {
 });
 ```
 
-## 빠른 시작: 저장 프로시저
+다른 데이터베이스의 설정 방법은 각 시작 가이드를 참고하세요: [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/) · [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/) · [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/) · [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/) · [브라우저 SQLite 및 Cloudflare D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/).
 
-쿼리 빌더나 원시 SQL 라이브러리에서는 저장 프로시저가 보통 일반 쿼리이고, 결과는 직접 읽어야 합니다. SQLBraid에서는 `CALL` 문을 쓰고 각 OUT 파라미터를 표시합니다. `db.call`은 OUT 값을 `output`에, 결과 집합을 `resultSets`에 담아 반환합니다. 드라이버가 반환값을 제공하면 `returnValue`에도 담습니다.
+## 동작 방식
 
-이 예제는 PostgreSQL과 앞선 빠른 시작의 `db`를 씁니다. 프로시저는 `refcursor` OUT 파라미터로 행을 돌려줍니다. PostgreSQL에서는 이때 열린 트랜잭션이 필요하므로 `db.tx` 안에서 호출합니다.
+SQLBraid는 템플릿을 읽어 세 단계를 거쳐 실행할 SQL 문장을 구성합니다.
+
+1. **지시어 평가 (`/*@braid ... */`):** 지시어는 표준 SQL 주석 문법을 따르므로 에디터와 SQL 포매터에서 일반 SQL로 정상 인식됩니다. `if`, `choose` / `when` / `otherwise`, `where`, `set`, `trim` 블록을 순서대로 평가해 거짓인 분기를 제거하며, 여러 줄 블록과 중첩 구조를 모두 지원합니다. `where`와 `set` 블록은 남은 조건문 앞의 불필요한 `AND`/`OR`나 끝의 쉼표(`,`)를 자동으로 정리합니다.
+2. **파라미터 바인딩 분리 (`${value}`):** 활성화된 분기 안의 `${value}` 표현식은 SQL 문자열에 직접 이어 붙이지 않고 별도의 바인딩 파라미터 배열로 분리합니다.
+3. **드라이버별 플레이스홀더 변환:** 쿼리에서는 항상 동일한 `${value}` 문법을 작성하면, 대상 드라이버 어댑터가 각 DB 규격(`$1`, `?`, `:1`, `@p1`)에 맞춰 플레이스홀더를 작성합니다.
+
+```ts
+sql.rows<User>`
+  SELECT u.id, u.name
+  FROM users u
+  /*@braid if ${teamName != null}*/
+    JOIN teams t
+      ON t.id = u.team_id
+     AND t.name = ${teamName}
+  /*@braid end*/
+  /*@braid where*/
+    /*@braid if ${onlyActive}*/
+      AND u.active = 1
+      AND u.name IS NOT NULL
+    /*@braid end*/
+  /*@braid end*/
+  /*@braid choose*/
+    /*@braid when ${sort === "name"}*/    ORDER BY u.name
+    /*@braid when ${sort === "created"}*/ ORDER BY u.created_at DESC
+    /*@braid otherwise*/                  ORDER BY u.id
+  /*@braid end*/
+`;
+// teamName = "core", onlyActive = true  ->  ... JOIN teams t ON t.id = u.team_id AND t.name = ? WHERE u.active = 1 AND u.name IS NOT NULL ORDER BY ...
+// teamName = null,   onlyActive = false ->  SELECT u.id, u.name FROM users u ORDER BY ...
+```
+
+- **무빌드 런타임 실행과 선택적 컴파일러:** 모든 지시어는 별도의 빌드 과정 없이 런타임에 바로 동작합니다. 비활성화된 `/*@braid if ...*/` 분기 내부의 `${...}` 표현식 평가 자체를 건너뛰고(지연 평가) 싶다면 선택적으로 컴파일러 플러그인(`@sqlbraid/vite`, `@sqlbraid/webpack`, `@sqlbraid/cli`)을 적용할 수 있습니다. 컴파일러는 표현식의 평가 시점만 지연 함수(thunk)로 감싸며, 최종 SQL 조립은 여전히 런타임에 수행합니다([동적 `@braid` 지시어](https://clickin.github.io/SQLBraid/latest/ko/concepts/dynamic-braid/#컴파일러가-하는-일) 참고).
+- **동적 식별자 및 쿼리 조각:** 테이블명, 컬럼 목록, 하위 쿼리 조각처럼 SQL 구조 자체를 동적으로 조합해야 할 때는 명시적 헬퍼(`sql.ident`, `sql.list`, `sql.join`, `sql.fragment`)를 사용합니다([구조적 SQL 조각](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/) 참고).
+
+## 반환 타입 선언과 스키마 검증
+
+쿼리의 성격에 따라 반환 형태를 명시적으로 선언합니다. 행 집합을 조회할 때는 `sql.rows<T>`, `INSERT`/`UPDATE`/`DELETE` 명령에는 `sql.command`, 저장 프로시저 호출에는 `sql.call`을 사용합니다. 선언한 형태와 실제 데이터베이스의 응답 구조가 다르면 잘못된 데이터를 조용히 반환하는 대신 즉시 예외를 발생시킵니다([SQL 태그와 결과 종류](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/) 참고).
+
+**Standard Schema 연동 (Zod, Valibot, ArkType 등):**
+
+타입 인자 대신 Standard Schema 규격을 지원하는 스키마 객체를 전달하면 런타임 행 검증과 타입 변환(예: 문자열로 반환된 숫자를 `number`나 `bigint`로 변환)을 동시에 처리할 수 있습니다([Standard Schema 결과 매핑](https://clickin.github.io/SQLBraid/latest/concepts/result-mapping/) 참고).
+
+```ts
+const user = await db.one(sql.rows(UserSchema)`SELECT id, name FROM users WHERE id = ${id}`);
+```
+
+**순수 JavaScript에서 사용하기:**
+
+`<T>` 타입 인자 없이 `sql.rows`를 그대로 사용합니다. 반환되는 각 행은 데이터베이스 컬럼명(또는 `AS` 별칭)을 그대로 키로 가지는 일반 객체입니다. SQLBraid는 `user_id`를 `userId`로 암묵적 변환하지 않으므로, camelCase 키가 필요하면 SQL에서 직접 별칭(`SELECT user_id AS "userId"`)을 지정하세요.
+
+## 저장 프로시저 (`db.call`)
+
+저장 프로시저를 단순 문자열 쿼리로 취급하는 대신, `sql.call`을 통해 타입이 지정된 `OUT` 파라미터, 다중 결과 집합(result sets), 반환값(return value)을 일관되게 다룰 수 있습니다.
+
+다음은 PostgreSQL에서 `refcursor` `OUT` 파라미터로 결과 행을 받아오는 예제입니다(PostgreSQL에서 커서를 읽으려면 열린 트랜잭션이 필요하므로 `db.tx` 내부에서 호출합니다).
 
 ```sql
 CREATE PROCEDURE list_active_users(OUT users refcursor) LANGUAGE plpgsql AS $$
@@ -127,9 +187,7 @@ const result = await db.tx(async (tx) =>
 console.log(result.resultSets[0].rows); // UserRow[]: [{ id: "1", name: "Ada" }]
 ```
 
-`RoutineCallResult<Output, Sets, ReturnValue>`는 호출 결과 전체를 선언합니다. `Output`은 스칼라 OUT 값의 타입이고, `Sets`는 결과 집합마다 행 타입 하나씩을 담은 튜플이며, `ReturnValue`는 반환값 타입입니다. 결과 집합마다 행 타입이 다를 수 있습니다. 이 예제에서는 refcursor가 결과 집합이 되므로 `Output`은 비어 있습니다.
-
-`sql.rows`처럼 타입 인자 대신 Standard Schema를 쓸 수도 있습니다. 스키마가 각 행을 검증하고 변환할 수 있습니다. 행 타입은 스키마의 출력 타입입니다.
+`RoutineCallResult<Output, Sets, ReturnValue>`는 스칼라 `OUT` 값의 타입, 결과 집합별 행 타입 튜플, 반환값 타입을 차례로 선언합니다. `sql.rows`와 마찬가지로 Standard Schema를 전달해 검증 및 변환할 수도 있습니다.
 
 ```ts
 import { postgresParameter, sql } from "sqlbraid/pg";
@@ -141,136 +199,49 @@ const result = await db.tx(async (tx) =>
     `,
   ),
 );
-// id를 숫자로 바꾸는 스키마를 쓰면: [{ id: 1, name: "Ada" }]
 ```
 
-`output`과 `returnValue`도 같은 방식으로 스키마를 받습니다.
+드라이버별 상세 지원 범위는 [루틴 호출](https://clickin.github.io/SQLBraid/latest/concepts/routines/)과 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)를 참고하세요.
 
-OUT 파라미터, 여러 결과 집합, 반환값의 지원 범위는 드라이버마다 다릅니다. [루틴 호출](https://clickin.github.io/SQLBraid/latest/concepts/routines/)과 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)를 참고하세요.
+## 다른 라이브러리와의 비교
 
-## 빠른 시작: 다른 데이터베이스
+아래 도구들은 모두 훌륭하며, 지향하는 트레이드오프가 다릅니다.
 
-위 빠른 시작은 SQLite와 PostgreSQL을 씁니다. 다른 데이터베이스는 각 시작 가이드를 참고하세요.
+|                                | 작성하는 SQL                                           | 동적 SQL 처리                                                                          | 결과 타입                                                  | 지원 데이터베이스                                                |
+| ------------------------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Prisma**                     | Prisma 스키마와 클라이언트 API, 원시 SQL은 `$queryRaw` | 클라이언트 API (`undefined` 필터 건너뜀), 원시 SQL에서는 `Prisma.sql` 및 `Prisma.join` | 스키마에서 생성, 원시 쿼리는 직접 타입 지정                | PostgreSQL, MySQL, SQLite, SQL Server, CockroachDB, MongoDB      |
+| **Drizzle**                    | TypeScript 스키마와 쿼리 API, 원시 부분은 `sql` 템플릿 | 쿼리 API (`and(...)`가 `undefined`를 건너뜀)                                           | 스키마에서 추론                                            | PostgreSQL, MySQL, SQLite, SingleStore, Gel                      |
+| **Kysely**                     | 타입 안전 쿼리 빌더, 원시 부분은 `sql` 템플릿          | 빌더 메서드 체이닝 (조건부 `.where()` 등)                                              | DB 인터페이스에서 추론                                     | PostgreSQL, MySQL, SQLite, SQL Server                            |
+| **postgres.js / slonik**       | 태그드 템플릿 기반 원시 SQL                            | JS 코드에서 조각 조합 (중첩 `sql`, `sql.fragment`, `sql.join` 등)                      | 직접 선언                                                  | PostgreSQL                                                       |
+| **pgtyped**                    | `:name` 파라미터를 쓰는 원시 SQL 파일                  | 내장 기능 없음 (`:name IS NULL OR ...`로 직접 작성)                                    | 실제 DB에 쿼리를 대조해 빌드 시 생성                       | PostgreSQL                                                       |
+| **sqlc** (TypeScript 플러그인) | 원시 SQL 파일                                          | 내장 기능 없음 (`IS NULL OR ...`로 직접 작성)                                          | SQL과 스키마 파일로부터 생성                               | PostgreSQL(`pg`, `postgres`), MySQL(`mysql2`), SQLite(`sqlite3`) |
+| **SQLBraid**                   | 태그드 템플릿 기반 원시 SQL                            | SQL 주석 내부 지시어 (`/*@braid if ...*/`)                                             | 직접 선언 및 런타임 스키마 검증, 선택적 테이블 모델 코드젠 | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server           |
 
-- [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/)
-- [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/)
-- [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/)
-- [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/)
-- [브라우저의 SQLite와 D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/)
+**SQLBraid가 적합한 경우:** 이미 SQL 중심으로 쿼리를 설계하는 팀, 선택적 검색 필터나 동적 조인이 많은 쿼리를 다루는 경우, 또는 여러 데이터베이스 엔진에 걸쳐 동일한 실행 API와 저장 프로시저 호출 방식이 필요한 경우.
 
-## 동작 방식
+**SQLBraid가 하지 않는 일:**
 
-SQLBraid는 템플릿을 읽어 문장 하나를 만들고 드라이버에 넘깁니다. 세 단계입니다.
+- **ORM이 아닙니다:** 연관 관계 자동 로딩(relation loading)이나 아이덴티티 맵을 제공하지 않습니다.
+- **임의의 `SELECT` 구문 타입 추론을 하지 않습니다:** 반환 행 타입을 직접 선언하거나 Standard Schema를 전달하며, 테이블 모델은 `@sqlbraid/codegen`으로 생성합니다.
+- **SQL을 몰래 고쳐 쓰거나 미지원 기능을 흉내 내지 않습니다:** 대상 드라이버가 지원하지 않는 기능(예: 쿼리 취소)을 호출하면 임의로 에뮬레이션하지 않고 명시적인 오류를 발생시킵니다.
+- **커넥션 풀을 자체 생성하지 않습니다:** 드라이버의 풀을 주입받아 작업 단위 또는 트랜잭션 단위로 커넥션을 대여하고 반납합니다.
 
-1. **지시어가 SQL 텍스트를 고릅니다.** `/*@braid ... */` 지시어는 SQL 주석이라서 에디터는 여전히 일반 SQL로 인식합니다. `if`, `when`, `where`를 순서대로 평가하고, 비활성 부분은 버립니다. 사용할 수 있는 지시어는 `if`, `choose` / `when` / `otherwise`, `where`, `set`, `trim`입니다.
-2. **모든 `${value}`는 파라미터가 됩니다.** 결과는 값이 분리된 SQL 텍스트입니다. 값을 텍스트에 이어 붙이지 않습니다.
-3. **플레이스홀더는 드라이버가 만듭니다.** 어디서나 같은 `${value}`를 씁니다. 드라이버 어댑터가 `$1`, `?`, `:1`, `@p1`로 바꿉니다.
+## 주요 실행 기능
 
-```ts
-sql.rows<User>`
-  SELECT id, name FROM users
-  /*@braid choose*/
-    /*@braid when ${sort === "name"}*/    ORDER BY name
-    /*@braid when ${sort === "created"}*/ ORDER BY created_at DESC
-    /*@braid otherwise*/                  ORDER BY id
-  /*@braid end*/
-`;
-// sort = "created"  ->  SELECT id, name FROM users ORDER BY created_at DESC
-```
+- **트랜잭션 ([`db.tx`](https://clickin.github.io/SQLBraid/latest/runtime/transactions/)):** 세이브포인트(savepoint), 격리 수준(isolation level), 읽기 전용 모드 지원
+- **세션 고정 ([`db.session`](https://clickin.github.io/SQLBraid/latest/runtime/direct-pools/)):** 여러 쿼리에 걸쳐 단일 커넥션 유지
+- **스트리밍 ([`db.stream`](https://clickin.github.io/SQLBraid/latest/runtime/streaming/)):** 대용량 결과 집합의 점진적 소비
+- **준비된 쿼리 및 대량 작업:** [`db.prepare(...)`](https://clickin.github.io/SQLBraid/latest/runtime/prepared/) 및 [`db.bulk(...)`](https://clickin.github.io/SQLBraid/latest/concepts/bulk/)
+- **저장 프로시저 ([`db.call`](https://clickin.github.io/SQLBraid/latest/concepts/routines/)):** `OUT` 파라미터 및 다중 결과 집합 처리
+- **제어 및 관측성:** `AbortSignal` 기반 쿼리 취소, [실행 옵저버](https://clickin.github.io/SQLBraid/latest/runtime/observers/), 선택적 [OpenTelemetry 스팬 및 메트릭 연동](https://clickin.github.io/SQLBraid/latest/runtime/opentelemetry/)
 
-`if`, `where`, `set`, `trim`, `choose`는 블록을 열고, `/*@braid end*/`가 그 블록을 닫습니다. `when`과 `otherwise`는 속한 `choose`의 `end`로 닫힙니다. 블록 안에는 줄을 몇 개든 넣을 수 있고, 블록은 중첩할 수 있습니다. 위의 한 줄 형태는 짧은 경우일 뿐입니다.
-
-```ts
-sql.rows<User>`
-  SELECT u.id, u.name
-  FROM users u
-  /*@braid if ${teamName != null}*/
-    JOIN teams t
-      ON t.id = u.team_id
-     AND t.name = ${teamName}
-  /*@braid end*/
-  /*@braid where*/
-    /*@braid if ${onlyActive}*/
-      AND u.active = 1
-      AND u.name IS NOT NULL
-    /*@braid end*/
-  /*@braid end*/
-  ORDER BY u.id
-`;
-// teamName = "core", onlyActive = true  ->  ... JOIN teams t ON t.id = u.team_id AND t.name = ? WHERE u.active = 1 AND u.name IS NOT NULL ORDER BY u.id
-// teamName = null,   onlyActive = false ->  SELECT u.id, u.name FROM users u ORDER BY u.id
-```
-
-지시어는 빌드 단계 없이 런타임에 동작합니다. 비활성 분기의 `${...}` 표현식까지 평가하지 않으려면 선택 사항인 컴파일러(`@sqlbraid/cli` 또는 Vite 플러그인)를 실행하세요. 컴파일러는 SQL 분기를 펼치거나 빌드 시점에 SQL을 만들지 않습니다. 각 `${...}` 표현식이 실행되는 시점만 바꿉니다. SQL과 값은 여전히 런타임에 만듭니다. [컴파일러가 하는 일](https://clickin.github.io/SQLBraid/latest/ko/concepts/dynamic-braid/#컴파일러가-하는-일)을 참고하세요.
-
-테이블 이름, 컬럼 목록, 조각 같은 SQL 구조를 문장에 넣어야 하면 명시적인 헬퍼 `sql.ident`, `sql.list`, `sql.join`, `sql.fragment`를 씁니다. [구조 조각](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/)을 참고하세요.
-
-## 쿼리가 반환하는 것
-
-**결과를 선언합니다.** 행을 반환하는 쿼리는 `sql.rows<T>`, INSERT/UPDATE/DELETE는 `sql.command`, 저장 프로시저는 `sql.call`을 씁니다. 선언이 데이터베이스가 실제로 반환한 것과 다르면, 조용히 잘못된 데이터를 주지 않고 오류가 납니다.
-
-**Standard Schema 라이브러리(Zod, Valibot, ArkType 등)로 행을 검증할 수 있습니다.**
-
-```ts
-const user = await db.one(sql.rows(UserSchema)`SELECT id, name FROM users WHERE id = ${id}`);
-```
-
-### JavaScript에서 쓰기
-
-SQLBraid는 순수 JavaScript에서도 동작합니다. `sql.rows`를 `<T>` 타입 인자 없이 쓰면 됩니다.
-
-- 각 행은 일반 객체입니다. 키는 데이터베이스가 반환한 컬럼 이름 또는 별칭 그대로입니다.
-- SQLBraid는 이름을 **변환하지 않습니다.** `user_id`는 `user_id`로 남고 `userId`가 되지 않습니다. camelCase 키가 필요하면 SQL에서 별칭을 씁니다. 예: `SELECT user_id AS "userId"` (따옴표 규칙은 데이터베이스마다 다릅니다).
-- 값은 TypeScript와 같은 규칙을 따릅니다. 정확한 숫자는 문자열이고, `null`은 `null`입니다.
-
-```js
-const rows = await db.all(sql.rows`SELECT id, created_at FROM users`);
-// [{ id: "1", created_at: ... }]   (키는 SQL 컬럼과 같습니다)
-```
-
-## 비슷한 라이브러리
-
-아래 도구는 모두 훌륭합니다. 다만 선택한 트레이드오프가 다릅니다.
-
-|                                | 작성하는 SQL                                           | 동적 SQL                                                                                    | 결과 타입                                                   | 데이터베이스                                                     |
-| ------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
-| **Prisma**                     | Prisma 스키마와 클라이언트 API, 원시 SQL은 `$queryRaw` | 클라이언트 API로 (`undefined` 필터는 건너뜀), 원시 SQL에서는 `Prisma.sql`과 `Prisma.join`   | 스키마에서 생성. 원시 쿼리는 직접 타입 지정                 | PostgreSQL, MySQL, SQLite, SQL Server, CockroachDB, MongoDB      |
-| **Drizzle**                    | TypeScript 스키마와 쿼리 API, 원시 부분은 `sql` 템플릿 | 쿼리 API로 (`and(...)`는 `undefined`를 건너뜀)                                              | 스키마에서 추론                                             | PostgreSQL, MySQL, SQLite, SingleStore, Gel                      |
-| **Kysely**                     | 타입 안전한 쿼리 빌더, 원시 부분은 `sql` 템플릿        | 빌더 메서드 체이닝 (예: 조건부 `.where()`)                                                  | DB 인터페이스에서 추론                                      | PostgreSQL, MySQL, SQLite, SQL Server                            |
-| **postgres.js / slonik**       | 태그드 템플릿의 원시 SQL                               | JS에서 조각을 조합 (postgres.js: 중첩 `sql`, slonik: `sql.fragment`, `sql.join`, `sql.and`) | 직접 선언                                                   | PostgreSQL                                                       |
-| **pgtyped**                    | `:name` 파라미터를 쓰는 원시 SQL 파일                  | 내장 기능 없음. SQL에서 `:name IS NULL OR ...`로 직접 처리                                  | SQL을 실제 데이터베이스에 대조해 생성                       | PostgreSQL                                                       |
-| **sqlc** (TypeScript 플러그인) | 원시 SQL 파일                                          | 내장 기능 없음. SQL에서 `IS NULL OR ...`로 직접 처리                                        | SQL과 스키마 파일에서 생성                                  | PostgreSQL(`pg`, `postgres`), MySQL(`mysql2`), SQLite(`sqlite3`) |
-| **SQLBraid**                   | 태그드 템플릿의 원시 SQL                               | SQL 안의 지시어                                                                             | 직접 선언하고 런타임에 검사. 테이블 모델은 선택적 코드 생성 | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server           |
-
-이런 경우에 SQLBraid를 선택하세요. 이미 SQL로 생각하는 경우, 쿼리에 선택 조건이 많은 경우, 여러 데이터베이스에서 같은 API가 필요한 경우입니다.
-
-관계를 자동으로 로드하고 싶거나, 임의의 `SELECT`에서 결과 타입을 추론하고 싶다면 다른 도구를 선택하세요. SQLBraid는 이 중 어느 것도 하지 않습니다.
-
-## SQLBraid가 하지 않는 일
-
-- ORM이 아닙니다. 관계 로딩, 아이덴티티 맵이 없습니다.
-- 임의의 `SELECT`의 타입을 추론하지 않습니다. 행 타입을 선언하거나 코드 생성으로 테이블 모델을 만드세요.
-- SQL을 고쳐 쓰거나 없는 데이터베이스 기능을 흉내 내지 않습니다. 드라이버가 할 수 없는 일(예: 쿼리 취소)은 명시적인 오류가 납니다.
-- 커넥션 풀을 만들지 않습니다. 드라이버로 풀을 만들어 넘기세요. 그러면 SQLBraid가 작업마다 연결 하나를, 트랜잭션에는 연결 하나를 통째로 씁니다.
-
-## 기능
-
-- 세이브포인트, 격리 수준, 읽기 전용 모드를 지원하는 트랜잭션: `db.tx(...)`
-- 연결 하나를 유지하는 세션: `db.session(...)`
-- 큰 결과의 스트리밍: `db.stream(...)`
-- 준비된 쿼리: `db.prepare(...)`
-- 대량 삽입/수정: `db.bulk(...)`
-- OUT 파라미터와 여러 결과 집합을 가진 저장 프로시저: `db.call(...)`
-- `AbortSignal`을 이용한 취소
-- 로깅용 쿼리 옵저버, 선택적 OpenTelemetry 스팬과 메트릭
-
-지원 범위는 드라이버마다 다릅니다. 데이터베이스, 드라이버, 런타임별로 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)를 확인하세요.
+데이터베이스, 드라이버, 런타임별 세부 지원 여부는 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)에서 확인할 수 있습니다.
 
 ## 지원 드라이버
 
-`sqlbraid`와 드라이버를 설치하고, 맞는 하위 경로를 import하세요. 드라이버 열에는 설치할 npm 패키지(또는 내장 모듈이나 플랫폼 API)를 적었습니다. postgres.js, Neon, PGlite 어댑터는 `@sqlbraid/postgres`에서 오므로, 이 경우에는 `sqlbraid` 대신 그 패키지를 설치하세요. 지원 열은 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)의 레이블입니다. **Official**은 CI가 정확한 드라이버 버전과 런타임을 테스트한다는 뜻입니다. **Compatible**은 API가 동작할 수 있지만 정확히 인증된 대상은 없다는 뜻입니다.
+`sqlbraid`와 대상 드라이버 패키지를 함께 설치한 뒤 해당하는 하위 경로를 import합니다(`postgres.js`, Neon, PGlite 어댑터는 `@sqlbraid/postgres` 패키지를 설치하세요). **Official**은 CI에서 지정된 드라이버 버전과 런타임을 직접 검증함을 의미하며, **Compatible**은 동일 API 규격으로 동작하지만 특정 버전이 고정 인증되지는 않았음을 뜻합니다.
 
-| 데이터베이스                       | 드라이버                               | import                           | 지원       |
+| 데이터베이스                       | 드라이버                               | import 경로                      | 지원 수준  |
 | ---------------------------------- | -------------------------------------- | -------------------------------- | ---------- |
 | PostgreSQL                         | `pg`                                   | `sqlbraid/pg`                    | Official   |
 | PostgreSQL                         | `postgres` (postgres.js)               | `@sqlbraid/postgres/postgres-js` | Compatible |
@@ -288,51 +259,40 @@ const rows = await db.all(sql.rows`SELECT id, created_at FROM users`);
 | SQL Server                         | `tedious`                              | `sqlbraid/tedious`               | Official   |
 | PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (Bun 내장)                     | `sqlbraid/bun-sql`               | Official   |
 
-## 선택 도구
+## 선택적 도구 (Optional Tooling)
 
-런타임 의존성이 아닙니다.
+아래 도구들은 모두 기본 런타임의 의존성이 아닌 선택적 패키지이며, 외부 런타임 의존성을 추가하지 않습니다. 전체 목록은 [패키지 구성](https://clickin.github.io/SQLBraid/latest/reference/packages/)을 참고하세요.
 
-- **코드 생성** (`@sqlbraid/codegen`, `@sqlbraid/cli`): 데이터베이스 스키마를 읽어 `Row`, `Insert`, `Update` 타입을 생성합니다. CI에서 `codegen --check`를 실행할 수 있습니다.
-- **에디터 지원** (`@sqlbraid/language-server`, [VS Code 확장](https://marketplace.visualstudio.com/items?itemName=sqlbraid.sqlbraid-vscode)): 템플릿 안의 SQL에 진단, 자동 완성, 호버를 제공합니다.
-- **Vite 플러그인** (`@sqlbraid/vite`): 빌드에서 지시어 컴파일러를 실행합니다.
-- **Webpack, Rspack, Next.js** (`@sqlbraid/webpack`): 지시어 컴파일러를 실행하는 로더입니다. Next.js 16의 Webpack과 Turbopack에서 모두 동작합니다. [Next.js 예제](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack)를 참고하세요.
-- **에이전트 스킬** ([`skills/sqlbraid`](https://github.com/Clickin/SQLBraid/tree/main/skills/sqlbraid)): AI 코딩 에이전트에게 SQLBraid 쿼리 작성법을 알려 주는 이식 가능한 스킬입니다.
-- **마이그레이션** (`@sqlbraid/migrate`): 버전이 있는 SQL 파일과 명시적인 시작 시 검사입니다. 마이그레이션은 SQL 파일일 뿐이고, 데이터베이스를 만들어도 자동으로 실행되지 않습니다. `migrate` 명령은 `@sqlbraid/cli`에 있습니다.
-
-모든 패키지는 [패키지 구성](https://clickin.github.io/SQLBraid/latest/reference/packages/)을 참고하세요.
+- **코드 생성 (`@sqlbraid/codegen`, `@sqlbraid/cli`):** 데이터베이스 스키마를 읽어 `Row`, `Insert`, `Update` 타입을 생성하며, CI 파이프라인에서 `codegen --check`로 스키마 일치 여부를 검증할 수 있습니다([코드 생성 설정](https://clickin.github.io/SQLBraid/latest/metadata/config/) 참고).
+- **에디터 지원 (`@sqlbraid/language-server`, [VS Code 확장](https://marketplace.visualstudio.com/items?itemName=sqlbraid.sqlbraid-vscode)):** 태그드 템플릿 내부의 SQL 구문 진단, 자동 완성, 호버 정보를 제공합니다.
+- **Vite 플러그인 (`@sqlbraid/vite`):** 빌드 시점에 지시어 표현식 컴파일러를 실행합니다([Vite 연동](https://clickin.github.io/SQLBraid/latest/getting-started/vite/) 참고).
+- **Webpack, Rspack, Next.js (`@sqlbraid/webpack`):** Next.js 16의 Webpack 및 Turbopack 환경을 모두 지원하는 지시어 컴파일러 로더입니다([Next.js 예제](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack) 참고).
+- **마이그레이션 (`@sqlbraid/migrate`, `@sqlbraid/cli`):** 버전 관리되는 순수 SQL 마이그레이션 파일 실행과 애플리케이션 시작 시점의 명시적 스키마 드리프트 검사를 제공합니다.
+- **에이전트 스킬 ([`skills/sqlbraid`](https://github.com/Clickin/SQLBraid/tree/main/skills/sqlbraid)):** AI 코딩 에이전트가 SQLBraid 문법에 맞는 쿼리를 작성하도록 안내하는 규칙 파일입니다.
 
 ## 예제
 
-각 예제는 작은 프로젝트이고, 저장소가 패킹한 패키지로 테스트합니다.
+모든 예제 프로젝트는 패킹된 실제 배포 아티팩트를 대상으로 CI에서 통합 테스트됩니다.
 
-| 예제                                                                                                          | 보여 주는 것                                                                               |
+| 예제                                                                                                          | 설명                                                                                       |
 | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [`nextjs-webpack`](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack)                     | Next.js App Router, Webpack 로더(Webpack과 Turbopack), 동적 필터, 트랜잭션                 |
+| [`nextjs-webpack`](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack)                     | Next.js App Router, Webpack/Turbopack 로더 설정, 동적 필터, 트랜잭션                       |
 | [`bookstore-api`](https://github.com/Clickin/SQLBraid/tree/main/examples/bookstore-api)                       | PostgreSQL 기반 Hono REST API: 마이그레이션, Standard Schema 매핑, 주문 트랜잭션, 스트리밍 |
-| [`sqlite-quickstart`](https://github.com/Clickin/SQLBraid/tree/main/examples/sqlite-quickstart)               | 가장 작은 프로젝트: `node:sqlite`와 컴파일러                                               |
-| [`postgres`](https://github.com/Clickin/SQLBraid/tree/main/examples/postgres)                                 | PostgreSQL 클라이언트와 풀                                                                 |
-| [`mysql`](https://github.com/Clickin/SQLBraid/tree/main/examples/mysql)                                       | MySQL 풀                                                                                   |
-| [`codegen`](https://github.com/Clickin/SQLBraid/tree/main/examples/codegen)                                   | 메타데이터 스냅샷에서 `Row`, `Insert`, `Update` 타입 생성                                  |
-| [`opentelemetry-slow-query`](https://github.com/Clickin/SQLBraid/tree/main/examples/opentelemetry-slow-query) | OpenTelemetry 관찰자로 쿼리 스팬과 소요 시간 메트릭 수집                                   |
+| [`sqlite-quickstart`](https://github.com/Clickin/SQLBraid/tree/main/examples/sqlite-quickstart)               | 내장 `node:sqlite`와 지시어 컴파일러를 사용하는 최소 구성 예제                             |
+| [`postgres`](https://github.com/Clickin/SQLBraid/tree/main/examples/postgres)                                 | PostgreSQL 단일 클라이언트 및 커넥션 풀 사용법                                             |
+| [`mysql`](https://github.com/Clickin/SQLBraid/tree/main/examples/mysql)                                       | MySQL 커넥션 풀 사용법                                                                     |
+| [`codegen`](https://github.com/Clickin/SQLBraid/tree/main/examples/codegen)                                   | 메타데이터 스냅샷으로부터 `Row`, `Insert`, `Update` 타입 생성                              |
+| [`opentelemetry-slow-query`](https://github.com/Clickin/SQLBraid/tree/main/examples/opentelemetry-slow-query) | OpenTelemetry 옵저버를 이용한 쿼리 스팬 및 실행 시간 메트릭 수집                           |
 
-## 요구 사항
+## 요구 사항 및 상태
 
-- 런타임 패키지(`sqlbraid`와 드라이버 하위 경로)는 Node.js 16.20.2 이상을 선언합니다. 드라이버마다 자체 최소 버전이 있습니다. `node:sqlite` 어댑터는 Node.js 22.18 이상이 필요합니다.
-- 빌드와 에디터 도구(`@sqlbraid/cli`, `@sqlbraid/compiler`, `@sqlbraid/vite`, `@sqlbraid/webpack`, `@sqlbraid/language-server`)는 Node.js 22.18 이상이 필요합니다.
-- 권장 Node.js 버전은 지원 중인 LTS 릴리스입니다.
+- **런타임 요구 사항:** 런타임 패키지(`sqlbraid` 및 드라이버 어댑터)는 Node.js 16.20.2 이상을 지원합니다(각 DB 드라이버의 최소 요구 버전 적용, `node:sqlite` 및 CLI/빌드 도구는 Node.js 22.18 이상 필요). 활성 LTS 버전 사용을 권장합니다.
+- **현재 상태:** 버전 1.x. 공개 API는 안정화되어 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
 
-## 상태
+## 개발 방식 및 AI 활용에 대해
 
-버전 1.x입니다. 공개 API는 안정적이며 시맨틱 버전(semantic versioning)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
+SQLBraid의 전체 아키텍처, 동적 지시어 문법, 드라이버 추상화 경계와 API 설계는 Java/MyBatis 기반 시스템을 개발·유지보수해 온 경험을 바탕으로 직접 정의했습니다. 6개 데이터베이스 패밀리의 방대한 드라이버 어댑터 구현과 컴파일러 IR 검증, 마이그레이션 스키마 드리프트 체크, 교차 DB 테스트 스위트 작성에는 Codex로 구현하고 Claude로 엣지 케이스와 보안을 교차 리뷰하는 에이전트 워크플로를 활용했습니다. SQLBraid 패키지 자체에는 어떠한 AI 런타임 의존성도 포함되어 있지 않습니다.
 
-## AI 사용에 대해
+## 기여 및 라이선스
 
-구현의 일부, 여섯 개 데이터베이스에 걸친 테스트, 코드 리뷰, 문서 작성에 AI 코딩 어시스턴트를 썼습니다. 설계와 API 결정은 제가 했습니다. SQLBraid에는 AI 런타임 의존성이 없습니다.
-
-## 기여
-
-이슈와 풀 리퀘스트를 환영합니다. [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요. 보안 문제는 [SECURITY.md](SECURITY.md)를 참고하세요.
-
-## 라이선스
-
-[Apache-2.0](LICENSE)
+이슈 제보와 풀 리퀘스트를 환영합니다([CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) 참고). 이 프로젝트는 [Apache-2.0](LICENSE) 라이선스를 따릅니다.

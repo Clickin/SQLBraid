@@ -22,13 +22,8 @@ The result table shows only the first 1,000 rows. This keeps exploratory queries
 responsive. If a worker runs for more than ten seconds, the preview replaces it
 and resets its database.
 
-The SQL is raw text that you write, inside this disposable database. This is
-intentional. The preview does not interpolate it into a server query. It does not
-claim injection safety. It does not keep any changes.
+The SQL runs only inside this disposable in-memory database in your browser. It is never sent to a server, and any changes you make are discarded when you leave or reset the page.
 
 <InteractivePreview />
 
-The default path does not require OPFS, persistence, `SharedArrayBuffer` or
-COOP/COEP headers. This is intentional. A production application can select a
-different SQLite WASM storage mode separately. This documentation preview stays
-portable on static hosting such as GitHub Pages.
+The preview runs without OPFS persistence, `SharedArrayBuffer`, or COOP/COEP headers so it works directly on static hosting such as GitHub Pages. Production browser applications can configure persistent SQLite WASM storage separately.

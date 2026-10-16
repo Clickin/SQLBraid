@@ -74,14 +74,7 @@ The native D1 batch can have stronger transaction behavior than root bulk. But
 that is not a portable SQLBraid rule. Root bulk is not a transaction. It has no
 portable promise of automatic chunking.
 
-The [runtime and driver support matrix](/SQLBraid/reference/support/) records
-labels for each exact tuple of database, driver, profile, runtime and
-capability, with its revision and workflow evidence. A neighboring version or a
-package installation is not certification. The final exact-SHA Runtime, Docs
-and Release gates and an explicit release authorization stay separate
-requirements. D1 stays Compatible. Its managed SQLite version is not reported.
-No browser gate claims OPFS persistence, SharedArrayBuffer, remote production
-support or npm publication.
+See the [runtime and driver support matrix](/SQLBraid/reference/support/) for the exact capability status of SQLite WASM and Cloudflare D1. Cloudflare D1 is listed as Compatible because the Worker binding does not report its underlying SQLite version.
 
 ## Browser and Worker representation profiles
 

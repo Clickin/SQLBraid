@@ -3,15 +3,7 @@ title: Driver-author binding guide
 description: Implement a custom SQLBraid adapter without crossing the value-only boundary.
 ---
 
-This guide is about custom `QueryExecutor`, `ConnectionProvider` and binding
-adapters. It describes the current API. It does not give a support label or
-publication evidence.
-
-For labels, read the [runtime and driver support matrix](/SQLBraid/reference/support/).
-Each label applies to one exact tuple of database, driver, profile, runtime and
-capability, with its revision and workflow evidence. A neighboring version or a
-package installation is not certification. The final exact-SHA Runtime, Docs and
-Release gates and an explicit release authorization stay separate requirements.
+This guide covers custom `QueryExecutor`, `ConnectionProvider`, and `StatementBindingAdapter` implementations. For the support status of first-party adapters, see the [runtime and driver support matrix](/SQLBraid/reference/support/).
 
 The physical SPI accepts synchronous results. The application API stays asynchronous:
 

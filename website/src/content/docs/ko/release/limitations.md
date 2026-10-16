@@ -1,6 +1,6 @@
 ---
 title: 현재 제한 사항
-description: 1.0.0 GA가 일부러 약속하지 않는 것들입니다.
+description: SQLBraid 1.x에서 지원하지 않거나 임의로 에뮬레이션하지 않는 기능과 드라이버별 경계입니다.
 ---
 
 - **지원은 특정 데이터베이스·드라이버·런타임 조합에만 적용됩니다.** 기준 자료는 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)입니다. 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합과 테스트한 버전이 기록되어 있습니다.
@@ -29,4 +29,4 @@ description: 1.0.0 GA가 일부러 약속하지 않는 것들입니다.
 - **직접 만든 드라이버는 릴리스 지원 대상이 아닙니다.** `QueryExecutor`/`ConnectionProvider`를 구현하고, 독립된 정확한 근거를 직접 갖추세요.
 - **도구는 Node 중심입니다.** 컴파일러, CLI, LSP, 메타데이터·코드 생성, Vite 연동은 빌드와 런타임의 관심사가 따로 있습니다. Node 전용 드라이버를 브라우저 번들에 넣지 마세요.
 
-이 경계들은 의도한 것이며, 숨은 대체 동작이 아닙니다. [루틴 호출](/SQLBraid/concepts/routines/), [스트리밍](/SQLBraid/runtime/streaming/), [트랜잭션](/SQLBraid/runtime/transactions/), [지원 매트릭스](/SQLBraid/reference/support/)를 보세요.
+각 항목의 상세 동작은 [루틴 호출](/SQLBraid/concepts/routines/), [스트리밍](/SQLBraid/runtime/streaming/), [트랜잭션](/SQLBraid/runtime/transactions/), [지원 매트릭스](/SQLBraid/reference/support/)를 참고하세요.

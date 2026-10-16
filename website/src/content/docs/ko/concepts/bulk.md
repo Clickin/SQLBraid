@@ -3,7 +3,7 @@ title: 같은 형태의 벌크 DML
 description: 명령 형태 하나를 여러 값 집합으로 실행합니다. 드라이버 기능을 감추지 않습니다.
 ---
 
-`db.bulk(inputs, factory)`는 같은 형태의 DML을 빠르게 처리하기 위한 SQLBraid의 기본 수단입니다. 서로 다른 쿼리 목록을 실행하는 `db.batch(queries)`와는 일부러 구분했습니다.
+`db.bulk(inputs, factory)`는 동일한 구조의 DML 명령 하나를 여러 파라미터 묶음에 대해 일괄 실행합니다. 서로 다른 쿼리 목록을 순서대로 실행하는 `db.batch(queries)`와 달리, `db.bulk`는 모든 항목의 SQL 구조가 같아야 합니다.
 
 ```ts
 const result = await db.bulk(

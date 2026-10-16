@@ -43,14 +43,7 @@ streaming, and one `connection.batch()` call for `db.bulk()` (`native-bulk`).
 Root bulk is not a transaction. It has no portable promise of automatic
 chunking. When you need callback transaction atomicity, use `db.tx()`.
 
-A `mysql2` connection can work with MariaDB as best-effort compatibility. But it
-is not evidence for the MariaDB protocol. The official certified profile is
-MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0. The [runtime and driver support
-matrix](/SQLBraid/reference/support/) records labels for each exact tuple of
-database, driver, profile, runtime and capability, with its revision and
-workflow evidence. A neighboring version or a package installation is not
-certification. The final exact-SHA Runtime, Docs and Release gates and an
-explicit release authorization stay separate requirements.
+A `mysql2` connection can connect to MariaDB on a best-effort basis, but official MariaDB support uses `mariadb` (Connector/Node.js, tested against MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0). See the [runtime and driver support matrix](/SQLBraid/reference/support/) for the exact tested capabilities.
 
 ## Connector/Node.js representation profile
 
