@@ -2,11 +2,11 @@
 
 # SQLBraid
 
-**쿼리 빌더 없이 SQL을 순수 SQL로, 하지만 타입 안전하게**
+**TypeScript에서도 SQL은 SQL 그대로.**
 
 SQLBraid는 TypeScript의 태그드 템플릿(tagged template) 안에 순수 SQL을 그대로 작성할 수 있게 해주는 데이터 접근 라이브러리입니다. 값은 항상 안전하게 바인딩 파라미터로 분리되며, MyBatis에서 영감을 받은 동적 조건문을 SQL 주석 안에 직접 작성하고 반환 행의 타입이나 검증 스키마를 선언할 수 있습니다.
 
-PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server 등 6개 데이터베이스 방언에 대해 단일화된 실행 API를 제공하며, Node.js, Bun, Deno, 브라우저(SQLite WASM), Cloudflare D1에서 동작합니다.
+PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server 등 6개 데이터베이스 방언에 대해 공통 실행 API를 제공하며, Node.js, Bun, Deno, 브라우저(SQLite WASM), Cloudflare D1에서 동작합니다.
 
 ```ts
 const users = await db.all(sql.rows<User>`
@@ -24,19 +24,19 @@ const users = await db.all(sql.rows<User>`
 
 ## 제작 동기
 
-직장에서 Java 기반 프레임워크 코어를 다루면서 iBatis/MyBatis 스타일의 XML SQL 매퍼를 오래 사용해 왔습니다. 오래된 스택이라고 말하는 사람도 있겠지만, 팀원들이 SQL에 익숙한 환경에서는 이 방식이 가진 효용이 매우 큽니다. 원하는 SQL을 제약 없이 그대로 작성할 수 있고, 동적 조건 분기를 하나의 쿼리 문맥 안에서 한눈에 파악할 수 있으며, 수동으로 행을 매핑하지 않아도 타입이 선언된 결과를 얻을 수 있기 때문입니다.
+직장에서 Java 기반 프레임워크 라이브러리를 유지보수하며 iBatis/MyBatis 스타일의 XML SQL 매퍼를 오래 사용해 왔습니다. 원하는 SQL을 제약 없이 그대로 작성하고, 동적 조건 분기를 하나의 쿼리 문맥 안에서 파악하며, 수동으로 행을 매핑하지 않아도 타입이 선언된 결과를 얻을 수 있다는 점을 선호합니다.
 
 TypeScript 생태계에서 같은 워크플로를 찾아보았을 때 각 선택지는 아쉬운 점이 있었습니다.
 
 - **순수 드라이버(Raw drivers):** 파라미터 바인딩은 안전하지만, 동적 `WHERE` 조건이 늘어나면 곧바로 복잡한 문자열 조립과 파라미터 인덱스 계산 코드가 됩니다.
 - **쿼리 빌더(Query builders):** 타입 추론은 훌륭하지만, 이미 머릿속에 있는 SQL을 라이브러리 고유의 메서드 체이닝 DSL로 다시 번역해야 합니다.
-- **ORM:** 실행되는 실제 SQL을 완전히 숨겨버립니다.
+- **ORM:** 생성된 쿼리와 객체 모델에 의존하기보다 SQL을 직접 작성하는 방식을 선호합니다.
 
 그래서 "AI 시대에 못 만들 게 없지!"라는 생각으로 직접 만들기 시작했습니다.
 
-SQLBraid를 만들면서 겪은 가장 큰 장벽은 **JDBC의 부재**였습니다. MyBatis는 Java가 제공하는 JDBC 표준 인터페이스(`Connection`, `PreparedStatement`, `ResultSet`) 위에 올라가 있어 드라이버별 실행 계층을 직접 구현할 필요가 없습니다. 반면 JavaScript 생태계에는 `pg`, `mysql2`, `oracledb`, `tedious`, `node:sqlite`를 아우르는 표준 인터페이스가 없어 커넥션 관리, 플레이스홀더 문법(`$1`, `?`, `:1`, `@p1`), 트랜잭션, 스트리밍, 저장 프로시저 처리 방식이 모두 제각각입니다.
+SQLBraid를 만들면서 겪은 가장 큰 장벽은 **JDBC에 해당하는 표준 인터페이스의 부재**였습니다. MyBatis는 Java가 제공하는 JDBC 표준 인터페이스(`Connection`, `PreparedStatement`, `ResultSet`) 위에 올라가 있어 드라이버별 실행 계층을 직접 구현할 필요가 없습니다. 반면 JavaScript 생태계에는 `pg`, `mysql2`, `oracledb`, `tedious`, `node:sqlite`를 아우르는 표준 인터페이스가 없어 커넥션 관리, 플레이스홀더 문법(`$1`, `?`, `:1`, `@p1`), 트랜잭션, 스트리밍, 저장 프로시저 처리 방식이 모두 제각각입니다.
 
-결국 SQLBraid는 처음 예상보다 한 단계 더 나아간 역할을 맡게 되었습니다. 태그드 템플릿 안에서 동작하는 동적 SQL 처리기에 더해, 각 데이터베이스의 고유 기능을 가리지 않으면서도 일관된 인터페이스로 묶어주는 드라이버 실행 추상화 계층입니다.
+따라서 SQLBraid에는 MyBatis 스타일의 동적 SQL 처리기뿐 아니라, 서로 다른 JavaScript 데이터베이스 드라이버를 공통 API로 연결하는 실행 계층도 필요했습니다.
 
 ## 빠른 시작: SQLite
 
@@ -107,7 +107,7 @@ await db.tx(async (tx) => {
 SQLBraid는 템플릿을 읽어 세 단계를 거쳐 실행할 SQL 문장을 구성합니다.
 
 1. **지시어 평가 (`/*@braid ... */`):** 지시어는 표준 SQL 주석 문법을 따르므로 에디터와 SQL 포매터에서 일반 SQL로 정상 인식됩니다. `if`, `choose` / `when` / `otherwise`, `where`, `set`, `trim` 블록을 순서대로 평가해 거짓인 분기를 제거하며, 여러 줄 블록과 중첩 구조를 모두 지원합니다. `where`와 `set` 블록은 남은 조건문 앞의 불필요한 `AND`/`OR`나 끝의 쉼표(`,`)를 자동으로 정리합니다.
-2. **파라미터 바인딩 분리 (`${value}`):** 활성화된 분기 안의 `${value}` 표현식은 SQL 문자열에 직접 이어 붙이지 않고 별도의 바인딩 파라미터 배열로 분리합니다.
+2. **파라미터 바인딩 분리 (`${value}`):** 활성화된 SQL 분기에서 사용된 값은 SQL 문자열에 직접 이어 붙이지 않고 바인딩 파라미터로 전달됩니다. 단, 선택적 컴파일러를 사용하지 않으면 JavaScript 태그드 템플릿의 동작 방식에 따라 SQLBraid가 지시어를 처리하기 전에 모든 템플릿 표현식이 먼저 평가됩니다.
 3. **드라이버별 플레이스홀더 변환:** 쿼리에서는 항상 동일한 `${value}` 문법을 작성하면, 대상 드라이버 어댑터가 각 DB 규격(`$1`, `?`, `:1`, `@p1`)에 맞춰 플레이스홀더를 작성합니다.
 
 ```ts
@@ -140,7 +140,7 @@ sql.rows<User>`
 
 ## 반환 타입 선언과 스키마 검증
 
-쿼리의 성격에 따라 반환 형태를 명시적으로 선언합니다. 행 집합을 조회할 때는 `sql.rows<T>`, `INSERT`/`UPDATE`/`DELETE` 명령에는 `sql.command`, 저장 프로시저 호출에는 `sql.call`을 사용합니다. 선언한 형태와 실제 데이터베이스의 응답 구조가 다르면 잘못된 데이터를 조용히 반환하는 대신 즉시 예외를 발생시킵니다([SQL 태그와 결과 종류](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/) 참고).
+쿼리의 성격에 따라 결과 종류를 명시적으로 선언합니다. 행 집합을 조회할 때는 `sql.rows<T>`, `INSERT`/`UPDATE`/`DELETE` 명령에는 `sql.command`, 저장 프로시저 호출에는 `sql.call`을 사용합니다. 데이터베이스가 선언한 것과 다른 결과 종류를 반환하면 예외를 발생시킵니다([SQL 태그와 결과 종류](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/) 참고). `sql.rows<T>`의 `T`는 TypeScript 타입 선언이며, 실제 행의 필드와 값을 런타임에 검증하려면 Standard Schema를 전달합니다.
 
 **Standard Schema 연동 (Zod, Valibot, ArkType 등):**
 
@@ -205,25 +205,23 @@ const result = await db.tx(async (tx) =>
 
 ## 다른 라이브러리와의 비교
 
-아래 도구들은 모두 훌륭하며, 지향하는 트레이드오프가 다릅니다.
+|                                | 작성하는 SQL                                           | 동적 SQL 처리                                                                          | 결과 타입                                                     | 지원 데이터베이스                                                |
+| ------------------------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Prisma**                     | Prisma 스키마와 클라이언트 API, 원시 SQL은 `$queryRaw` | 클라이언트 API (`undefined` 필터 건너뜀), 원시 SQL에서는 `Prisma.sql` 및 `Prisma.join` | 스키마에서 생성, 원시 쿼리는 직접 타입 지정                   | PostgreSQL, MySQL, SQLite, SQL Server, CockroachDB, MongoDB      |
+| **Drizzle**                    | TypeScript 스키마와 쿼리 API, 원시 부분은 `sql` 템플릿 | 쿼리 API (`and(...)`가 `undefined`를 건너뜀)                                           | 스키마에서 추론                                               | PostgreSQL, MySQL, SQLite, SingleStore, Gel                      |
+| **Kysely**                     | 타입 안전 쿼리 빌더, 원시 부분은 `sql` 템플릿          | 빌더 메서드 체이닝 (조건부 `.where()` 등)                                              | DB 인터페이스에서 추론                                        | PostgreSQL, MySQL, SQLite, SQL Server                            |
+| **postgres.js / slonik**       | 태그드 템플릿 기반 원시 SQL                            | JS 코드에서 조각 조합 (중첩 `sql`, `sql.fragment`, `sql.join` 등)                      | 직접 선언                                                     | PostgreSQL                                                       |
+| **pgtyped**                    | `:name` 파라미터를 쓰는 원시 SQL 파일                  | 내장 기능 없음 (`:name IS NULL OR ...`로 직접 작성)                                    | 실제 DB에 쿼리를 대조해 빌드 시 생성                          | PostgreSQL                                                       |
+| **sqlc** (TypeScript 플러그인) | 원시 SQL 파일                                          | 내장 기능 없음 (`IS NULL OR ...`로 직접 작성)                                          | SQL과 스키마 파일로부터 생성                                  | PostgreSQL(`pg`, `postgres`), MySQL(`mysql2`), SQLite(`sqlite3`) |
+| **SQLBraid**                   | 태그드 템플릿 기반 원시 SQL                            | SQL 주석 내부 지시어 (`/*@braid if ...*/`)                                             | 직접 선언 및 런타임 스키마 검증, 선택적 테이블 모델 코드 생성 | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server           |
 
-|                                | 작성하는 SQL                                           | 동적 SQL 처리                                                                          | 결과 타입                                                  | 지원 데이터베이스                                                |
-| ------------------------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
-| **Prisma**                     | Prisma 스키마와 클라이언트 API, 원시 SQL은 `$queryRaw` | 클라이언트 API (`undefined` 필터 건너뜀), 원시 SQL에서는 `Prisma.sql` 및 `Prisma.join` | 스키마에서 생성, 원시 쿼리는 직접 타입 지정                | PostgreSQL, MySQL, SQLite, SQL Server, CockroachDB, MongoDB      |
-| **Drizzle**                    | TypeScript 스키마와 쿼리 API, 원시 부분은 `sql` 템플릿 | 쿼리 API (`and(...)`가 `undefined`를 건너뜀)                                           | 스키마에서 추론                                            | PostgreSQL, MySQL, SQLite, SingleStore, Gel                      |
-| **Kysely**                     | 타입 안전 쿼리 빌더, 원시 부분은 `sql` 템플릿          | 빌더 메서드 체이닝 (조건부 `.where()` 등)                                              | DB 인터페이스에서 추론                                     | PostgreSQL, MySQL, SQLite, SQL Server                            |
-| **postgres.js / slonik**       | 태그드 템플릿 기반 원시 SQL                            | JS 코드에서 조각 조합 (중첩 `sql`, `sql.fragment`, `sql.join` 등)                      | 직접 선언                                                  | PostgreSQL                                                       |
-| **pgtyped**                    | `:name` 파라미터를 쓰는 원시 SQL 파일                  | 내장 기능 없음 (`:name IS NULL OR ...`로 직접 작성)                                    | 실제 DB에 쿼리를 대조해 빌드 시 생성                       | PostgreSQL                                                       |
-| **sqlc** (TypeScript 플러그인) | 원시 SQL 파일                                          | 내장 기능 없음 (`IS NULL OR ...`로 직접 작성)                                          | SQL과 스키마 파일로부터 생성                               | PostgreSQL(`pg`, `postgres`), MySQL(`mysql2`), SQLite(`sqlite3`) |
-| **SQLBraid**                   | 태그드 템플릿 기반 원시 SQL                            | SQL 주석 내부 지시어 (`/*@braid if ...*/`)                                             | 직접 선언 및 런타임 스키마 검증, 선택적 테이블 모델 코드젠 | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server           |
-
-**SQLBraid가 적합한 경우:** 이미 SQL 중심으로 쿼리를 설계하는 팀, 선택적 검색 필터나 동적 조인이 많은 쿼리를 다루는 경우, 또는 여러 데이터베이스 엔진에 걸쳐 동일한 실행 API와 저장 프로시저 호출 방식이 필요한 경우.
+**SQLBraid가 적합한 경우:** 이미 SQL 중심으로 쿼리를 설계하는 팀, 선택적 검색 필터나 동적 조인이 많은 쿼리를 다루는 경우, 또는 여러 데이터베이스 엔진에 걸쳐 공통 실행 API와 저장 프로시저 호출 방식이 필요한 경우.
 
 **SQLBraid가 하지 않는 일:**
 
 - **ORM이 아닙니다:** 연관 관계 자동 로딩(relation loading)이나 아이덴티티 맵을 제공하지 않습니다.
 - **임의의 `SELECT` 구문 타입 추론을 하지 않습니다:** 반환 행 타입을 직접 선언하거나 Standard Schema를 전달하며, 테이블 모델은 `@sqlbraid/codegen`으로 생성합니다.
-- **SQL을 몰래 고쳐 쓰거나 미지원 기능을 흉내 내지 않습니다:** 대상 드라이버가 지원하지 않는 기능(예: 쿼리 취소)을 호출하면 임의로 에뮬레이션하지 않고 명시적인 오류를 발생시킵니다.
+- **SQL을 암묵적으로 재작성하거나 미지원 기능을 흉내 내지 않습니다:** 대상 드라이버가 지원하지 않는 기능(예: 쿼리 취소)을 호출하면 임의로 에뮬레이션하지 않고 명시적인 오류를 발생시킵니다.
 - **커넥션 풀을 자체 생성하지 않습니다:** 드라이버의 풀을 주입받아 작업 단위 또는 트랜잭션 단위로 커넥션을 대여하고 반납합니다.
 
 ## 주요 실행 기능
@@ -259,7 +257,7 @@ const result = await db.tx(async (tx) =>
 | SQL Server                         | `tedious`                              | `sqlbraid/tedious`               | Official   |
 | PostgreSQL, MySQL, MariaDB, SQLite | Bun.SQL (Bun 내장)                     | `sqlbraid/bun-sql`               | Official   |
 
-## 선택적 도구 (Optional Tooling)
+## 선택적 개발 도구
 
 아래 도구들은 모두 기본 런타임의 의존성이 아닌 선택적 패키지이며, 외부 런타임 의존성을 추가하지 않습니다. 전체 목록은 [패키지 구성](https://clickin.github.io/SQLBraid/latest/reference/packages/)을 참고하세요.
 
@@ -289,9 +287,11 @@ const result = await db.tx(async (tx) =>
 - **런타임 요구 사항:** 런타임 패키지(`sqlbraid` 및 드라이버 어댑터)는 Node.js 16.20.2 이상을 지원합니다(각 DB 드라이버의 최소 요구 버전 적용, `node:sqlite` 및 CLI/빌드 도구는 Node.js 22.18 이상 필요). 활성 LTS 버전 사용을 권장합니다.
 - **현재 상태:** 버전 1.x. 공개 API는 안정화되어 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
 
-## 개발 방식 및 AI 활용에 대해
+## 개발 방식 및 AI 활용
 
-SQLBraid의 전체 아키텍처, 동적 지시어 문법, 드라이버 추상화 경계와 API 설계는 Java/MyBatis 기반 시스템을 개발·유지보수해 온 경험을 바탕으로 직접 정의했습니다. 6개 데이터베이스 패밀리의 방대한 드라이버 어댑터 구현과 컴파일러 IR 검증, 마이그레이션 스키마 드리프트 체크, 교차 DB 테스트 스위트 작성에는 Codex로 구현하고 Claude로 엣지 케이스와 보안을 교차 리뷰하는 에이전트 워크플로를 활용했습니다. SQLBraid 패키지 자체에는 어떠한 AI 런타임 의존성도 포함되어 있지 않습니다.
+SQLBraid의 아키텍처와 API는 Java 및 MyBatis를 사용해 온 경험을 바탕으로 직접 설계했습니다. 모든 코드 커밋은 코딩 에이전트(주로 Codex)를 사용해 작성했으며, 세부 구현, 엣지 케이스, 보안 이슈의 독립적인 검토에는 Claude를 활용했습니다. 결과물 검토와 최종 설계 결정은 직접 수행했습니다.
+
+SQLBraid에는 AI 런타임 의존성이 없습니다.
 
 ## 기여 및 라이선스
 

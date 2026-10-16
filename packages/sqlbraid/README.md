@@ -1,10 +1,10 @@
 # sqlbraid
 
-**Write plain SQL in TypeScript, with type safety and no query builder.**
+**Write SQL directly in TypeScript. No query builder required.**
 
 SQLBraid is a SQL-first data-access library for TypeScript that lets you write raw SQL inside tagged templates. Interpolated values are always separated as bound parameters, dynamic conditions inspired by MyBatis live directly inside SQL comments, and each query declares its return row type or validation schema.
 
-It provides one unified execution API across 6 database dialects—PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL Server—and runs on Node.js, Bun, Deno, browsers (SQLite WASM), and Cloudflare D1.
+It provides a common execution API across 6 database dialects—PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL Server—and runs on Node.js, Bun, Deno, browsers (SQLite WASM), and Cloudflare D1.
 
 ```ts
 const users = await db.all(sql.rows<User>`
@@ -22,19 +22,19 @@ const users = await db.all(sql.rows<User>`
 
 ## Motivation
 
-At work, I maintain Java framework core libraries and have used iBatis/MyBatis XML SQL mappers for years. Some call that stack old-fashioned, but when a team knows SQL well, it is hard to beat: you write the exact SQL you want without restrictions, read dynamic conditions inside one query context at a glance, and get typed results without mapping rows by hand.
+I maintain Java framework libraries at work and have used iBatis/MyBatis XML mappers for years. I like being able to write SQL directly, keep dynamic conditions inside the query, and get typed results without mapping rows by hand.
 
-When I looked for the same workflow in TypeScript, every option had a catch:
+When I looked for a similar workflow in TypeScript, I wasn't happy with the trade-offs I found:
 
 - **Raw drivers:** Parameter binding is safe, but adding dynamic `WHERE` filters quickly turns into messy string concatenation and parameter index bookkeeping.
 - **Query builders:** Type inference is great, but you have to translate the SQL already in your head into a library-specific method-chaining DSL.
-- **ORMs:** They hide the actual SQL being executed altogether.
+- **ORMs:** I prefer writing SQL myself rather than relying on generated queries and an object model.
 
-In the AI era, there was no reason not to build the tool I actually wanted.
+With coding agents available, I figured I'd try building it myself.
 
-The biggest hurdle while building SQLBraid was **the absence of JDBC**. In Java, MyBatis sits on top of the standard JDBC interfaces (`Connection`, `PreparedStatement`, `ResultSet`), so it never has to build a custom execution layer per driver. JavaScript has no standard interface across `pg`, `mysql2`, `oracledb`, `tedious`, and `node:sqlite`—connection management, placeholder syntax (`$1`, `?`, `:1`, `@p1`), transactions, streaming, and stored procedures all work differently.
+The biggest hurdle was that **JavaScript has no equivalent to JDBC**. In Java, MyBatis sits on top of the standard JDBC interfaces (`Connection`, `PreparedStatement`, `ResultSet`), so it never has to build a custom execution layer per driver. JavaScript has no standard interface across `pg`, `mysql2`, `oracledb`, `tedious`, and `node:sqlite`—connection management, placeholder syntax (`$1`, `?`, `:1`, `@p1`), transactions, streaming, and stored procedures all work differently.
 
-Because of that, SQLBraid took on a second role beyond a dynamic SQL template processor: a unified driver execution layer that wraps each database's native client under one consistent interface without hiding database-specific capabilities.
+Because of that, SQLBraid needed not only a MyBatis-style dynamic SQL processor, but also an execution layer that connects different JavaScript database drivers to a common API without hiding database-specific capabilities.
 
 ## Quickstart: SQLite
 
@@ -105,7 +105,7 @@ For other databases, see the getting-started guides: [MySQL](https://clickin.git
 SQLBraid builds an executable statement from your template in three steps:
 
 1. **Directive evaluation (`/*@braid ... */`):** Directives use standard SQL block comments so editors and SQL formatters treat your query as valid SQL. SQLBraid evaluates `if`, `choose` / `when` / `otherwise`, `where`, `set`, and `trim` blocks in order, drops inactive branches, and supports multi-line and nested blocks. `where` and `set` automatically strip leading `AND`/`OR` tokens or trailing commas.
-2. **Parameter extraction (`${value}`):** Every `${value}` expression in an active branch is extracted into a bound parameter list—never concatenated into the SQL string.
+2. **Parameter extraction (`${value}`):** Values used by active SQL branches are sent as bound parameters—never concatenated into the SQL string. Without the optional compiler, JavaScript still evaluates all template expressions before SQLBraid processes the directives.
 3. **Driver placeholder rendering:** You write the same `${value}` syntax everywhere, and the target driver adapter emits the native placeholders (`$1`, `?`, `:1`, `@p1`).
 
 ```ts
@@ -138,7 +138,7 @@ sql.rows<User>`
 
 ## Result Declarations & Schema Validation
 
-You declare the expected return shape for every query: `sql.rows<T>` for row sets, `sql.command` for `INSERT`/`UPDATE`/`DELETE`, and `sql.call` for stored procedures. If the database returns a different result kind than declared, SQLBraid throws immediately instead of returning silently wrong data (see [SQL tags and result kinds](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/)).
+You declare the expected result kind for every query: `sql.rows<T>` for row sets, `sql.command` for `INSERT`/`UPDATE`/`DELETE`, and `sql.call` for stored procedures. SQLBraid throws if the database returns a different result kind than declared (see [SQL tags and result kinds](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/)). `sql.rows<T>` is a TypeScript type declaration; to validate row fields and values at runtime, pass a Standard Schema.
 
 **Standard Schema integration (Zod, Valibot, ArkType, etc.):**
 
@@ -203,8 +203,6 @@ See [Routine calls](https://clickin.github.io/SQLBraid/latest/concepts/routines/
 
 ## Comparison with Other Libraries
 
-Every tool below is solid; they optimize for different trade-offs.
-
 |                              | SQL you write                                               | Dynamic SQL handling                                                               | Result types                                                            | Supported databases                                                 |
 | ---------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | **Prisma**                   | Prisma schema & client API; `$queryRaw` for raw SQL         | Client API (skips `undefined` filters), or `Prisma.sql` / `Prisma.join` in raw SQL | Generated from schema; manual typing for raw queries                    | PostgreSQL, MySQL, SQLite, SQL Server, CockroachDB, MongoDB         |
@@ -215,7 +213,7 @@ Every tool below is solid; they optimize for different trade-offs.
 | **sqlc** (TypeScript plugin) | Raw SQL files                                               | Not built-in (write `IS NULL OR ...` in SQL)                                       | Generated from SQL and schema files                                     | PostgreSQL (`pg`, `postgres`), MySQL (`mysql2`), SQLite (`sqlite3`) |
 | **SQLBraid**                 | Raw SQL in tagged templates                                 | In-SQL comment directives (`/*@braid if ...*/`)                                    | Declared by you & validated via Standard Schema; optional table codegen | PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server              |
 
-**When SQLBraid fits well:** Teams that design queries in SQL first, queries with many optional search filters or conditional joins, or projects that need one consistent execution and stored-procedure API across multiple database engines.
+**When SQLBraid fits well:** Teams that design queries in SQL first, queries with many optional search filters or conditional joins, or projects that need a common execution and stored-procedure API across multiple database engines.
 
 **What SQLBraid does not do:**
 
@@ -296,9 +294,11 @@ Every example project is integration-tested in CI against the packed release tar
 - **Runtime requirements:** Runtime packages (`sqlbraid` and driver adapters) support Node.js 16.20.2 or newer (subject to each driver's own minimum Node version; `node:sqlite` and CLI/build tools require Node.js 22.18+). Active LTS releases are recommended.
 - **Current status:** Version 1.x. The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
 
-## How This Was Built & AI Use
+## Development and AI Usage
 
-I defined SQLBraid's overall architecture, dynamic directive syntax, driver abstraction boundaries, and API design based on years of building and maintaining Java/MyBatis systems. To implement the driver adapters across six database families, compiler IR verification, migration drift checks, and the cross-database test suite, I used an agent workflow—implementing with Codex and cross-reviewing edge cases and security boundaries with Claude. SQLBraid packages have zero AI runtime dependencies.
+I designed SQLBraid's architecture and APIs based on my experience with Java and MyBatis. All code commits were produced using coding agents, primarily Codex, with Claude used for independent reviews of implementation details, edge cases, and security issues. I reviewed the results and made the final design decisions.
+
+SQLBraid has no AI runtime dependency.
 
 ## Contributing & License
 
