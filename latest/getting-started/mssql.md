@@ -5,14 +5,15 @@
 Install the SQLBraid runtime facade, the SQL Server dialect package and Tedious together:
 
 ```bash
-npm install sqlbraid @sqlbraid/mssql tedious
+pnpm add sqlbraid @sqlbraid/mssql tedious
 ```
 
 The portable root exposes the SQL Server dialect and the hint factories. The Node driver adapter is under `/tedious`:
 
 ```ts
 import { Connection } from "tedious";
-import { createTediousDatabase, mssqlParameter, sql } from "sqlbraid/tedious";
+import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
 
 interface UserRow {
   id: string;

@@ -14,7 +14,7 @@ SQLBraid ships an official portable Agent Skill at [`skills/sqlbraid/`](https://
 Install it with the standard `skills` CLI:
 
 ```sh
-npx skills add Clickin/SQLBraid --skill sqlbraid
+pnpm dlx skills add Clickin/SQLBraid --skill sqlbraid
 ```
 
 The skill is for application development. Its default workflow is:

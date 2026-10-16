@@ -7,7 +7,7 @@ Metadata is optional, Node-first tooling. Runtime dialect imports do not install
 Install the dialect, the driver and the optional metadata package explicitly:
 
 ```bash
-npm install @sqlbraid/postgres pg @sqlbraid/metadata
+pnpm add @sqlbraid/postgres pg @sqlbraid/metadata
 ```
 
 The inspector is a **subpath export** of the dialect package. It is not a separate package. Inspect a physical client that is already connected:

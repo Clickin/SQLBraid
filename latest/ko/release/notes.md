@@ -1,17 +1,25 @@
 # 릴리스 노트
 
-> SQLBraid GA의 인터페이스, 2.0.0 파사드 의존성 경계, 기능·근거 경계입니다.
+> SQLBraid 2.0.0 공동 릴리스, 드라이버 직접 import, 기능 경계입니다.
 
 이 페이지는 SQLBraid GA 릴리스 계열을 기록합니다. GA로 공개 인터페이스가 안정화되었습니다. 그렇다고 모든 드라이버에서 모든 기능을 쓸 수 있는 것은 아닙니다.
 
 지원하는 데이터베이스, 드라이버, 프로필, 런타임, 기능 조합은 [런타임·드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)에 있습니다.
 
-## 2.0.0 파사드 의존성 경계
+## 2.0.0 공동 릴리스
 
-`sqlbraid` 2.0.0은 일곱 방언·어댑터 패키지(`@sqlbraid/bun-sql`, `@sqlbraid/mariadb`, `@sqlbraid/mssql`, `@sqlbraid/mysql`, `@sqlbraid/oracle`, `@sqlbraid/postgres`, `@sqlbraid/sqlite`)를 필수 의존성에서 선택적 피어 의존성으로 전환합니다. 이제 `sqlbraid` 파사드는 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`만 필수 의존성으로 유지합니다.
+배포 대상인 모든 자체 패키지와 VS Code 확장이 함께 `2.0.0`으로 올라갑니다.
+파사드만 메이저 버전을 올리려던 이전 계획을 대체합니다.
 
-- import하는 `sqlbraid/*` 하위 경로에 맞는 `@sqlbraid/*` 방언 또는 어댑터 패키지를 함께 설치하세요(예: `sqlbraid/pg`를 쓰려면 `npm install sqlbraid @sqlbraid/postgres pg`).
-- 모든 `sqlbraid` 하위 경로, 쿼리 API, 런타임 동작은 1.0.x와 같으며, `@sqlbraid/*` 패키지는 1.x 계열을 유지합니다.
+`sqlbraid`는 루트와 `sqlbraid/compiled` 진입점만 유지합니다.
+의존성은 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`뿐입니다.
+선택적 피어를 포함하여 방언이나 어댑터 의존성은 없습니다.
+
+- 애플리케이션이 쓰는 방언·어댑터 패키지와 외부 드라이버를 설치하세요.
+- `sql`과 방언 힌트는 해당 `@sqlbraid/*` 루트에서 import하세요.
+- 데이터베이스 생성 함수는 `@sqlbraid/postgres/pg` 같은 어댑터 하위 경로에서 import하세요.
+- 모든 드라이버·방언 파사드 import를 바꾸세요. 이전 하위 경로는 호환 별칭 없이 제거됩니다.
+- 쿼리 API와 런타임 동작은 그대로 유지합니다.
 
 ## 1.0.0에 포함된 것
 

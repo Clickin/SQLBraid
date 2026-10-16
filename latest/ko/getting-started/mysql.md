@@ -5,7 +5,7 @@
 SQLBraid 런타임 파사드, MySQL 방언 패키지, `mysql2` 드라이버를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid @sqlbraid/mysql mysql2
+pnpm add sqlbraid @sqlbraid/mysql mysql2
 ```
 
 ## 물리 커넥션에 직접 연결하기
@@ -14,7 +14,8 @@ npm install sqlbraid @sqlbraid/mysql mysql2
 
 ```ts
 import mysql from "mysql2/promise";
-import { createMysql2Database, MYSQL2_LOSSLESS_TEXT, sql } from "sqlbraid/mysql2";
+import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 
 const connection = await mysql.createConnection({
   uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
@@ -38,7 +39,8 @@ try {
 
 ```ts
 import mysql from "mysql2/promise";
-import { createMysql2PoolDatabase, MYSQL2_LOSSLESS_TEXT, sql } from "sqlbraid/mysql2";
+import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 
 const pool = mysql.createPool({
   uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",

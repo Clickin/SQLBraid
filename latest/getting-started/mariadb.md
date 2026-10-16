@@ -5,7 +5,7 @@
 Install the SQLBraid runtime facade, the MariaDB dialect package and the official Connector/Node.js driver together:
 
 ```bash
-npm install sqlbraid @sqlbraid/mariadb mariadb
+pnpm add sqlbraid @sqlbraid/mariadb mariadb
 ```
 
 Use the `/mariadb` adapter subpath with a connected connection or with an explicit
@@ -13,7 +13,8 @@ pool factory:
 
 ```ts
 import mariadb from "mariadb";
-import { createMariaDbDatabase, MARIADB_LOSSLESS_TEXT, sql } from "sqlbraid/mariadb";
+import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
+import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
 
 const connection = await mariadb.createConnection({
   host: "127.0.0.1",

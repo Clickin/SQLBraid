@@ -8,13 +8,13 @@ This path uses Node `>=22.18.0` and `node:sqlite`. You do not need a database se
 
 All SQLite adapters share the SQLite dialect. The subpath selects the physical adapter:
 
-| Subpath                   | Physical boundary                     | Important limits                                                                             |
-| ------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `sqlbraid/node-sqlite`    | Node `DatabaseSync` / `StatementSync` | synchronous physical calls; exact INTEGER strings; native `iterate()` stream                 |
-| `sqlbraid/better-sqlite3` | better-sqlite3 statements             | synchronous and event-loop blocking; statement-local `safeIntegers(true)`; native iteration  |
-| `sqlbraid/libsql`         | `@libsql/client`                      | requires `intMode: "string"`; interactive transactions; no pinned session or stream fallback |
-| `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                       | OO1 statement ownership; async-generator adaptation for streams                              |
-| `sqlbraid/d1`             | Cloudflare D1                         | prepared binds; no streaming or callback transactions                                        |
+| Subpath                           | Physical boundary                     | Important limits                                                                             |
+| --------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `@sqlbraid/sqlite/node-sqlite`    | Node `DatabaseSync` / `StatementSync` | synchronous physical calls; exact INTEGER strings; native `iterate()` stream                 |
+| `@sqlbraid/sqlite/better-sqlite3` | better-sqlite3 statements             | synchronous and event-loop blocking; statement-local `safeIntegers(true)`; native iteration  |
+| `@sqlbraid/sqlite/libsql`         | `@libsql/client`                      | requires `intMode: "string"`; interactive transactions; no pinned session or stream fallback |
+| `@sqlbraid/sqlite/wasm`           | SQLite WASM OO1                       | OO1 statement ownership; async-generator adaptation for streams                              |
+| `@sqlbraid/sqlite/d1`             | Cloudflare D1                         | prepared binds; no streaming or callback transactions                                        |
 
 In Deno 2.9.3, the `node:sqlite` iterator turns SQLite step errors into a normal
 EOF. Thus, SQLBraid rejects streaming on Deno with `BRAID_STREAM_UNSUPPORTED`.
@@ -34,10 +34,9 @@ The [runtime and driver support matrix](/SQLBraid/latest/reference/support.md) l
 
 ```bash
 mkdir braid-sqlite && cd braid-sqlite
-npm init -y
-npm pkg set type=module
-npm install sqlbraid @sqlbraid/sqlite
-npm install --save-dev typescript @types/node@22
+pnpm init --init-type module
+pnpm add sqlbraid @sqlbraid/sqlite
+pnpm add --save-dev typescript @types/node@22
 mkdir src
 ```
 
@@ -47,7 +46,8 @@ Create `src/index.ts`:
 
 ```ts
 import { DatabaseSync } from "node:sqlite";
-import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { sql } from "@sqlbraid/sqlite";
 
 interface UserRow {
   id: string;
@@ -105,8 +105,8 @@ console.log(users);
 Build the TypeScript source with the SQLBraid compiler lowering. Then run the emitted JavaScript:
 
 ```bash
-npm install --save-dev @sqlbraid/cli
-npx sqlbraid build --file src/index.ts --out-file build/index.js
+pnpm add --save-dev @sqlbraid/cli
+pnpm exec sqlbraid build --file src/index.ts --out-file build/index.js
 node build/index.js
 ```
 
@@ -171,7 +171,8 @@ Node and the SQLite library that Node bundles.
 
 ```ts
 import Database from "better-sqlite3";
-import { createBetterSqlite3Database, sql } from "sqlbraid/better-sqlite3";
+import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";
+import { sql } from "@sqlbraid/sqlite";
 
 const native = new Database(":memory:");
 const db = createBetterSqlite3Database(native);
@@ -187,7 +188,8 @@ worker. Routines and active cancellation are unsupported.
 
 ```ts
 import { createClient } from "@libsql/client";
-import { createLibsqlDatabase, sql } from "sqlbraid/libsql";
+import { createLibsqlDatabase } from "@sqlbraid/sqlite/libsql";
+import { sql } from "@sqlbraid/sqlite";
 
 const client = createClient({ url: "file:app.db", intMode: "string" });
 const db = createLibsqlDatabase(client, { intMode: "string" });

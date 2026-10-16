@@ -5,14 +5,15 @@
 SQLBraid 런타임 파사드, SQL Server 방언 패키지, Tedious를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid @sqlbraid/mssql tedious
+pnpm add sqlbraid @sqlbraid/mssql tedious
 ```
 
 방언 루트는 SQL Server 방언과 힌트 팩토리를 제공합니다. Node 드라이버 어댑터는 `/tedious`에 있습니다.
 
 ```ts
 import { Connection } from "tedious";
-import { createTediousDatabase, mssqlParameter, sql } from "sqlbraid/tedious";
+import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
 
 interface UserRow {
   id: string;

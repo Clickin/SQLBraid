@@ -12,13 +12,14 @@ Install the SQLBraid runtime facade, the SQLite package and the official WASM
 runtime in the application that owns the browser or worker resource:
 
 ```bash
-npm install sqlbraid @sqlbraid/sqlite @sqlite.org/sqlite-wasm
+pnpm add sqlbraid @sqlbraid/sqlite @sqlite.org/sqlite-wasm
 ```
 
 Create one direct database from the OO1-style object in the current realm:
 
 ```ts
-import { createSqliteWasmDatabase, sql } from "sqlbraid/sqlite-wasm";
+import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
+import { sql } from "@sqlbraid/sqlite";
 
 const db = createSqliteWasmDatabase(wasmDatabase, { sqlite3 });
 const rows = await db.all(sql.rows<{ id: string }>`SELECT id FROM account`);
@@ -47,14 +48,14 @@ incomplete async-context polyfill.
 Install the facade and SQLite package. D1 does not need the WASM runtime:
 
 ```bash
-npm install sqlbraid @sqlbraid/sqlite
+pnpm add sqlbraid @sqlbraid/sqlite
 ```
 
 D1 stays SQLite. It uses a structural binding interface. Thus, the package does
 not need a Cloudflare type package at runtime:
 
 ```ts
-import { createD1Database } from "sqlbraid/d1";
+import { createD1Database } from "@sqlbraid/sqlite/d1";
 
 const db = createD1Database(env.DB);
 ```

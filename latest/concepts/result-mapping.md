@@ -6,7 +6,7 @@ SQLBraid depends on the Standard Schema protocol. It does not depend on one vali
 
 ```ts
 import * as v from "valibot";
-import { sql } from "sqlbraid/postgres";
+import { sql } from "@sqlbraid/postgres";
 
 const EventSchema = v.object({
   id: v.pipe(v.string(), v.transform(Number)),

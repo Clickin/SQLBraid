@@ -7,7 +7,7 @@
 방언, 드라이버, 선택 사항인 메타데이터 패키지를 명시적으로 설치하세요.
 
 ```bash
-npm install @sqlbraid/postgres pg @sqlbraid/metadata
+pnpm add @sqlbraid/postgres pg @sqlbraid/metadata
 ```
 
 인스펙터는 별도 패키지가 아니라 방언 패키지의 **하위 경로 export**입니다. 이미 연결된 물리 클라이언트를 검사하세요.

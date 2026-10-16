@@ -6,8 +6,10 @@
 다음 명령은 SQLite를 사용합니다.
 
 ```bash
-npm install sqlbraid @sqlbraid/sqlite @sqlbraid/vite
+pnpm add sqlbraid @sqlbraid/sqlite @sqlbraid/template @sqlbraid/vite
 ```
+
+생성된 코드는 `@sqlbraid/template`에서 헬퍼를 import합니다. 애플리케이션의 직접 런타임 의존성으로 유지하세요.
 
 프레임워크와 무관한 이 플러그인을 일반 Vite 변환보다 앞에 추가하세요.
 
@@ -20,7 +22,7 @@ export default defineConfig({
 });
 ```
 
-`@sqlbraid/vite`는 Vite 8을 대상으로 하며 사전 변환(pre-transform)으로 실행됩니다. 세분화된 `@sqlbraid/*` 방언 루트와, 그에 대응하는 `sqlbraid/*` 파사드 하위 경로에서 import한 SQLBraid 태그를 인식합니다. 애플리케이션이 태그를 감싸서 쓴다면 사용자 정의 태그를 설정하세요.
+`@sqlbraid/vite`는 Vite 8을 대상으로 하며 사전 변환으로 실행됩니다. `@sqlbraid/*` 방언 루트와 `@sqlbraid/template`에서 import한 태그를 인식합니다. 애플리케이션이 태그를 감싸서 쓴다면 사용자 정의 태그를 설정하세요.
 
 ```ts
 sqlbraid({

@@ -31,7 +31,7 @@ placeholder syntax.
 If the database parameter type must be explicit, use `sql.bind(value, hint)`:
 
 ```ts
-import { mssqlParameter, sql } from "sqlbraid/mssql";
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
 
 const query = sql.rows<UserRow>`
   SELECT id, display_name

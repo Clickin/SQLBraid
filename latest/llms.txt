@@ -68,7 +68,7 @@ Assume ordinary SQL knowledge. Use these documents for SQLBraid-specific APIs, g
 
 ## Release
 - [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations.md): Capabilities and driver behaviors that SQLBraid 1.x does not support or emulate.
-- [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes.md): The SQLBraid GA interfaces, the 2.0.0 facade dependency boundary and their capability and evidence boundaries.
+- [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes.md): The coordinated SQLBraid 2.0.0 release, direct driver imports and capability boundaries.
 - [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap.md): Current behavior, and candidates that need their own design and evidence.
 
 ## Optional

@@ -5,7 +5,7 @@
 `@sqlbraid/opentelemetry`는 선택 사항인 공식 옵저버 연동입니다. OpenTelemetry API와 함께 설치하세요.
 
 ```sh
-npm install @sqlbraid/opentelemetry @opentelemetry/api
+pnpm add @sqlbraid/opentelemetry @opentelemetry/api
 ```
 
 OpenTelemetry SDK, 프로바이더, 익스포터, 리더는 애플리케이션에서 설정하세요. SQLBraid는 피어 의존성인 API만 씁니다.

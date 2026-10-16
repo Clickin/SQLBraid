@@ -7,7 +7,7 @@ CLI와 LSP 서버는 같은 분석 기능을 공유합니다. CLI 명령에서 �
 다음 명령을 실행할 프로젝트에 선택 사항인 CLI를 설치하세요.
 
 ```bash
-npm install --save-dev @sqlbraid/cli
+pnpm add --save-dev @sqlbraid/cli
 ```
 
 ```bash

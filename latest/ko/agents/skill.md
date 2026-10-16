@@ -14,7 +14,7 @@ SQLBraid는 공식 Agent Skill을 [`skills/sqlbraid/`](https://github.com/Clicki
 표준 `skills` CLI로 설치하세요.
 
 ```sh
-npx skills add Clickin/SQLBraid --skill sqlbraid
+pnpm dlx skills add Clickin/SQLBraid --skill sqlbraid
 ```
 
 이 스킬은 애플리케이션 개발용입니다. 기본 작업 원칙은 다음과 같습니다.

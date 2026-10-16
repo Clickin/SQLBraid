@@ -5,7 +5,7 @@
 SQLBraid 런타임 파사드, PostgreSQL 방언 패키지, `pg` 드라이버를 함께 설치하세요.
 
 ```bash
-npm install sqlbraid @sqlbraid/postgres pg
+pnpm add sqlbraid @sqlbraid/postgres pg
 ```
 
 ## 물리 클라이언트에 직접 연결하기
@@ -14,7 +14,8 @@ npm install sqlbraid @sqlbraid/postgres pg
 
 ```ts
 import { Client } from "pg";
-import { createPgDatabase, sql } from "sqlbraid/pg";
+import { createPgDatabase } from "@sqlbraid/postgres/pg";
+import { sql } from "@sqlbraid/postgres";
 
 interface UserRow {
   id: string;
@@ -41,7 +42,8 @@ try {
 
 ```ts
 import { Pool } from "pg";
-import { createPgPoolDatabase, sql } from "sqlbraid/pg";
+import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";
+import { sql } from "@sqlbraid/postgres";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = createPgPoolDatabase(pool);
@@ -72,7 +74,7 @@ SQLBraid는 모양만 보고 풀을 판별하지 않습니다. 직접 연결 팩
 애플리케이션이 `db.stream()`을 쓸 때만 `pg-cursor`를 설치하세요.
 
 ```bash
-npm install pg-cursor
+pnpm add pg-cursor
 ```
 
 일반 쿼리에는 이 피어 의존성이 필요 없습니다.
@@ -89,7 +91,7 @@ npm install pg-cursor
 기본 `pg` 프로필은 `pg-lossless-text`입니다. 드라이버가 텍스트를 줄 수 있으면 JSON과 날짜·시간 값을 텍스트로 유지합니다. `@sqlbraid/postgres`는 `typePolicyForProfile({ json, temporal })`과 변경할 수 없는 `representationProfiles` 설명 객체를 export합니다. 그래서 런타임과 코드 생성이 정확히 같은 정책을 쓸 수 있습니다.
 
 ```ts
-import { typePolicyForProfile } from "sqlbraid/pg";
+import { typePolicyForProfile } from "@sqlbraid/postgres/pg";
 import { generateModels } from "@sqlbraid/codegen";
 
 const typePolicy = typePolicyForProfile({ json: "text", temporal: "text" });

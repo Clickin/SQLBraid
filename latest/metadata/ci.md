@@ -7,7 +7,7 @@ Generated models are derived artifacts. Change the metadata snapshot or the conf
 Install the optional CLI before you run these commands:
 
 ```bash
-npm install --save-dev @sqlbraid/cli
+pnpm add --save-dev @sqlbraid/cli
 ```
 
 ```bash

@@ -2,53 +2,49 @@
 
 > Find the SQLBraid package that owns each concern.
 
-| Package                     | Responsibility                                                                                                                                               |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sqlbraid`                  | Canonical runtime facade; combined driver+dialect/query subpaths use matching adapters, while `/bun-sql` is a multi-dialect adapter with an explicit dialect |
-| `@sqlbraid/core`            | Public interfaces, Standard Schema-facing types, and rendered parameter metadata                                                                             |
-| `@sqlbraid/template`        | Tagged templates, directives, rendering, structural fragments, and `sql.bind`                                                                                |
-| `@sqlbraid/runtime`         | Execution, mapping, result-kind checks, transactions, streaming, and prepared shapes                                                                         |
-| `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg`, `/neon`, `/neon-http`, `/postgres-js` and `/pglite` adapters; `/inspector`                                             |
-| `@sqlbraid/mysql`           | MySQL dialect/TypePolicy; `/mysql2` adapter; `/inspector`                                                                                                    |
-| `@sqlbraid/sqlite`          | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, and `/d1` adapters; `/inspector`                                                      |
-| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` adapter; `/inspector`                                                                                                 |
-| `@sqlbraid/bun-sql`         | Bun.SQL adapter family with required user-selected PostgreSQL/MySQL/MariaDB/SQLite dialect                                                                   |
-| `@sqlbraid/oracle`          | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; `/inspector`                                                                             |
-| `@sqlbraid/mssql`           | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; `/inspector`                                                                          |
-| `@sqlbraid/compiler`        | TypeScript discovery and guarded-template lowering                                                                                                           |
-| `@sqlbraid/vite`            | Vite 8 pre-transform for guarded-template lowering with source maps                                                                                          |
-| `@sqlbraid/opentelemetry`   | Optional OpenTelemetry DB client spans and duration metrics through observers                                                                                |
-| `@sqlbraid/metadata`        | DB-fact snapshots, validation, identity, and drift                                                                                                           |
-| `@sqlbraid/migrate`         | Optional SQL migrations and startup checks; `/node` loader, `/vite` manifest plugin and `/drift` adapter                                                     |
-| `@sqlbraid/codegen`         | Metadata + TypePolicy to Row/Insert/Update declarations                                                                                                      |
-| `@sqlbraid/tooling`         | Shared config/workspace evidence and semantic indexes                                                                                                        |
-| `@sqlbraid/operations`      | Fingerprints and declaration manifests                                                                                                                       |
-| `@sqlbraid/cli`             | Optional codegen, inspect, diagnostics, drift and `migrate` commands                                                                                         |
-| `@sqlbraid/language-server` | Standard stdio LSP integration                                                                                                                               |
+| Package                     | Responsibility                                                                                                   |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `sqlbraid`                  | Database-neutral runtime facade; root interfaces and constructors, plus `sqlbraid/compiled`                      |
+| `@sqlbraid/core`            | Public interfaces, Standard Schema-facing types, and rendered parameter metadata                                 |
+| `@sqlbraid/template`        | Tagged templates, directives, rendering, structural fragments, and `sql.bind`                                    |
+| `@sqlbraid/runtime`         | Execution, mapping, result-kind checks, transactions, streaming, and prepared shapes                             |
+| `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg`, `/neon`, `/neon-http`, `/postgres-js` and `/pglite` adapters; `/inspector` |
+| `@sqlbraid/mysql`           | MySQL dialect/TypePolicy; `/mysql2` adapter; `/inspector`                                                        |
+| `@sqlbraid/sqlite`          | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, and `/d1` adapters; `/inspector`          |
+| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` adapter; `/inspector`                                                     |
+| `@sqlbraid/bun-sql`         | Bun.SQL adapter family with required user-selected PostgreSQL/MySQL/MariaDB/SQLite dialect                       |
+| `@sqlbraid/oracle`          | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; `/inspector`                                 |
+| `@sqlbraid/mssql`           | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; `/inspector`                              |
+| `@sqlbraid/compiler`        | TypeScript discovery and guarded-template lowering                                                               |
+| `@sqlbraid/vite`            | Vite 8 pre-transform for guarded-template lowering with source maps                                              |
+| `@sqlbraid/opentelemetry`   | Optional OpenTelemetry DB client spans and duration metrics through observers                                    |
+| `@sqlbraid/metadata`        | DB-fact snapshots, validation, identity, and drift                                                               |
+| `@sqlbraid/migrate`         | Optional SQL migrations and startup checks; `/node` loader, `/vite` manifest plugin and `/drift` adapter         |
+| `@sqlbraid/codegen`         | Metadata + TypePolicy to Row/Insert/Update declarations                                                          |
+| `@sqlbraid/tooling`         | Shared config/workspace evidence and semantic indexes                                                            |
+| `@sqlbraid/operations`      | Fingerprints and declaration manifests                                                                           |
+| `@sqlbraid/cli`             | Optional codegen, inspect, diagnostics, drift and `migrate` commands                                             |
+| `@sqlbraid/language-server` | Standard stdio LSP integration                                                                                   |
 
 `sqlbraid` installs only `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template` as dependencies.
-The seven dialect and adapter packages in the table are optional peers.
-Install the corresponding package explicitly before importing a dialect or adapter subpath.
-For example, `sqlbraid/pg` requires `@sqlbraid/postgres`, and `sqlbraid/node-sqlite` requires `@sqlbraid/sqlite`.
-All facade subpaths remain supported. Direct imports from `@sqlbraid/*` remain supported too.
+It has no dialect or adapter dependencies, including optional peers.
+Install each dialect or adapter package and external driver that your application uses.
+Import `sql` and dialect hints from the package root, and factories from its adapter subpath.
+Driver and dialect facade subpaths are removed in 2.0.0.
+All publishable first-party packages and the VS Code extension move together to `2.0.0`.
 
-Install `sqlbraid` in application code. Then use a subpath that combines a driver
-and a dialect:
-`sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
-`sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`
-or `sqlbraid/tedious`. For Bun.SQL, use the `sqlbraid/bun-sql` adapter, which
-supports many dialects. Import `sql` from the root of the selected dialect, and
-give that dialect explicitly:
+For Bun.SQL, use `@sqlbraid/bun-sql`. Import `sql` from the selected dialect
+root and give that dialect explicitly:
 
 For the Bun.SQL PostgreSQL example, install both the adapter and the dialect:
 
 ```bash
-npm install sqlbraid @sqlbraid/bun-sql @sqlbraid/postgres
+pnpm add sqlbraid @sqlbraid/bun-sql @sqlbraid/postgres
 ```
 
 ```ts
-import { createBunSqlDatabase } from "sqlbraid/bun-sql";
-import { sql } from "sqlbraid/postgres";
+import { createBunSqlDatabase } from "@sqlbraid/bun-sql";
+import { sql } from "@sqlbraid/postgres";
 
 const client = new Bun.SQL(process.env.DATABASE_URL!);
 const db = createBunSqlDatabase(client, { dialect: "postgres" });
@@ -56,16 +52,14 @@ const db = createBunSqlDatabase(client, { dialect: "postgres" });
 
 The `node:sqlite` adapter uses the module that is part of Node. It does not need a separate driver package. Install the other external drivers that your application uses.
 
-The root is database-neutral. It does not export an implicit `sql` tag. The
-dialect-only subpaths `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`,
-`sqlbraid/oracle` and `sqlbraid/mssql` are for custom adapters. The granular
-`@sqlbraid/*` packages stay supported for library authors and for deliberately
-narrower dependencies.
+The `sqlbraid` root is database-neutral and does not export an implicit `sql` tag.
+Dialect roots such as `@sqlbraid/postgres` also expose the interfaces for custom adapters.
 
-`sqlbraid/compiled` is an advanced entry point for the `capture` and
-`assertDirectiveCondition` helpers that the compiler generates. It is not an API
-for applications to write queries. It does not import the compiler. Use the same
-version for the compiler and the runtime.
+`sqlbraid/compiled` remains an advanced entry point for `capture` and
+`assertDirectiveCondition`. It is not an API for applications to write queries
+and does not import the compiler. The compiler now imports helpers from
+`@sqlbraid/template`. Install it as a direct runtime dependency for compiled queries.
+Use the same version for the compiler and runtime packages.
 
 The string array that you give to `capture` is SQL text, as with `sql.raw()`.
 Never build it from input. `capture` accepts only the template node kinds that
