@@ -7,7 +7,7 @@ This index belongs to the latest documentation snapshot at https://clickin.githu
 Assume ordinary SQL knowledge. Use these documents for SQLBraid-specific APIs, guarantees, limits, and database/driver behavior rather than generic SQL syntax.
 
 ## Start here
-- [SQLBraid](https://clickin.github.io/SQLBraid/latest/index.md): Write plain SQL in TypeScript, with type safety and no query builder.
+- [SQLBraid](https://clickin.github.io/SQLBraid/latest/index.md): A SQL-first data-access library for TypeScript.
 - [SQL tags and result kinds](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags.md): Declare what a SQLBraid statement returns without hiding the SQL.
 - [Safe binds](https://clickin.github.io/SQLBraid/latest/concepts/safe-binds.md): Keep values as driver parameters and make structural SQL explicit.
 - [Structural SQL fragments](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments.md): Make identifiers, lists, joins and trusted raw SQL visible in the API.
