@@ -1,0 +1,27 @@
+---
+title: SQLBraid
+description: A SQL-first data-access library for TypeScript.
+template: splash
+hero:
+  title: Write SQL directly in TypeScript.
+  tagline: A SQL-first data-access library. No query builder required.
+  actions:
+    - text: Get started
+      link: /SQLBraid/getting-started/sqlite/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/Clickin/SQLBraid
+      variant: minimal
+---
+
+import InteractivePreview from "../../components/InteractivePreview.astro";
+
+SQLBraid lets you write SQL inside TypeScript tagged templates. Values are passed as bound parameters, and MyBatis-style dynamic conditions live in SQL comments. Each query declares its result type or validation schema.
+
+## Try it
+
+Change the parameters and run the fixed query against an in-memory SQLite database in your browser.
+
+<InteractivePreview variant="compact" locale="en" />
+
+[Open the full interactive preview](/SQLBraid/interactive-preview/) to edit SQL and inspect the database schema.

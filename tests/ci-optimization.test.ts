@@ -73,7 +73,7 @@ test("CI planner fails open for unknown changes and selects driver-local lanes",
   });
   assert.ok(bulkDocs.db_matrix.includes("mariadb") && bulkDocs.db_matrix.includes("mssql"));
   assert.deepEqual(
-    planChanges(["website/src/content/docs/index.md"], { eventName: "pull_request", baseKnown: true }).db_matrix,
+    planChanges(["website/src/content/docs/index.mdx"], { eventName: "pull_request", baseKnown: true }).db_matrix,
     [],
   );
   const plan = planChanges(["website/index.md"], { eventName: "pull_request", baseKnown: true });

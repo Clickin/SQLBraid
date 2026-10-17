@@ -417,6 +417,48 @@ async function supportMatrix(browser, previewUrl) {
   }
 }
 
+async function landingDemo(browser, previewUrl) {
+  const page = await browser.newPage();
+  try {
+    for (const locale of ["en", "ko"]) {
+      const landingUrl = new URL(`${basePath}/${locale === "ko" ? "ko/" : ""}`, previewUrl);
+      await page.goto(landingUrl.href, { waitUntil: "networkidle" });
+      const preview = page.getByTestId("interactive-preview");
+      if (page.workers().length !== 0) throw new Error("Landing loaded SQLite before execution.");
+      if (await preview.getByTestId("preview-sql").count()) throw new Error("Landing exposes the raw SQL editor.");
+      const executeButton = preview.getByTestId("preview-braid-run");
+      const names = () =>
+        preview.locator("tbody tr").evaluateAll((rows) => rows.map((row) => row.cells[1]?.textContent).filter(Boolean));
+      const execute = async () => {
+        await executeButton.click();
+        await page.waitForFunction(() => !document.querySelector("[data-preview-braid-run]")?.disabled);
+        if (await preview.getByTestId("preview-error").isVisible()) {
+          throw new Error(await preview.getByTestId("preview-error").textContent());
+        }
+      };
+      await execute();
+      if (JSON.stringify(await names()) !== JSON.stringify(["Seoul Capital", "한빛증권"])) {
+        throw new Error("Landing default parameters returned incorrect accounts.");
+      }
+      await preview.getByTestId("preview-search").fill("' OR 1=1 --");
+      await execute();
+      if ((await names()).length !== 0) throw new Error("Landing search escaped its bound parameter.");
+      await preview.getByTestId("preview-search").fill("");
+      await preview.getByTestId("preview-currency").selectOption("");
+      await preview.getByTestId("preview-min-balance").fill("");
+      await execute();
+      if (
+        JSON.stringify(await names()) !== JSON.stringify(["Seoul Capital", "東京パートナーズ", "한빛증권", "푸른은행"])
+      ) {
+        throw new Error("Clearing landing filters failed to restore all accounts.");
+      }
+    }
+    console.log("Landing demo passed: EN/KO lazy SQLite, default parameters, bound search, cleared filters.");
+  } finally {
+    await page.close();
+  }
+}
+
 async function main() {
   let server;
   let fixtureServer;
@@ -452,6 +494,7 @@ async function main() {
     const certificationBundle = certification === undefined ? undefined : await buildBrowserCertificationBundle();
     const browser = await chromium.launch({ headless: true });
     try {
+      await landingDemo(browser, url);
       const sqliteWasmVersion = JSON.parse(
         await readFile(require.resolve("@sqlite.org/sqlite-wasm/package.json"), "utf8"),
       ).version;

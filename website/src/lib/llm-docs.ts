@@ -120,13 +120,14 @@ export function renderRawMarkdown(entry: CollectionEntry<"docs">, base = docsBas
       ? `\n> ${entry.data.description.trim()}\n`
       : "";
   let source = entry.body ?? "";
-  if (entry.id === "interactive-preview" || entry.id === "ko/interactive-preview") {
-    const renderedPreviewUrl = `https://clickin.github.io${base}/${entry.id}/`;
+  if (source.includes('import InteractivePreview from "')) {
+    const korean = entry.id === "ko" || entry.id.startsWith("ko/");
+    const renderedPreviewUrl = `https://clickin.github.io${base}/${korean ? "ko/" : ""}interactive-preview/`;
     source = source
       .replace(/^import InteractivePreview from "[^"]+";\n*/u, "")
       .replace(
-        "<InteractivePreview />",
-        entry.id.startsWith("ko/")
+        /<InteractivePreview\b[^>]*\/>/u,
+        korean
           ? `문서 사이트에서 렌더링된 [인터랙티브 미리보기](${renderedPreviewUrl})를 사용할 수 있습니다.`
           : `The rendered [interactive preview](${renderedPreviewUrl}) is available on the documentation site.`,
       );

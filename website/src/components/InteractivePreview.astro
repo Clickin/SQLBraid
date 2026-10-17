@@ -1,4 +1,45 @@
-<section class="sqlbraid-preview" data-sqlbraid-preview data-testid="interactive-preview">
+---
+interface Props {
+  variant?: "compact" | "full";
+  locale?: "en" | "ko";
+}
+
+const { variant = "full", locale = "en" } = Astro.props;
+const compact = variant === "compact";
+const ko = compact && locale === "ko";
+const Diagnostics = compact ? "details" : "div";
+const id = `preview-${crypto.randomUUID()}`;
+const labels = {
+  currency: ko ? "통화" : "Currency",
+  anyCurrency: ko ? "모든 통화" : "Any currency",
+  minimum: ko ? "최소 잔액" : "Minimum balance",
+  search: ko ? "계좌 이름에 포함된 문자열" : "Account name contains",
+  placeholder: ko ? "비우면 조건이 제거됩니다" : "Clear to remove the predicate",
+  run: ko ? "쿼리 실행" : compact ? "Run query" : "Render and run Braid",
+  ready: ko ? "파라미터를 바꾸고 쿼리를 실행해 보세요." : compact ? "Change the parameters and run the query." : "Ready. Change the controls and run the Braid query.",
+};
+const compactSource = [
+  "sql.rows`",
+  "  SELECT account_id, account_name, balance",
+  "  FROM finance_accounts",
+  "  /*@braid where*/",
+  '    /*@braid if ${currency !== ""} */',
+  "      AND currency = ${currency}",
+  "    /*@braid end*/",
+  "    /*@braid if ${minBalance !== null} */",
+  "      AND balance >= ${minBalance}",
+  "    /*@braid end*/",
+  "    /*@braid if ${search.trim().length > 0} */",
+  "      AND account_name LIKE ${`%${search.trim()}%`}",
+  "    /*@braid end*/",
+  "  /*@braid end*/",
+  "  ORDER BY balance DESC, account_id ASC;",
+  "`",
+].join("\n");
+---
+
+<section class:list={["sqlbraid-preview", { "preview-compact": compact }]} data-sqlbraid-preview data-variant={variant} data-locale={locale} data-testid="interactive-preview">
+  {!compact && (
   <div class="preview-heading">
     <div>
       <p class="preview-kicker">Live SQLBraid playground</p>
@@ -11,77 +52,83 @@
     </div>
     <span class="preview-badge">Braid · worker · :memory:</span>
   </div>
+  )}
 
   <div class="preview-braid-layout">
-    <section class="preview-panel" aria-labelledby="preview-braid-controls-title">
-      <h3 id="preview-braid-controls-title">Change the query</h3>
+    <section class="preview-panel" aria-labelledby={`${id}-controls`}>
+      <h3 id={`${id}-controls`}>{compact ? ko ? "파라미터" : "Parameters" : "Change the query"}</h3>
       <div class="preview-form-grid">
-        <label>
+        {!compact && <label>
           <span>SELECT projection</span>
           <select data-preview-projection data-testid="preview-projection">
             <option value="full">Full account row</option>
             <option value="compact">Compact account row</option>
           </select>
-        </label>
+        </label>}
         <label>
-          <span>Currency</span>
+          <span>{labels.currency}</span>
           <select data-preview-currency data-testid="preview-currency">
-            <option value="">Any currency</option>
+            <option value="">{labels.anyCurrency}</option>
             <option value="KRW" selected>KRW</option>
             <option value="JPY">JPY</option>
           </select>
         </label>
         <label>
-          <span>Minimum balance</span>
+          <span>{labels.minimum}</span>
           <input data-preview-min-balance data-testid="preview-min-balance" type="number" min="0" step="100000" value="1000000" />
         </label>
         <label>
-          <span>Account name contains</span>
-          <input data-preview-search data-testid="preview-search" type="text" maxlength="200" placeholder="Clear to remove the predicate" />
+          <span>{labels.search}</span>
+          <input data-preview-search data-testid="preview-search" type="text" maxlength="200" placeholder={labels.placeholder} />
         </label>
-        <label>
+        {!compact && <label>
           <span>ORDER BY</span>
           <select data-preview-order data-testid="preview-order">
             <option value="balance-desc" selected>balance DESC</option>
             <option value="account-id">account_id ASC</option>
           </select>
-        </label>
+        </label>}
       </div>
-      <div class="preview-controls" aria-label="Braid preview controls">
-        <button type="button" data-preview-braid-run data-testid="preview-braid-run">Render and run Braid</button>
-        <button type="button" class="preview-secondary" data-preview-braid-reset data-testid="preview-braid-reset">Reset query controls</button>
+      <div class="preview-controls" aria-label={ko ? "쿼리 실행" : "Braid preview controls"}>
+        <button type="button" data-preview-braid-run data-testid="preview-braid-run">{labels.run}</button>
+        {!compact && <button type="button" class="preview-secondary" data-preview-braid-reset data-testid="preview-braid-reset">Reset query controls</button>}
       </div>
       <p class="preview-hint">
-        Clear a filter to make its <code>@braid if</code> branch disappear. Projection and sort changes use structural fragments rather than value binds.
+        {compact
+          ? ko ? "값을 비우면 해당 조건이 제거됩니다. 값은 SQL에 합쳐지지 않고 파라미터로 바인딩됩니다." : "Clear a value to remove its condition. Values are bound as parameters, not inserted into SQL."
+          : <>Clear a filter to make its <code>@braid if</code> branch disappear. Projection and sort changes use structural fragments rather than value binds.</>}
       </p>
     </section>
 
-    <section class="preview-panel preview-source-panel" aria-labelledby="preview-braid-source-title">
-      <h3 id="preview-braid-source-title">Braid source</h3>
-      <pre><code data-preview-braid-source data-testid="preview-braid-source">Loading example…</code></pre>
+    <section class="preview-panel preview-source-panel" aria-labelledby={`${id}-source`}>
+      <h3 id={`${id}-source`}>{ko ? "SQL · 읽기 전용" : compact ? "SQL · read-only" : "Braid source"}</h3>
+      <pre><code data-preview-braid-source data-testid="preview-braid-source">{compact ? compactSource : "Loading example…"}</code></pre>
     </section>
   </div>
 
   <p class="preview-status" data-preview-status data-testid="preview-status" aria-live="polite">
-    Ready. Change the controls and run the Braid query.
+    {labels.ready}
   </p>
   <p class="preview-error" data-preview-error data-testid="preview-error" role="alert" hidden></p>
-  <p data-browser-ownership-status data-testid="browser-ownership-status" hidden></p>
+  {!compact && <p data-browser-ownership-status data-testid="browser-ownership-status" hidden></p>}
 
+  <Diagnostics>
+  {compact && <summary>{ko ? "실행된 SQL과 바인딩 값" : "Executed SQL and bound values"}</summary>}
   <div class="preview-grid">
     <div>
-      <h3>Rendered SQL</h3>
-      <pre data-preview-rendered data-testid="preview-rendered"><code>Run a query to see the statement sent to SQLite.</code></pre>
+      <h3>{ko ? "실행된 SQL" : "Rendered SQL"}</h3>
+      <pre data-preview-rendered data-testid="preview-rendered"><code>{ko ? "실행하면 SQLite에 전달된 SQL이 표시됩니다." : "Run a query to see the statement sent to SQLite."}</code></pre>
     </div>
     <div>
-      <h3>Bound parameters</h3>
+      <h3>{ko ? "바인딩된 파라미터" : "Bound parameters"}</h3>
       <pre data-preview-parameters data-testid="preview-parameters"><code>[]</code></pre>
-      <p class="preview-variant">Variant: <code data-preview-variant data-testid="preview-variant">not rendered</code></p>
+      {!compact && <p class="preview-variant">Variant: <code data-preview-variant data-testid="preview-variant">not rendered</code></p>}
     </div>
   </div>
+  </Diagnostics>
 
   <div class="preview-results">
-    <h3>Query results</h3>
+    <h3>{ko ? "조회 결과" : "Query results"}</h3>
     <p class="preview-command" data-preview-command data-testid="preview-command" hidden></p>
     <div class="preview-table-wrap">
       <table data-preview-table data-testid="preview-table">
@@ -91,6 +138,7 @@
     </div>
   </div>
 
+  {!compact && <>
   <details class="preview-schema" open>
     <summary>Seeded database schema</summary>
     <pre data-preview-schema-output data-testid="preview-schema-output"><code>finance_accounts (
@@ -102,17 +150,17 @@
 )</code></pre>
   </details>
 
-  <section class="preview-raw" aria-labelledby="preview-raw-title">
+  <section class="preview-raw" aria-labelledby={`${id}-raw`}>
     <div>
-      <h3 id="preview-raw-title">Raw SQL scratchpad</h3>
+      <h3 id={`${id}-raw`}>Raw SQL scratchpad</h3>
       <p>
         Want to prove the database itself is live? Edit this SQL directly. This path intentionally
         uses <code>sql.raw()</code> only inside the disposable browser database.
       </p>
     </div>
     <div class="preview-editor">
-      <label for="preview-sql">SQL statement</label>
-      <textarea id="preview-sql" data-preview-sql data-testid="preview-sql" rows="9" spellcheck="false">SELECT
+      <label for={`${id}-sql`}>SQL statement</label>
+      <textarea id={`${id}-sql`} data-preview-sql data-testid="preview-sql" rows="9" spellcheck="false">SELECT
   account_id,
   account_name,
   balance,
@@ -128,6 +176,7 @@ ORDER BY account_id;</textarea>
       <button type="button" data-browser-ownership-run data-testid="browser-ownership-run" hidden>Run browser ownership conformance</button>
     </div>
   </section>
+  </>}
 </section>
 
 <script>
@@ -186,8 +235,10 @@ ORDER BY account_id;</textarea>
 
   const roots = document.querySelectorAll<HTMLElement>("[data-sqlbraid-preview]");
   for (const root of roots) {
-    let worker = createPreviewWorker();
-    const ownershipWorker = new Worker(new URL("../workers/runtime-ownership.worker.ts", import.meta.url), { type: "module" });
+    const compact = root.dataset.variant === "compact";
+    const ko = compact && root.dataset.locale === "ko";
+    let worker: Worker | undefined;
+    const ownershipWorker = compact ? undefined : new Worker(new URL("../workers/runtime-ownership.worker.ts", import.meta.url), { type: "module" });
     const sqlInput = root.querySelector<HTMLTextAreaElement>("[data-preview-sql]");
     const runButton = root.querySelector<HTMLButtonElement>("[data-preview-run]");
     const braidRunButton = root.querySelector<HTMLButtonElement>("[data-preview-braid-run]");
@@ -210,15 +261,13 @@ ORDER BY account_id;</textarea>
     const table = root.querySelector<HTMLTableElement>("[data-preview-table]");
     const ownershipRun = root.querySelector<HTMLButtonElement>("[data-browser-ownership-run]");
     const ownershipStatus = root.querySelector<HTMLElement>("[data-browser-ownership-status]");
-    if (!sqlInput || !runButton || !braidRunButton || !braidResetButton || !projectionInput || !currencyInput
-      || !minimumInput || !searchInput || !orderInput || !source || !resetButton || !schemaButton || !status
-      || !error || !rendered || !parameters || !variant || !schemaOutput || !command || !table || !ownershipRun || !ownershipStatus) {
-      worker.terminate();
-      ownershipWorker.terminate();
+    if (!braidRunButton || !currencyInput || !minimumInput || !searchInput || !source || !status
+      || !error || !rendered || !parameters || !command || !table) {
+      ownershipWorker?.terminate();
       continue;
     }
 
-    source.textContent = braidSourceText;
+    if (!compact) source.textContent = braidSourceText;
 
     let timeoutId: number | undefined;
     const clearTimeout = (): void => {
@@ -226,17 +275,17 @@ ORDER BY account_id;</textarea>
       timeoutId = undefined;
     };
     const setBusy = (value: boolean): void => {
-      runButton.disabled = value;
+      if (runButton) runButton.disabled = value;
       braidRunButton.disabled = value;
-      schemaButton.disabled = value;
+      if (schemaButton) schemaButton.disabled = value;
     };
-    const seededSchema = schemaOutput.textContent;
+    const seededSchema = schemaOutput?.textContent ?? "";
     const clearResults = (): void => {
       table.tHead?.replaceChildren();
       table.tBodies[0]?.replaceChildren();
-      rendered.textContent = "No completed statement.";
+      rendered.textContent = ko ? "아직 실행된 SQL이 없습니다." : "No completed statement.";
       parameters.textContent = "[]";
-      variant.textContent = "not rendered";
+      if (variant) variant.textContent = "not rendered";
       command.hidden = true;
     };
 
@@ -266,7 +315,7 @@ ORDER BY account_id;</textarea>
         const tableRow = body.insertRow();
         const cell = tableRow.insertCell();
         cell.colSpan = Math.max(visibleColumns.length, 1);
-        cell.textContent = "No rows returned.";
+        cell.textContent = ko ? "조회된 행이 없습니다." : "No rows returned.";
       }
     };
 
@@ -275,53 +324,84 @@ ORDER BY account_id;</textarea>
       setBusy(false);
       const response = event.data;
       if (response.type === "error") {
-        status.textContent = `SQL error (${response.code}).`;
+        status.textContent = ko ? `SQL 오류 (${response.code}).` : `SQL error (${response.code}).`;
         error.hidden = false;
-        error.textContent = response.message;
+        const translatedErrors: Record<string, string> = {
+          "Choose a supported currency filter.": "지원되는 통화를 선택하세요.",
+          "Minimum balance must be a non-negative finite number or blank.": "최소 잔액에 0 이상의 유한한 숫자를 입력하거나 값을 비우세요.",
+          "Account-name search is limited to 200 characters.": "계좌 이름 검색어는 200자까지 입력할 수 있습니다.",
+        };
+        error.textContent = ko ? translatedErrors[response.message] ?? `쿼리를 실행하지 못했습니다: ${response.message}` : response.message;
         return;
       }
       error.hidden = true;
       error.textContent = "";
       if (response.type === "schema") {
         status.textContent = "Schema loaded.";
-        schemaOutput.textContent = JSON.stringify(response.tables, null, 2);
-        const details = schemaOutput.closest("details");
+        if (schemaOutput) schemaOutput.textContent = JSON.stringify(response.tables, null, 2);
+        const details = schemaOutput?.closest("details");
         if (details) details.open = true;
         return;
       }
       const count = response.kind === "rows"
         ? `${response.rowCount} row${response.rowCount === 1 ? "" : "s"} returned${response.truncated ? " (showing the first 1,000)." : "."}`
         : `Command completed${response.affectedRows === undefined ? "." : ` (${response.affectedRows} row${response.affectedRows === 1 ? "" : "s"} affected).`}`;
-      status.textContent = response.mode === "braid" ? `Braid rendered and executed. ${count}` : count;
+      status.textContent = ko
+        ? `쿼리를 실행했습니다. ${response.rowCount}개 행이 조회되었습니다${response.truncated ? " (최대 1,000개 표시)" : ""}.`
+        : compact ? count : response.mode === "braid" ? `Braid rendered and executed. ${count}` : count;
       rendered.textContent = response.sql;
       parameters.textContent = JSON.stringify(response.parameters, null, 2);
-      variant.textContent = response.mode === "braid" ? response.variantFingerprint || "base variant" : "raw SQL";
+      if (variant) variant.textContent = response.mode === "braid" ? response.variantFingerprint || "base variant" : "raw SQL";
       command.hidden = response.kind !== "command";
       command.textContent = response.kind === "command" ? "This statement changed the disposable database." : "";
       renderRows(response.rows, response.columns);
     };
 
     const attachWorker = (current: Worker): void => {
-      current.addEventListener("message", handleWorkerMessage);
+      current.addEventListener("message", (event: MessageEvent<PreviewResponse>) => {
+        if (worker === current) handleWorkerMessage(event);
+      });
       current.addEventListener("error", (event) => {
+        if (worker !== current) return;
         clearTimeout();
         setBusy(false);
-        status.textContent = "Worker failed.";
+        current.terminate();
+        worker = undefined;
+        status.textContent = ko ? "실행 워커에 오류가 발생했습니다." : "Worker failed.";
         error.hidden = false;
-        error.textContent = event.message || "The preview worker could not be loaded.";
+        error.textContent = ko ? `미리보기 워커를 불러오거나 실행하지 못했습니다.${event.message ? ` ${event.message}` : ""}` : event.message || "The preview worker could not be loaded.";
       });
     };
     const restartWorker = (): void => {
-      worker.terminate();
-      worker = createPreviewWorker();
-      attachWorker(worker);
+      worker?.terminate();
+      worker = undefined;
       clearResults();
-      schemaOutput.textContent = seededSchema;
+      if (schemaOutput) schemaOutput.textContent = seededSchema;
     };
 
-    attachWorker(worker);
+    const getWorker = (): Worker => {
+      if (!worker) {
+        worker = createPreviewWorker();
+        attachWorker(worker);
+      }
+      return worker;
+    };
 
-    ownershipWorker.addEventListener("message", (event: MessageEvent<{ readonly type: "success"; readonly checks: readonly string[] } | { readonly type: "error"; readonly code: string; readonly message: string }>) => {
+    const cleanup = (): void => {
+      clearTimeout();
+      worker?.terminate();
+      worker = undefined;
+      ownershipWorker?.terminate();
+      setBusy(false);
+    };
+    window.addEventListener("pagehide", cleanup);
+    document.addEventListener("astro:before-swap", () => {
+      cleanup();
+      window.removeEventListener("pagehide", cleanup);
+    }, { once: true });
+
+    ownershipWorker?.addEventListener("message", (event: MessageEvent<{ readonly type: "success"; readonly checks: readonly string[] } | { readonly type: "error"; readonly code: string; readonly message: string }>) => {
+      if (!ownershipStatus) return;
       if (event.data.type === "error") {
         ownershipStatus.hidden = false;
         delete ownershipStatus.dataset.checks;
@@ -333,7 +413,8 @@ ORDER BY account_id;</textarea>
       ownershipStatus.textContent = `Browser ownership conformance passed (${event.data.checks.length} checks).`;
     });
 
-    ownershipWorker.addEventListener("error", (event) => {
+    ownershipWorker?.addEventListener("error", (event) => {
+      if (!ownershipStatus) return;
       ownershipStatus.hidden = false;
       delete ownershipStatus.dataset.checks;
       ownershipStatus.textContent = `Browser ownership worker failed: ${event.message || "unknown error"}`;
@@ -345,9 +426,9 @@ ORDER BY account_id;</textarea>
         clearTimeout();
         restartWorker();
         setBusy(false);
-        status.textContent = "Query timed out; worker restarted and database reset to seeded data.";
+        status.textContent = ko ? "실행 시간이 초과되어 데이터베이스를 초기화했습니다. 다시 실행해 주세요." : "Query timed out; database reset to seeded data. Run again to restart the worker.";
         error.hidden = false;
-        error.textContent = "The SQL worker exceeded the 10-second preview limit.";
+        error.textContent = ko ? "SQL 실행이 미리보기 제한 시간인 10초를 초과했습니다." : "The SQL worker exceeded the 10-second preview limit.";
       }, 10_000);
     };
 
@@ -357,40 +438,41 @@ ORDER BY account_id;</textarea>
       setBusy(true);
       clearResults();
       startTimeout();
-      status.textContent = "Rendering Braid and running it in SQLite WASM…";
+      status.textContent = ko ? "SQLite WASM에서 쿼리를 실행하는 중…" : "Rendering Braid and running it in SQLite WASM…";
       error.hidden = true;
       error.textContent = "";
-      worker.postMessage({
+      getWorker().postMessage({
         type: "run-braid",
-        projection: projectionInput.value,
+        projection: projectionInput?.value ?? "compact",
         currency: currencyInput.value,
         minBalance: minimum,
         search: searchInput.value,
-        order: orderInput.value,
+        order: orderInput?.value ?? "balance-desc",
       });
     };
 
     braidRunButton.addEventListener("click", runBraid);
-    braidResetButton.addEventListener("click", () => {
-      projectionInput.value = "full";
+    braidResetButton?.addEventListener("click", () => {
+      if (projectionInput) projectionInput.value = "full";
       currencyInput.value = "KRW";
       minimumInput.value = "1000000";
       searchInput.value = "";
-      orderInput.value = "balance-desc";
+      if (orderInput) orderInput.value = "balance-desc";
       runBraid();
     });
 
-    runButton.addEventListener("click", () => {
+    runButton?.addEventListener("click", () => {
+      if (!sqlInput) return;
       setBusy(true);
       clearResults();
       startTimeout();
       status.textContent = "Running raw SQL in SQLite WASM…";
       error.hidden = true;
       error.textContent = "";
-      worker.postMessage({ type: "run", sql: sqlInput.value });
+      getWorker().postMessage({ type: "run", sql: sqlInput.value });
     });
 
-    resetButton.addEventListener("click", () => {
+    resetButton?.addEventListener("click", () => {
       clearTimeout();
       restartWorker();
       setBusy(false);
@@ -400,16 +482,17 @@ ORDER BY account_id;</textarea>
       command.hidden = true;
     });
 
-    schemaButton.addEventListener("click", () => {
+    schemaButton?.addEventListener("click", () => {
       setBusy(true);
       startTimeout();
       status.textContent = "Inspecting schema…";
       error.hidden = true;
       error.textContent = "";
-      worker.postMessage({ type: "schema" });
+      getWorker().postMessage({ type: "schema" });
     });
 
-    ownershipRun.addEventListener("click", () => {
+    ownershipRun?.addEventListener("click", () => {
+      if (!ownershipStatus || !ownershipWorker) return;
       ownershipStatus.hidden = false;
       ownershipStatus.textContent = "Running browser ownership conformance…";
       ownershipWorker.postMessage({ type: "run" });
@@ -418,6 +501,13 @@ ORDER BY account_id;</textarea>
 </script>
 
 <style>
+  .preview-compact .preview-braid-layout { margin-top: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
+  .preview-compact .preview-form-grid { grid-template-columns: 1fr; }
+  .preview-compact .preview-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .preview-compact .preview-grid h3 { font-size: 0.85rem; margin: 0 0 0.5rem; }
+  .preview-compact .preview-grid pre { max-height: 11rem; overflow: auto; }
+  .preview-compact .preview-source-panel pre { max-height: none; }
+  .preview-compact .preview-braid-layout > *, .preview-compact .preview-grid > * { min-width: 0; }
   .sqlbraid-preview { border: 1px solid var(--sl-color-gray-5); border-radius: 0.75rem; padding: 1.25rem; margin: 2rem 0; background: var(--sl-color-gray-7); }
   .preview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .preview-heading h2, .preview-heading p { margin: 0; }
@@ -460,5 +550,6 @@ ORDER BY account_id;</textarea>
     .preview-badge { display: inline-block; margin-top: 0.7rem; }
     .preview-controls button { flex: 1 1 100%; }
     .preview-braid-layout, .preview-grid { grid-template-columns: 1fr; }
+    .preview-compact .preview-braid-layout, .preview-compact .preview-grid { grid-template-columns: 1fr; }
   }
 </style>

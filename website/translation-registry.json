@@ -142,10 +142,10 @@
       "sourceDigest": "795051281db8b81929a07730ac0362cb8178093af421d9d00d2238a7418fa8a6"
     },
     {
-      "source": "website/src/content/docs/index.md",
-      "translation": "website/src/content/docs/ko/index.md",
-      "translationOf": "website/src/content/docs/index.md",
-      "sourceDigest": "76134d0e1d06baac49752441011272792e77737f879380f897b0f38a583d0828"
+      "source": "website/src/content/docs/index.mdx",
+      "translation": "website/src/content/docs/ko/index.mdx",
+      "translationOf": "website/src/content/docs/index.mdx",
+      "sourceDigest": "432051098634e27d8d03454783d12559771243a98801cd28b335362498a2b992"
     },
     {
       "source": "website/src/content/docs/interactive-preview.mdx",
