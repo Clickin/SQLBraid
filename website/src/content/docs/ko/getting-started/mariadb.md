@@ -24,9 +24,15 @@ const connection = await mariadb.createConnection({
   ...MARIADB_LOSSLESS_TEXT.connectionOptions,
 });
 const db = createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT });
-const users = await db.all(sql.rows<{ id: string; name: string }>`
-  SELECT id, name FROM users WHERE id = ${1}
-`);
+
+try {
+  const users = await db.all(sql.rows<{ id: string; name: string }>`
+    SELECT id, name FROM users WHERE id = ${1}
+  `);
+  console.log(users);
+} finally {
+  await connection.end();
+}
 ```
 
 방언은 `mysql`이 아니라 `mariadb`입니다. MariaDB 전용 문법은 SQL에 직접 씁니다. 현재 기능 검증 픽스처는 문서에 나온 `INSERT ... RETURNING`, `DELETE ... RETURNING`, `REPLACE ... RETURNING`, 시퀀스, CTE, JSON 함수를 다룹니다.

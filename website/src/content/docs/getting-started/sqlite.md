@@ -82,8 +82,9 @@ The output is a row array, such as `[{ id: "1", name: "Ada" }]`. The requested I
 The node:sqlite adapter renders the logical statement to text with `?`
 placeholders. Then it uses the documented `DatabaseSync.prepare(text)` and
 `StatementSync` APIs. Materialization and hint validation occur before the
-statement executes. When reuse is configured, the adapter owns it. SQLBraid
-does not call `SQLTagStore` through an undocumented callable path.
+statement executes. The adapter prepares the statement again for each call and
+reports the reuse strategy `simple`. SQLBraid does not call `SQLTagStore`
+through an undocumented callable path.
 
 ## 3. Add dynamic @braid and lower it
 

@@ -7,7 +7,7 @@
       "source": "website/src/content/docs/agents/cli.md",
       "translation": "website/src/content/docs/ko/agents/cli.md",
       "translationOf": "website/src/content/docs/agents/cli.md",
-      "sourceDigest": "75babe478867c2ae5070a6d4adde9d1d8c0a829061d7e9b28ff70d2c627e89b2"
+      "sourceDigest": "5f171bff21dbe306fe4fd32cc7d6a9b3db34523d6407f109bfb88de1f937738d"
     },
     {
       "source": "website/src/content/docs/agents/driver-author.md",
@@ -19,7 +19,7 @@
       "source": "website/src/content/docs/agents/lsp.md",
       "translation": "website/src/content/docs/ko/agents/lsp.md",
       "translationOf": "website/src/content/docs/agents/lsp.md",
-      "sourceDigest": "e3ba4b888d7dce3f95c8e399a60982fadd4bbd17718498c0af22c957d37a9b19"
+      "sourceDigest": "6dd626bd2c56d3a6cbbf41432439fd55c4577a66ebb6616dd06e78b746c95dc3"
     },
     {
       "source": "website/src/content/docs/agents/skill.md",
@@ -97,7 +97,7 @@
       "source": "website/src/content/docs/getting-started/mariadb.md",
       "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
       "translationOf": "website/src/content/docs/getting-started/mariadb.md",
-      "sourceDigest": "8b0216863897466470c2a074fe2ad136ebf2b2a365d0f4a359f1c68a1c941d8b"
+      "sourceDigest": "9f703a2ef69412b24dac5e167aab36707964e027b5bd77d039d395efe105b750"
     },
     {
       "source": "website/src/content/docs/getting-started/mssql.md",
@@ -133,7 +133,7 @@
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "26d942b78c03c0e57909323b4514ed9f7445395e49bbf6624e0ee351326c3b51"
+      "sourceDigest": "c60550c2d9967b3bcbcee17977eee3aeca58d592d0af1123fec040ed261ceac8"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",
@@ -157,13 +157,13 @@
       "source": "website/src/content/docs/metadata/ci.md",
       "translation": "website/src/content/docs/ko/metadata/ci.md",
       "translationOf": "website/src/content/docs/metadata/ci.md",
-      "sourceDigest": "4914b17650cca149757e1dcd7c5c9de3514fbc29ecb1742745d87c41d4b94afb"
+      "sourceDigest": "6717c422927b8367e1099772db0676a4f4427f30cce1d78c764a8509dd1882b8"
     },
     {
       "source": "website/src/content/docs/metadata/config.md",
       "translation": "website/src/content/docs/ko/metadata/config.md",
       "translationOf": "website/src/content/docs/metadata/config.md",
-      "sourceDigest": "d5849ccc3a39499941081cd5c56f25ff12640b9f9df32791baea2b38661090f0"
+      "sourceDigest": "9f0b6055a78477b73ea0c92ec8dd6e9860341927339c00a13227a4967ae72277"
     },
     {
       "source": "website/src/content/docs/metadata/inspectors.md",

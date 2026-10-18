@@ -15,9 +15,9 @@ When a standard language server is available, use the LSP features that it offer
 When LSP is unavailable, use the JSON inspection surface:
 
 ```sh
-sqlbraid inspect query --file <path> --line <1-based> --column <1-based> --json
-sqlbraid inspect symbol <name> --json
-sqlbraid inspect diagnostics --file <path> --json
+pnpm exec sqlbraid inspect query --file <path> --line <1-based> --column <1-based> --json
+pnpm exec sqlbraid inspect symbol <name> --json
+pnpm exec sqlbraid inspect diagnostics --file <path> --json
 ```
 
 The config is executable code. Run these commands from the project directory of a trusted repository. Discovery stops at the current directory, and a `--file` outside the current directory fails.
@@ -35,7 +35,7 @@ Do not replace explicit SQLBraid evidence with a stronger inference from general
 Generated model files are derived artifacts. Change the configuration, filters, overrides or source metadata. Run `sqlbraid codegen`. Then run:
 
 ```sh
-sqlbraid codegen --check
+pnpm exec sqlbraid codegen --check
 ```
 
 Do not edit generated models manually as the primary fix.

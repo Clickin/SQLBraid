@@ -12,8 +12,8 @@ pnpm add --save-dev @sqlbraid/cli
 ```
 
 ```bash
-sqlbraid codegen
-sqlbraid codegen --check
+pnpm exec sqlbraid codegen
+pnpm exec sqlbraid codegen --check
 ```
 
 A stale or missing output is a CI failure. Run the check after changes to the metadata or the config, and before packaging. If a build system needs the target status in a machine-readable format, use `--json`.

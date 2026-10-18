@@ -12,9 +12,9 @@ pnpm add --save-dev @sqlbraid/cli
 ```
 
 ```bash
-sqlbraid inspect query --file src/query.ts --line 8 --column 20 --json
-sqlbraid inspect symbol UsersRow --json
-sqlbraid inspect diagnostics --file src/query.ts --json
+pnpm exec sqlbraid inspect query --file src/query.ts --line 8 --column 20 --json
+pnpm exec sqlbraid inspect symbol UsersRow --json
+pnpm exec sqlbraid inspect diagnostics --file src/query.ts --json
 ```
 
 설정 파일은 실행 가능한 Node 코드이고, `inspect`는 찾은 설정 파일을 실행합니다. 그래서 `--file`이 있는 디렉터리에서 찾기 시작하고 현재 디렉터리에서 멈춥니다. 현재 디렉터리보다 위에 있는 설정 파일은 실행하지 않습니다. `--file`이 현재 디렉터리 밖에 있으면 명령은 종료 코드 2로 실패합니다. inspect 명령은 신뢰하는 저장소에서만 실행하세요.

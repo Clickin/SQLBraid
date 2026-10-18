@@ -29,10 +29,10 @@ export default defineConfig({
 설정 파일이 있는 프로젝트에서 다음 명령을 실행하세요.
 
 ```bash
-sqlbraid codegen
-sqlbraid codegen --config ./sqlbraid.config.mjs
-sqlbraid codegen --target main --check
-sqlbraid codegen --json
+pnpm exec sqlbraid codegen
+pnpm exec sqlbraid codegen --config ./sqlbraid.config.mjs
+pnpm exec sqlbraid codegen --target main --check
+pnpm exec sqlbraid codegen --json
 ```
 
 메타데이터와 출력 경로는 설정 파일 기준 상대 경로입니다.

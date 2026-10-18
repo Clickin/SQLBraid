@@ -137,16 +137,16 @@ If the factory fails before returning, the factory must clean up its acquired re
 The migrations directory and configured snapshot path are relative to the config file.
 
 ```sh
-sqlbraid migrate new create_users
-sqlbraid migrate new email_index --dialect postgres
-sqlbraid migrate status --json
-sqlbraid migrate status --check
-sqlbraid migrate up
-sqlbraid migrate baseline 001
-sqlbraid migrate repair
-sqlbraid migrate accept-schema
-sqlbraid migrate manifest --out-file ./src/migrations.mjs
-sqlbraid migrate snapshot
+pnpm exec sqlbraid migrate new create_users
+pnpm exec sqlbraid migrate new email_index --dialect postgres
+pnpm exec sqlbraid migrate status --json
+pnpm exec sqlbraid migrate status --check
+pnpm exec sqlbraid migrate up
+pnpm exec sqlbraid migrate baseline 001
+pnpm exec sqlbraid migrate repair
+pnpm exec sqlbraid migrate accept-schema
+pnpm exec sqlbraid migrate manifest --out-file ./src/migrations.mjs
+pnpm exec sqlbraid migrate snapshot
 ```
 
 `status` reports and exits with code 0. With `--check`, it exits with code 1 unless the report is `current`.

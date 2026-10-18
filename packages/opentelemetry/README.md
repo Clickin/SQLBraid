@@ -23,4 +23,4 @@ const db = createPgDatabase(client, {
 - **Setup**: Your application must configure an OpenTelemetry SDK and an exporter.
 - **Integration**: Register this observer last in the list. This keeps the span lifecycle correct.
 
-See the [OpenTelemetry integration guide](https://clickin.github.io/SQLBraid/runtime/opentelemetry/) and [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [OpenTelemetry integration guide](https://clickin.github.io/SQLBraid/latest/runtime/opentelemetry/) and [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

@@ -73,7 +73,7 @@ node src/index.ts
 
 출력은 `[{ id: "1", name: "Ada" }]` 같은 행 배열입니다. 요청한 ID는 드라이버가 바인딩하는 값이며, SQL 텍스트에 끼워 넣지 않습니다.
 
-node:sqlite 어댑터는 논리 문장을 `?` 플레이스홀더가 있는 텍스트로 렌더링한 뒤, 문서화된 `DatabaseSync.prepare(text)`와 `StatementSync` API를 씁니다. 변환과 힌트 검증은 문장 실행 전에 일어납니다. 재사용을 설정하면 어댑터가 맡습니다. SQLBraid는 문서화되지 않은 호출 경로로 `SQLTagStore`를 부르지 않습니다.
+node:sqlite 어댑터는 논리 문장을 `?` 플레이스홀더가 있는 텍스트로 렌더링한 뒤, 문서화된 `DatabaseSync.prepare(text)`와 `StatementSync` API를 씁니다. 변환과 힌트 검증은 문장 실행 전에 일어납니다. 어댑터는 호출할 때마다 문장을 다시 prepare하고 재사용 전략을 `simple`로 보고합니다. SQLBraid는 문서화되지 않은 호출 경로로 `SQLTagStore`를 부르지 않습니다.
 
 ## 3. 동적 @braid를 추가하고 변환하기
 

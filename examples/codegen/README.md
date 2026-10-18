@@ -26,7 +26,7 @@ Vite is optional. For one source file, compile the query before the
 application build:
 
 ```bash
-sqlbraid build --file src/queries.ts --out-file dist/queries.js
+pnpm exec sqlbraid build --file src/queries.ts --out-file dist/queries.js
 node dist/queries.js
 ```
 
