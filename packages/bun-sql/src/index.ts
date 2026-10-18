@@ -168,6 +168,8 @@ function nativeTemplate(rendered: RenderedStatement): TemplateStringsArray {
 
 function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): StatementBindingAdapter {
   const id = `bun-sql:${dialect}`;
+  // Bun.SQL SQLite prepares every statement again. The `prepare` option does not change that.
+  const effectiveReuse = dialect === "sqlite" || client.options?.prepare === false ? "simple" : "reuse";
   const describe = (
     statement: RenderedStatement,
     context: {
@@ -186,10 +188,7 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
     const description = createStatementBindingDescription(logical, context, {
       adapterId: id,
       transport: "native-value-template",
-      reuse: {
-        effective: client.options?.prepare === false ? "simple" : "reuse",
-        owner: "driver",
-      },
+      reuse: { effective: effectiveReuse, owner: "driver" },
       formatLiteral: (parameter) => literal(parameter.value, dialect),
     });
     describedStatements.set(description, logical);
@@ -222,7 +221,7 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
       const description = createBulkBindingDescription(logical, context, {
         adapterId: id,
         transport: "native-value-template",
-        reuse: { effective: client.options?.prepare === false ? "simple" : "reuse", owner: "driver" },
+        reuse: { effective: effectiveReuse, owner: "driver" },
         formatLiteral: (parameter) => literal(parameter.value, dialect),
       });
       describedBulks.set(description, bulk);

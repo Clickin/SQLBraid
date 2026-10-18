@@ -149,6 +149,10 @@ node build/index.js
 
 ### better-sqlite3
 
+```bash
+pnpm add @sqlbraid/sqlite better-sqlite3
+```
+
 ```ts
 import Database from "better-sqlite3";
 import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";
@@ -162,6 +166,10 @@ const rows = await db.all(sql.rows`SELECT 1 AS value`);
 SQLBraid는 문장마다 `safeIntegers(true)`를 적용해 정확한 INTEGER 값을 십진 문자열로 노출합니다. `iterate()`가 실제 스트림 기능입니다. 벌크는 `prepared-loop`를 씁니다. 네이티브 호출은 이벤트 루프를 막습니다. 문제가 되면 워커를 쓰세요. 루틴과 활성 취소는 지원하지 않습니다.
 
 ### libSQL
+
+```bash
+pnpm add @sqlbraid/sqlite @libsql/client
+```
 
 ```ts
 import { createClient } from "@libsql/client";

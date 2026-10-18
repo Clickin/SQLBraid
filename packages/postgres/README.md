@@ -10,6 +10,10 @@ Use this package through the `@sqlbraid/postgres/pg` adapter. Give it a connecte
 
 ### Neon (WebSocket)
 
+```sh
+pnpm add @sqlbraid/postgres @neondatabase/serverless
+```
+
 Use the `@sqlbraid/postgres/neon` adapter with a `Pool` or `Client` from `@neondatabase/serverless`. Set `neonConfig.webSocketConstructor` first. The adapter is tested against a local WebSocket proxy, so its support label is Compatible. The pooled Neon endpoint can reject named prepared statements, so `statement.prepare` is `guarded` for this adapter.
 
 ```ts
@@ -20,6 +24,10 @@ const db = createNeonPoolDatabase(new Pool({ connectionString: process.env.DATAB
 ```
 
 ### Neon (HTTP)
+
+```sh
+pnpm add @sqlbraid/postgres @neondatabase/serverless
+```
 
 Use the `@sqlbraid/postgres/neon-http` adapter with the `neon()` query function. Each statement is one HTTP request, so the adapter pins no connection. `db.tx()` and `db.session()` reject. `db.bulk()` runs in one server-side transaction through `sql.transaction()`.
 
@@ -34,6 +42,10 @@ const db = createNeonHttpDatabase(neon(process.env.DATABASE_URL!));
 - `statement.stream`, `statement.cancel` and routine calls are unsupported. An active `AbortSignal` is rejected before I/O.
 
 ### postgres.js
+
+```sh
+pnpm add @sqlbraid/postgres postgres
+```
 
 Use the `@sqlbraid/postgres/postgres-js` adapter with a [postgres.js](https://github.com/porsager/postgres) client. Spread `postgresJsOptions()` into the client options. The adapter checks them and rejects a client that does not use the lossless text parsers.
 
@@ -50,6 +62,10 @@ const db = createPostgresJsDatabase(postgres(process.env.DATABASE_URL!, postgres
 - A discarded lease runs `ROLLBACK` and `DISCARD ALL` before it returns to the pool, because postgres.js does not expose the physical connection.
 
 ### PGlite
+
+```sh
+pnpm add @sqlbraid/postgres @electric-sql/pglite
+```
 
 Use the `@sqlbraid/postgres/pglite` adapter with a [PGlite](https://pglite.dev) instance. PGlite is one connection in one process, so SQLBraid must own the instance. A direct call on it during `db.tx()` joins the open transaction.
 

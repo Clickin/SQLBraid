@@ -3,7 +3,7 @@
 This changelog covers SQLBraid package releases. The initial 1.0.0 release is coordinated; subsequent workspace packages may version and release independently. It
 summarizes durable compatibility and release information; detailed behavior
 and support evidence live in the [public API audit](docs/public-api-audit.md),
-[release notes](docs/SQLBraid_1.0.0_release_notes.md), and
+[current release notes](website/src/content/docs/release/notes.md), and
 [versioned support records](support/targets/).
 
 ## Unreleased
@@ -33,6 +33,9 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   All publishable first-party packages and the VS Code extension move together to `2.0.0`.
   This coordinated release replaces the earlier facade-only major version plan.
   Query APIs and runtime behavior remain unchanged.
+
+- Update installation instructions for explicit dialect and driver dependencies.
+  Mark the 1.0 release notes as historical and remove obsolete facade examples.
 
 ### Added
 
@@ -275,6 +278,6 @@ Initial pre-release SQL-first surface:
   browser playground;
 - exact-value representation policies and tuple-specific support evidence.
 
-See the current [SQLBraid 1.0.0 release notes](docs/SQLBraid_1.0.0_release_notes.md)
-for the stable surface and deliberate nonfeatures. Historical preparation does
+See the historical [SQLBraid 1.0.0 release notes](docs/SQLBraid_1.0.0_release_notes.md)
+for that release's surface and deliberate nonfeatures. Historical preparation does
 not authorize package, GitHub, Marketplace, or Pages publication.

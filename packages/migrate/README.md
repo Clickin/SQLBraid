@@ -3,17 +3,23 @@
 Versioned SQL migrations and explicit startup checks for SQLBraid.
 Migrations are SQL files only. The application supplies its `Database` and dialect. Creating a database does not run migrations.
 
+Install the migration package and CLI tools:
+
 ```sh
 pnpm add @sqlbraid/migrate
 pnpm add --save-dev @sqlbraid/cli
 ```
 
-Use `@sqlbraid/core` and `@sqlbraid/runtime` version `1.0.3` or later.
-MySQL and SQL Server migrations also need `@sqlbraid/mysql` or `@sqlbraid/mssql` version `1.0.3` or later.
-Earlier runtimes ignore the migration runner's simple-execution request.
-Earlier MySQL and SQL Server adapters do not implement the required execution paths.
-The CLI commands need `@sqlbraid/cli` and `@sqlbraid/tooling` version `1.0.3` or later.
-Optional schema drift needs `@sqlbraid/metadata` version `1.0.3` or later.
+Use SQLBraid 2.x packages, including `@sqlbraid/cli` and `@sqlbraid/tooling` for CLI commands.
+Optional schema drift needs the `@sqlbraid/metadata` peer dependency at version `^2.0.0`.
+
+Installing these tools does not configure the application's database.
+Install the matching dialect or adapter package and its driver for your application.
+The SQLite example below uses the built-in `node:sqlite` driver:
+
+```sh
+pnpm add @sqlbraid/sqlite
+```
 
 [SQLBraid documentation](https://clickin.github.io/SQLBraid/)
 

@@ -363,6 +363,24 @@ test("Bun.SQL exposes explicit unsupported streaming and routine paths", async (
   assert.equal(logs.length, 0, "unsupported operations must fail before statement I/O");
 });
 
+function bindingReuse(dialect: "sqlite" | "postgres", options?: { prepare?: boolean }) {
+  const client = Object.defineProperties(() => undefined, {
+    options: { value: options },
+    reserve: { value: () => undefined },
+  }) as unknown as BunSqlClient;
+  const provider = createBunSqlProvider(client, { dialect });
+  const statement = (dialect === "sqlite" ? sqlite : postgres).rows`SELECT ${1}`.render();
+  return provider.statementBinding.describe(statement, { dialectId: dialect, requestedReuse: "auto" }).reuse.effective;
+}
+
+test("Bun.SQL reports statement reuse only where Bun keeps native statements", () => {
+  // Bun.SQL SQLite prepares every statement again, with or without the `prepare` option.
+  assert.equal(bindingReuse("sqlite"), "simple");
+  assert.equal(bindingReuse("sqlite", { prepare: true }), "simple");
+  assert.equal(bindingReuse("postgres"), "reuse");
+  assert.equal(bindingReuse("postgres", { prepare: false }), "simple");
+});
+
 test("Bun.SQL SQLite uses one direct physical client and advertises canonical capabilities", async () => {
   const logs: Log[] = [];
   const db = createBunSqlDatabase(fakeClient(logs, { count: 0 }), { dialect: "sqlite" });

@@ -305,7 +305,7 @@ const result = await db.tx(async (tx) =>
 ## 요구 사항 및 상태
 
 - **런타임 요구 사항:** 런타임 패키지(`sqlbraid` 및 드라이버 어댑터)는 Node.js 16.20.2 이상을 지원합니다(각 DB 드라이버의 최소 요구 버전 적용, `node:sqlite` 및 CLI/빌드 도구는 Node.js 22.18 이상 필요). 활성 LTS 버전 사용을 권장합니다.
-- **현재 상태:** `sqlbraid` 2.x 및 `@sqlbraid/*` 1.x. 공개 API는 안정화되어 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
+- **현재 상태:** `sqlbraid` 및 `@sqlbraid/*` 2.x. 공개 API는 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
 
 ## 개발 방식 및 AI 활용
 

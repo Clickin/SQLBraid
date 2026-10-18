@@ -1,5 +1,9 @@
 # SQLBraid 1.0.0
 
+This document records the 1.0.0 release. It is not the installation guide for 2.0.
+For current installation and imports, see the [README](../README.md#quickstart-sqlite)
+and [current release notes](../website/src/content/docs/release/notes.md).
+
 **Write SQL and keep TypeScript, without a query-builder translation layer.**
 
 SQLBraid is a SQL-first data-access toolkit for TypeScript. You write ordinary SQL; SQLBraid adds safe value
@@ -11,40 +15,9 @@ vary by database and transport; see the support matrix for details.
 
 ## Install
 
-```sh
-pnpm add sqlbraid
-```
-
-The main `sqlbraid` package is a facade over the first-party runtime and driver packages. Import the subpath
-for the driver you use:
-
-```ts
-import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
-import { DatabaseSync } from "node:sqlite";
-
-interface UserRow {
-  id: string;
-  name: string;
-}
-
-const native = new DatabaseSync(":memory:");
-native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
-native.prepare("INSERT INTO users (name) VALUES (?)").run("Ada");
-
-const db = createNodeSqliteDatabase(native);
-
-const userId = 1;
-const users = await db.all(sql.rows<UserRow>`
-  SELECT id, name
-  FROM users
-  WHERE id = ${userId}
-`);
-
-// [{ id: "1", name: "Ada" }]
-```
-
-The built-in `node:sqlite` quickstart uses Node.js 22.18 or newer. Other adapters have their own certified
-runtime and driver combinations.
+Use the [versioned 1.0.0 installation guide](https://clickin.github.io/SQLBraid/v/1.0.0/getting-started/sqlite/)
+for that release. For 2.0, install each dialect package and external driver explicitly.
+The current [SQLite quickstart](../README.md#quickstart-sqlite) shows the package imports.
 
 ## What is in 1.0
 
@@ -84,9 +57,9 @@ retries, a universal prepared-statement cache, or a complete SQL semantic engine
 Support is based on specific database, driver, runtime, representation profile, and capability combinations. See the
 [versioned support records](https://github.com/Clickin/SQLBraid/tree/v1.0.0/support/targets) for the exact matrix.
 
-Convenience subpaths include `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
-`sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
-`sqlbraid/tedious`, and `sqlbraid/bun-sql`. Granular `@sqlbraid/*` packages are available for custom integrations.
+The 1.0 facade exposed convenience entry points for these adapters.
+Version 2.0 removes those entry points. Import dialect tags from the owning
+`@sqlbraid/*` package and factories from its adapter subpaths.
 
 ## Important limits in 1.0
 
@@ -123,9 +96,9 @@ A major part of the 1.0 work was making connection ownership and failure semanti
 The initial 1.0.0 release is coordinated across the first-party packages. After 1.0, packages can version and
 release independently.
 
-A PostgreSQL driver fix, for example, can release as `@sqlbraid/postgres@1.0.1` without forcing an unrelated
-Oracle, SQLite, CLI, or facade release. The `sqlbraid` facade depends on compatible `^1.0.0` first-party
-ranges and only needs a new version when its own public facade surface or compatibility contract changes.
+A PostgreSQL driver fix could release independently of unrelated adapters.
+In 1.x, the facade depended on compatible first-party package ranges.
+Version 2.0 removes dialect and adapter dependencies from the facade.
 
 The coordinated `v1.0.0` release remains the common starting point for the first stable package line.
 

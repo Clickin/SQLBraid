@@ -133,7 +133,7 @@
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "d8347299769de66c0ac8b296180553c86ad5028cd42ffeeab0ba4e121a0c356e"
+      "sourceDigest": "26d942b78c03c0e57909323b4514ed9f7445395e49bbf6624e0ee351326c3b51"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",

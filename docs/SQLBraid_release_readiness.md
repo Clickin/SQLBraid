@@ -122,9 +122,9 @@ SQLBraid does not require lockstep npm package versions.
 - A tag such as `v1.0.3` selects only the unscoped `sqlbraid` package.
 - A tag such as `postgres-v1.0.3` or `opentelemetry-v1.1.0` selects only that
   `@sqlbraid/*` package. Do not use `sqlbraid-v*` for the facade.
-- Thus, the unscoped `sqlbraid` facade needs a new version only when its own
-  public facade surface or its dependency rules change. Its semver dependency
-  ranges resolve ordinary compatible driver releases.
+- The unscoped `sqlbraid` facade needs a new version when its public surface or
+  dependency rules change. In 2.0, applications install dialect and adapter
+  packages directly. The facade does not resolve their versions.
 
 The existing `v1.0.0` and `v1.0.2` records keep their original coordinated
 package sets. Recovery uses their validated manifests. Do not move those tags

@@ -170,6 +170,10 @@ Node and the SQLite library that Node bundles.
 
 ### better-sqlite3
 
+```bash
+pnpm add @sqlbraid/sqlite better-sqlite3
+```
+
 ```ts
 import Database from "better-sqlite3";
 import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";
@@ -186,6 +190,10 @@ prepared loop. Native calls block the event loop. If that is a problem, use a
 worker. Routines and active cancellation are unsupported.
 
 ### libSQL
+
+```bash
+pnpm add @sqlbraid/sqlite @libsql/client
+```
 
 ```ts
 import { createClient } from "@libsql/client";

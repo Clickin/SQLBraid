@@ -313,7 +313,7 @@ Every example project is integration-tested in CI against the packed release tar
 ## Requirements & Status
 
 - **Runtime requirements:** Runtime packages (`sqlbraid` and driver adapters) support Node.js 16.20.2 or newer (subject to each driver's own minimum Node version; `node:sqlite` and CLI/build tools require Node.js 22.18+). Active LTS releases are recommended.
-- **Current status:** `sqlbraid` 2.x and `@sqlbraid/*` 1.x. The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
+- **Current status:** `sqlbraid` and `@sqlbraid/*` 2.x. The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
 
 ## Development and AI Usage
 
