@@ -73,7 +73,7 @@
       "source": "website/src/content/docs/concepts/routines.md",
       "translation": "website/src/content/docs/ko/concepts/routines.md",
       "translationOf": "website/src/content/docs/concepts/routines.md",
-      "sourceDigest": "ac6fd5e38256457272fd6d148b568f868a9c66ac05d72a5e45bca959d507a186"
+      "sourceDigest": "6c5956b3bd6ab5ff66c3afbe3d3f05fa8739a4ce6e1691be7fed86be7f05d38d"
     },
     {
       "source": "website/src/content/docs/concepts/safe-binds.md",
@@ -217,7 +217,7 @@
       "source": "website/src/content/docs/release/limitations.md",
       "translation": "website/src/content/docs/ko/release/limitations.md",
       "translationOf": "website/src/content/docs/release/limitations.md",
-      "sourceDigest": "a51704637a46828cd60c54b00300dfdad27fd62f403c54997516e57fa2c21cdb"
+      "sourceDigest": "05281935b4c5a303afa1237bffb386e81cb0fe40982d3ad273ac11bd512d2004"
     },
     {
       "source": "website/src/content/docs/release/notes.md",
@@ -229,7 +229,7 @@
       "source": "website/src/content/docs/release/roadmap.md",
       "translation": "website/src/content/docs/ko/release/roadmap.md",
       "translationOf": "website/src/content/docs/release/roadmap.md",
-      "sourceDigest": "73d7739a5ce68d77bdbec9be19d908a11ec42e676c7b0b26bc0a7cba6fd951c4"
+      "sourceDigest": "72bf82cf6d1a9852cbd25fe9639fc3ad5f24ccb59a1f79cd186bfb9ba18ad86c"
     },
     {
       "source": "website/src/content/docs/runtime/direct-pools.md",
@@ -247,7 +247,7 @@
       "source": "website/src/content/docs/runtime/opentelemetry.md",
       "translation": "website/src/content/docs/ko/runtime/opentelemetry.md",
       "translationOf": "website/src/content/docs/runtime/opentelemetry.md",
-      "sourceDigest": "946a5a3d0b479f4767f27d81c3ede3cb68937da8d5ccf60dbbef994dcce36740"
+      "sourceDigest": "d06358c3ccfd0a919f5dc982f3224f2a6fd8099e1581ca7215148fbf0c160714"
     },
     {
       "source": "website/src/content/docs/runtime/prepared.md",

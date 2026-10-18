@@ -39,7 +39,7 @@ const db = createPgPoolDatabase(pool, { observers: [telemetry] });
 - `db.batch()` 안의 각 작업
 - 논리적 작업 하나인 `db.bulk()`
 
-span은 `query:ready`나 `bulk:ready`에서 시작해, 짝이 맞는 mapped, result, error 이벤트에서 끝납니다. 트랜잭션 안의 쿼리도 일반 쿼리 span을 그대로 씁니다. 1.0.0은 트랜잭션이나 세이브포인트 span을 만들지 않습니다.
+span은 `query:ready`나 `bulk:ready`에서 시작해, 짝이 맞는 mapped, result, error 이벤트에서 끝납니다. 트랜잭션 안의 쿼리도 일반 쿼리 span을 그대로 씁니다. 2.0.0은 트랜잭션이나 세이브포인트 span을 만들지 않습니다.
 
 안정 지표 `db.client.operation.duration` 히스토그램은 초 단위와 권장 명시 경계값 `0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10`을 씁니다.
 
@@ -93,7 +93,7 @@ SQLBraid는 실제 통합 테스트 없이 `pg`, `mysql2` 같은 드라이버와
 
 ## 옵저버 순서와 배치
 
-옵저버는 등록한 순서대로 하나씩 실행됩니다. 1.0.0에서 지원하는 구성은 OpenTelemetry를 마지막에 등록하는 것입니다.
+옵저버는 등록한 순서대로 하나씩 실행됩니다. 2.0.0에서 지원하는 구성은 OpenTelemetry를 마지막에 등록하는 것입니다.
 
 ```ts
 const db = createPgPoolDatabase(pool, {
@@ -127,6 +127,6 @@ const db = createPgPoolDatabase(pool, {
 
 패키징된 [`examples/opentelemetry-slow-query`](https://github.com/Clickin/SQLBraid/tree/main/examples/opentelemetry-slow-query) 예제는 빠른 쿼리 하나와 결정적인 PostgreSQL `pg_sleep(...)`을 실행합니다. 그런 다음 경고와, SDK가 소유한 트레이스·지표 익스포터를 확인합니다.
 
-## 1.0.0의 명시적 한계
+## 2.0.0의 명시적 한계
 
-이 연동은 스트림 span, 트랜잭션·세이브포인트 span, 풀 지표, OTel Logs를 만들지 않습니다. 스트림에는 소비자의 반복과 정리가 포함되므로, 올바른 span 경계를 정하려면 별도의 설계가 필요합니다. 풀 수준 지표와 Logs는 1.0.0 범위 밖입니다.
+이 연동은 스트림 span, 트랜잭션·세이브포인트 span, 풀 지표, OTel Logs를 만들지 않습니다. 스트림에는 소비자의 반복과 정리가 포함되므로, 올바른 span 경계를 정하려면 별도의 설계가 필요합니다. 풀 수준 지표와 Logs는 2.0.0 범위 밖입니다.

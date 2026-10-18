@@ -77,7 +77,7 @@ try {
 
 ## Quickstart: PostgreSQL Connection Pool
 
-You create the connection pool with your driver (`pg`, `mysql2`, etc.) and pass it to SQLBraid. SQLBraid leases one connection per operation or pins a single connection across a transaction.
+You create the connection pool with your driver (for example `pg` or `mysql2`) and pass it to SQLBraid. SQLBraid leases one connection per operation or pins a single connection across a transaction.
 
 ```sh
 pnpm add sqlbraid @sqlbraid/postgres pg
@@ -144,7 +144,7 @@ When you use the compiler, install `@sqlbraid/template` as a direct runtime depe
 
 You declare the expected result kind for every query: `sql.rows<T>` for row sets, `sql.command` for `INSERT`/`UPDATE`/`DELETE`, and `sql.call` for stored procedures. SQLBraid throws if the database returns a different result kind than declared (see [SQL tags and result kinds](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/)). `sql.rows<T>` is a TypeScript type declaration; to validate row fields and values at runtime, pass a Standard Schema.
 
-**Standard Schema integration (Zod, Valibot, ArkType, etc.):**
+**Standard Schema integration (for example Zod, Valibot or ArkType):**
 
 Pass any Standard Schema object instead of a type argument to validate rows at runtime and transform values (for example, parsing numeric strings into `number` or `bigint`; see [Standard Schema result mapping](https://clickin.github.io/SQLBraid/latest/concepts/result-mapping/)).
 
@@ -211,7 +211,7 @@ See [Routine calls](https://clickin.github.io/SQLBraid/latest/concepts/routines/
 | ---------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | **Prisma**                   | Prisma schema & client API; `$queryRaw` for raw SQL         | Client API (skips `undefined` filters), or `Prisma.sql` / `Prisma.join` in raw SQL | Generated from schema; manual typing for raw queries                    | PostgreSQL, MySQL, SQLite, SQL Server, CockroachDB, MongoDB         |
 | **Drizzle**                  | TypeScript schema & query API; `sql` template for raw parts | Query API (`and(...)` skips `undefined`)                                           | Inferred from schema                                                    | PostgreSQL, MySQL, SQLite, SingleStore, Gel                         |
-| **Kysely**                   | Type-safe query builder; `sql` template for raw parts       | Builder method chaining (e.g., conditional `.where()`)                             | Inferred from DB interface                                              | PostgreSQL, MySQL, SQLite, SQL Server                               |
+| **Kysely**                   | Type-safe query builder; `sql` template for raw parts       | Builder method chaining (for example, conditional `.where()`)                      | Inferred from DB interface                                              | PostgreSQL, MySQL, SQLite, SQL Server                               |
 | **postgres.js / slonik**     | Raw SQL in tagged templates                                 | Fragment composition in JS (nested `sql`, `sql.fragment`, `sql.join`)              | Declared by you                                                         | PostgreSQL                                                          |
 | **pgtyped**                  | Raw SQL files with `:name` parameters                       | Not built-in (write `:name IS NULL OR ...` in SQL)                                 | Generated at build time against a live DB                               | PostgreSQL                                                          |
 | **sqlc** (TypeScript plugin) | Raw SQL files                                               | Not built-in (write `IS NULL OR ...` in SQL)                                       | Generated from SQL and schema files                                     | PostgreSQL (`pg`, `postgres`), MySQL (`mysql2`), SQLite (`sqlite3`) |

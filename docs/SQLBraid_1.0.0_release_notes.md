@@ -7,7 +7,7 @@ and [current release notes](../website/src/content/docs/release/notes.md).
 **Write SQL and keep TypeScript, without a query-builder translation layer.**
 
 SQLBraid is a SQL-first data-access toolkit for TypeScript. You write ordinary SQL; SQLBraid adds safe value
-binding, explicit result contracts, result mapping, connection and transaction ownership, and driver adapters
+binding, explicit result declarations, result mapping, connection and transaction ownership, and driver adapters
 without introducing a query-builder language between your application and the database.
 
 1.0.0 is the first stable release. The public API is now GA; driver capabilities
@@ -24,17 +24,17 @@ The current [SQLite quickstart](../README.md#quickstart-sqlite) shows the packag
 - **SQL-first tagged templates.** Ordinary `${value}` interpolation is always a value bind. Structural SQL requires
   explicit helpers such as `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, and deliberately unsafe
   `sql.raw`.
-- **Result contracts.** Queries declare row, command, call, or unknown result kinds. `all`, `one`,
-  `maybeOne`, `execute`, and `call` enforce those contracts.
+- **Result declarations.** Queries declare row, command, call, or unknown result kinds. `all`, `one`,
+  `maybeOne`, `execute`, and `call` enforce those declarations.
 - **Standard Schema result mapping.** Schemas can be attached to row queries or supplied per execution without
   turning SQLBraid into an ORM or relation-hydration layer.
-- **Physical connection ownership.** Direct executors and provider/lease pools share the same runtime contract.
+- **Physical connection ownership.** Direct executors and provider/lease pools follow the same runtime rules.
   `session()` pins a lease; `tx()` pins a transaction and uses savepoints for supported nested transactions.
 - **Prepared queries, streaming, bulk execution, cancellation, and routines.** These are exposed through one
   runtime API and enabled only where the selected adapter can provide the required semantics.
 - **Exact-value policy.** Exact integers and decimals are represented as strings; approximate IEEE values remain
   numbers. JSON, temporal values, binary values, containers, and driver-specific types have separate fidelity
-  contracts.
+  rules.
 - **Metadata and tooling.** Includes database inspection, deterministic model generation, CLI
   tooling, a stdio language server, Vite lowering, and an optional OpenTelemetry observer integration.
 - **Direct failure for unsupported features.** Unsupported behavior raises a SQLBraid error instead of being silently

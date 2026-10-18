@@ -123,7 +123,7 @@ If an adapter maps names to native statements, it must obey these rules:
 
 The supported boundary for SPI implementers is the executor, provider, lease and
 binding interfaces above, and the documented observer interfaces. Existing
-required members stay source-compatible across 1.x. To add a new driver
+required members stay source-compatible across 2.x. To add a new driver
 capability, use optional members or capabilities, or a separate extension
 interface. Do not add a new required method for one adapter. Keep these items:
 

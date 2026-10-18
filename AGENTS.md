@@ -623,7 +623,7 @@ Keep the dialect, driver, transaction-profile and execution-runtime concerns
 independent, as the public API audit and the release-readiness records document
 them. Node, Bun and Deno host compatibility is separate deployment evidence.
 
-The stable 1.x API supports standard transaction isolation and read-only
+The stable 2.x API supports standard transaction isolation and read-only
 options. If the options are omitted, the actual DB or session default stays.
 Richer transaction profiles and vendor-specific modes stay outside this API.
 

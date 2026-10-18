@@ -107,6 +107,6 @@ const refresh = sql.call({
 
 ## 루틴 스트리밍
 
-SQLBraid는 메모리로 모두 읽는 `db.call()`만 제공합니다. `callStream()`은 이름만 예약되어 있고 구현되지 않았습니다. 1.0.0에서 호출할 수 있는 API가 아닙니다. 행을 만드는 일반 쿼리와 집합 반환 함수에는 `db.stream(sql.rows(...))`를 쓰세요. 루틴 커서 결과 집합은 독립된 행 스트림이 아닙니다.
+SQLBraid는 메모리로 모두 읽는 `db.call()`만 제공합니다. `callStream()`은 이름만 예약되어 있고 구현되지 않았습니다. 호출할 수 있는 API가 아닙니다. 행을 만드는 일반 쿼리와 집합 반환 함수에는 `db.stream(sql.rows(...))`를 쓰세요. 루틴 커서 결과 집합은 독립된 행 스트림이 아닙니다.
 
 [SQL 태그와 결과 종류](/SQLBraid/concepts/sql-tags/), [스트리밍](/SQLBraid/runtime/streaming/), [진단](/SQLBraid/reference/errors/)도 함께 읽어 보세요.

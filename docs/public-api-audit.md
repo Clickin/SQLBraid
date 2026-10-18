@@ -407,7 +407,7 @@ of a server-side prepared cache.
 Applications usually get application-facing types, such as `Database`,
 `PreparedQuery`, `SqlTag`, query and result types and execution options, from
 SQLBraid factories. But exported structural types can also occur in user mocks
-and wrappers. During 1.x, do not remove their required members or change them
+and wrappers. During 2.x, do not remove their required members or change them
 incompatibly.
 
 An added required method on an exported interface is not automatically a
@@ -427,7 +427,7 @@ Third-party drivers and integrations can implement `QueryExecutor`,
 descriptions and contexts, and observer interfaces. This applies where the
 documentation calls the interface an implementation boundary.
 
-Existing required members stay source-compatible during 1.x. A new driver
+Existing required members stay source-compatible during 2.x. A new driver
 capability must normally use an optional SPI member or capability, or a
 separate extension interface. A new required SPI method for one adapter is not
 a compatible minor change. Unsupported capabilities stay explicit and come from
@@ -455,7 +455,7 @@ generic checks for transaction and savepoint support stay independent.
 ### Closed unions
 
 Exported closed and discriminated unions are sensitive to compatibility during
-1.x. A new member can break exhaustive TypeScript consumers. This includes
+2.x. A new member can break exhaustive TypeScript consumers. This includes
 `QueryResultKind`, `ParameterTransportKind`, `RequestedReuse`, `EffectiveReuse`,
 `ReuseOwner`, `RoutineParameterDirection`, `RoutineResultSource`,
 `BulkExecutionMode`, `QueryErrorStage`, `ExecutionEvent`,
@@ -486,7 +486,7 @@ order or other documented behavior.
 
 ### Product boundary
 
-The 1.x boundary does not promise these features:
+The 2.x boundary does not promise these features:
 
 - behavior that is complete in the JDBC sense;
 - iteration over arbitrary statements with many results;
