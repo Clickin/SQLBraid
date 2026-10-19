@@ -16,7 +16,7 @@ import {
   type ProjectEvidence,
 } from "./project.js";
 
-const EXTENSION_VERSION = "2.0.0";
+const EXTENSION_VERSION = "0.2.0";
 const LANGUAGE_SERVER_VERSION = "1.0.4";
 const CLI_VERSION = "1.1.0";
 const SERVER_ID = "sqlbraid-language-server";

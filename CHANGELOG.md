@@ -33,7 +33,7 @@ and [versioned support records](support/targets/).
   Only `sqlbraid` moves to `2.0.0`. Each other package keeps its own version line and is tagged and released on its own
   (`v2.0.0` for `sqlbraid`, `<package>-v<version>` for the others). Packages with changes in this release:
   `@sqlbraid/core` 1.1.0, `@sqlbraid/compiler` 1.1.0, `@sqlbraid/cli` 1.1.0, `@sqlbraid/migrate` 0.2.0,
-  `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/bun-sql` 1.0.3, `@sqlbraid/language-server` 1.0.4 and `@sqlbraid/mssql` 1.0.4.
+  `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/bun-sql` 1.0.3, `@sqlbraid/language-server` 1.0.4, `@sqlbraid/mssql` 1.0.4 and the VS Code extension 0.2.0.
   Query APIs and runtime behavior remain unchanged.
 
 - Update installation instructions for explicit dialect and driver dependencies.
