@@ -96,12 +96,13 @@ console.log(users);
 SQLBraid 컴파일러로 TypeScript 소스를 변환해 빌드한 뒤, 출력된 JavaScript를 실행하세요.
 
 ```bash
+pnpm add @sqlbraid/template
 pnpm add --save-dev @sqlbraid/cli
 pnpm exec sqlbraid build --file src/index.ts --out-file build/index.js
 node build/index.js
 ```
 
-컴파일러는 조건부 템플릿을 `build/index.js`로 변환합니다.
+컴파일러는 조건부 템플릿을 `build/index.js`로 변환합니다. 생성된 코드는 `@sqlbraid/template`에서 헬퍼를 import하므로, 애플리케이션에 직접 의존성으로 필요합니다.
 
 - `@braid where`는 하위 항목이 SQL을 출력할 때만 `WHERE`를 붙이고, 맨 앞의 `AND`나 `OR`를 지웁니다.
 - 조건이 조건부 값보다 먼저 평가됩니다. 비활성 분기의 식은 평가하지 않습니다.

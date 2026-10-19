@@ -66,7 +66,7 @@ Rules for the attributes:
 
 **This guarantee requires SQLBraid compiler lowering.** Plain JavaScript, `tsc` and runtime tag calls evaluate each `${...}` before they call the tag. To get lazy branches, do these steps:
 
-1. Install `@sqlbraid/cli`.
+1. Install `@sqlbraid/cli` as a development dependency and `@sqlbraid/template` as a dependency. The generated code imports its helpers from `@sqlbraid/template`.
 2. Build the guarded source with `pnpm exec sqlbraid build --file src/query.ts --out-file build/query.js`.
 3. Run the generated JavaScript.
 

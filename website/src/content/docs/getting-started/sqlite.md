@@ -107,12 +107,13 @@ console.log(users);
 Build the TypeScript source with the SQLBraid compiler lowering. Then run the emitted JavaScript:
 
 ```bash
+pnpm add @sqlbraid/template
 pnpm add --save-dev @sqlbraid/cli
 pnpm exec sqlbraid build --file src/index.ts --out-file build/index.js
 node build/index.js
 ```
 
-The compiler lowers the guarded template into `build/index.js`.
+The compiler lowers the guarded template into `build/index.js`. The generated code imports its helpers from `@sqlbraid/template`, so the application needs it as a direct dependency.
 
 - `@braid where` emits `WHERE` only when a child emits SQL. It removes a leading `AND` or `OR`.
 - The condition is evaluated before the guarded value. Expressions in inactive branches are not evaluated.
