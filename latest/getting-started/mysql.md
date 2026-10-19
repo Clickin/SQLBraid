@@ -2,15 +2,36 @@
 
 > Connect SQLBraid to mysql2 with either a direct connection or an explicit pool.
 
+This page needs Node `>=22.18.0` and Docker. Node 22.18.0 runs the TypeScript examples directly.
+
+## 1. Start a database
+
+Start a local MySQL server and create the table that the examples read. If you have a server with a `users` table, set `DATABASE_URL` and skip this step.
+
+```bash
+docker run -d --name braid-mysql -e MYSQL_ROOT_PASSWORD=password -e MYSQL_DATABASE=app -p 3306:3306 mysql:8.4
+until docker exec braid-mysql mysql -h 127.0.0.1 -uroot -ppassword -e "SELECT 1" >/dev/null 2>&1; do sleep 1; done
+docker exec -i braid-mysql mysql -uroot -ppassword app <<'SQL'
+CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL);
+INSERT INTO users (name) VALUES ('Ada'), ('Grace');
+SQL
+export DATABASE_URL=mysql://root:password@localhost:3306/app
+```
+
+## 2. Create a project
+
 Install the SQLBraid runtime facade, the MySQL dialect package and the `mysql2` driver together:
 
 ```bash
+mkdir braid-mysql-app && cd braid-mysql-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/mysql mysql2
+mkdir src
 ```
 
 ## Direct physical connection
 
-The direct factory accepts a connected `Connection` or `PoolConnection` object from `mysql2/promise`. It does not accept an unresolved Promise or a pool:
+The direct factory accepts a connected `Connection` or `PoolConnection` object from `mysql2/promise`. It does not accept an unresolved Promise or a pool. Save this code as `src/direct.ts` and run `node src/direct.ts`:
 
 ```ts
 import mysql from "mysql2/promise";
@@ -35,7 +56,7 @@ try {
 
 ## Pool-backed database
 
-Use the pool factory for `mysql2/promise` pools:
+Use the pool factory for `mysql2/promise` pools. Save this code as `src/pool.ts` and run `node src/pool.ts`:
 
 ```ts
 import mysql from "mysql2/promise";
@@ -57,6 +78,8 @@ try {
   await pool.end();
 }
 ```
+
+When you finish, stop the server with `docker rm -f braid-mysql`.
 
 The pool stays a resource of the application. SQLBraid acquires and releases a physical connection for each independent root operation. `db.tx(...)` pins one lease for the callback.
 

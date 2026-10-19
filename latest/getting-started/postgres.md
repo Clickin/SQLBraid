@@ -2,15 +2,38 @@
 
 > Connect SQLBraid to pg with either a direct client or an explicit pool.
 
+This page needs Node `>=22.18.0` and Docker. Node 22.18.0 runs the TypeScript examples directly.
+
+## 1. Start a database
+
+Start a local PostgreSQL server and create the two tables that the examples read. If you have a server with these tables, set `DATABASE_URL` and skip this step.
+
+```bash
+docker run -d --name braid-postgres -e POSTGRES_PASSWORD=braid -e POSTGRES_DB=braid -p 5432:5432 postgres:17
+until docker exec braid-postgres psql -h 127.0.0.1 -U postgres -d braid -c "SELECT 1" >/dev/null 2>&1; do sleep 1; done
+docker exec -i braid-postgres psql -U postgres -d braid <<'SQL'
+CREATE TABLE users (id serial PRIMARY KEY, name text NOT NULL);
+INSERT INTO users (name) VALUES ('Ada'), ('Grace');
+CREATE TABLE accounts (id serial PRIMARY KEY, email text NOT NULL);
+INSERT INTO accounts (email) VALUES ('ada@example.com');
+SQL
+export DATABASE_URL=postgres://postgres:braid@localhost:5432/braid
+```
+
+## 2. Create a project
+
 Install the SQLBraid runtime facade, the PostgreSQL dialect package and the `pg` driver together:
 
 ```bash
+mkdir braid-postgres-app && cd braid-postgres-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/postgres pg
+mkdir src
 ```
 
 ## Direct physical client
 
-A direct factory accepts a connected `pg.Client` or `pg.PoolClient`. It does not accept a `pg.Pool`:
+A direct factory accepts a connected `pg.Client` or `pg.PoolClient`. It does not accept a `pg.Pool`. Save this code as `src/direct.ts` and run `node src/direct.ts`:
 
 ```ts
 import { Client } from "pg";
@@ -38,7 +61,7 @@ try {
 
 ## Pool-backed database
 
-Use the pool factory when the application owns a `pg.Pool`:
+Use the pool factory when the application owns a `pg.Pool`. Save this code as `src/pool.ts` and run `node src/pool.ts`:
 
 ```ts
 import { Pool } from "pg";
@@ -58,6 +81,8 @@ try {
   await pool.end();
 }
 ```
+
+When you finish, stop the server with `docker rm -f braid-postgres`.
 
 A pooled root operation does these steps: it acquires one connection lease, does its physical I/O, releases the lease and then maps the materialized results. A transaction is the explicit boundary that pins a connection. Inside a transaction, use its callback handle for each operation. The application owns the shutdown of the pool.
 

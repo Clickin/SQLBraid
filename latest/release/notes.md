@@ -27,7 +27,7 @@ It has no dialect or adapter dependencies, including optional peers.
 - Replace all driver and dialect facade imports. The old subpaths are removed, with no compatibility aliases.
 - Query APIs and runtime behavior remain unchanged.
 
-## What 1.0.0 includes
+## What the stable interfaces include
 
 - SQL-first templates, safe value binds and the explicit result kinds `rows`,
   `command`, `call` and `unknown`;
@@ -76,7 +76,7 @@ transactions.
   reliably.
 - SQLite `db.call()` / `routine.call` is unsupported. This does not restrict
   ordinary SQLite SQL functions or extensions.
-- `callStream()` is reserved and not implemented. It is not a 1.0.0 API that you
+- `callStream()` is reserved and not implemented. It is not an API that you
   can call.
 
 Read the [capability limitations](/SQLBraid/latest/release/limitations.md). They include

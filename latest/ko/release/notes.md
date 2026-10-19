@@ -25,7 +25,7 @@
 - 모든 드라이버·방언 파사드 import를 바꾸세요. 이전 하위 경로는 호환 별칭 없이 제거됩니다.
 - 쿼리 API와 런타임 동작은 그대로 유지합니다.
 
-## 1.0.0에 포함된 것
+## 안정 인터페이스에 포함된 것
 
 - SQL 중심 템플릿, 안전한 값 바인딩, 명시적인 결과 종류 `rows`, `command`, `call`, `unknown`
 - 범위가 제한된 `@braid` 지시어와 명시적인 구조 조각
@@ -52,7 +52,7 @@
 
 - MySQL/mysql2는 `CALL`이 출력하는 서로 다른 결과 집합을 지원합니다. OUT·INOUT 설명은 전달 행을 확실히 식별할 수 없어 지원하지 않습니다.
 - SQLite의 `db.call()` / `routine.call`은 지원하지 않습니다. 일반 SQLite SQL 함수나 확장을 제한하는 것은 아닙니다.
-- `callStream()`은 이름만 예약되어 있고 구현되지 않았습니다. 1.0.0에서 호출할 수 있는 API가 아닙니다.
+- `callStream()`은 이름만 예약되어 있고 구현되지 않았습니다. 호출할 수 있는 API가 아닙니다.
 
 [기능 제한 사항](/SQLBraid/latest/release/limitations.md)을 보세요. 예를 들어 Bun 1.3.14의 MySQL과 MariaDB는 명시적인 `readOnly` 불리언 값을 둘 다 거부합니다. 옵션을 생략하면 네이티브 세션 기본값이 유지됩니다. Bun.SQL PostgreSQL은 다릅니다.
 
