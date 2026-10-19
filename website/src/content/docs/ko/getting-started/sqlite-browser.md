@@ -7,21 +7,36 @@ SQLBraid에서 SQLite는 하나의 방언입니다. 실행 드라이버와 런�
 
 ## SQLite WASM
 
+이 예제에는 Node `>=22.18.0`이 필요하며 Node에서 실행합니다. 브라우저 애플리케이션은 같은 `sqlite3`와 `oo1.DB` 객체를 만듭니다.
+
 브라우저나 워커 리소스를 가진 애플리케이션에 SQLBraid 런타임 파사드, SQLite 패키지, 공식 WASM 런타임을 함께 설치하세요.
 
 ```bash
+mkdir braid-wasm-app && cd braid-wasm-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/sqlite @sqlite.org/sqlite-wasm
+mkdir src
 ```
 
-현재 realm의 OO1 스타일 객체로 직접 연결 데이터베이스를 하나 만드세요.
+현재 realm의 OO1 스타일 객체로 직접 연결 데이터베이스를 하나 만드세요. 이 코드를 `src/index.ts`로 저장하고 `node src/index.ts`로 실행하세요.
 
 ```ts
+import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
 import { sql } from "@sqlbraid/sqlite";
 
+const sqlite3 = await sqlite3InitModule();
+const wasmDatabase = new sqlite3.oo1.DB(":memory:");
+wasmDatabase.exec("CREATE TABLE account (id INTEGER PRIMARY KEY, email TEXT NOT NULL)");
+wasmDatabase.exec("INSERT INTO account (email) VALUES ('ada@example.com')");
+
 const db = createSqliteWasmDatabase(wasmDatabase, { sqlite3 });
-const rows = await db.all(sql.rows<{ id: string }>`SELECT id FROM account`);
+const rows = await db.all(sql.rows<{ id: string; email: string }>`SELECT id, email FROM account`);
+console.log(rows);
+wasmDatabase.close();
 ```
+
+출력은 `[{ id: '1', email: 'ada@example.com' }]`입니다.
 
 INTEGER 저장 값은 정규 십진 문자열로 노출됩니다. WASM 어댑터는 숫자 값으로 추측하지 않고, 네이티브 열 타입과 `sqlite3_column_int64`를 씁니다. 정수 값을 가진 REAL은 `number`로 남습니다. 네이티브 bigint는 내부 전송 세부 사항이며, 공개 정수 모드가 아닙니다. D1은 별도의 guarded 프로필입니다. 안전한 범위의 정수 JavaScript Number는 문자열이 되고, 범위를 벗어난 값은 반올림하지 않고 미지원으로 처리합니다.
 
@@ -36,19 +51,60 @@ INTEGER 저장 값은 정규 십진 문자열로 노출됩니다. WASM 어댑터
 
 ## Cloudflare D1
 
-파사드와 SQLite 패키지를 설치하세요. D1에는 WASM 런타임이 필요 없습니다.
+이 예제에는 Node `>=22.18.0`이 필요하며, 로컬 D1 데이터베이스로 Worker를 실행합니다.
+
+파사드와 SQLite 패키지를 설치하세요. D1에는 WASM 런타임이 필요 없습니다. Wrangler가 Worker를 로컬에서 실행합니다.
 
 ```bash
+mkdir braid-d1-app && cd braid-d1-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/sqlite
+pnpm add --save-dev wrangler
+mkdir src
 ```
 
-D1도 SQLite입니다. 구조적 바인딩 인터페이스를 쓰므로 런타임에 Cloudflare 타입 패키지가 필요 없습니다.
+이 설정을 `wrangler.jsonc`로 저장하세요.
+
+```jsonc
+{
+  "name": "braid-d1-app",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "d1_databases": [{ "binding": "DB", "database_name": "braid", "database_id": "local" }],
+}
+```
+
+D1도 SQLite입니다. 구조적 바인딩 인터페이스를 쓰므로 런타임에 Cloudflare 타입 패키지가 필요 없습니다. 이 Worker를 `src/index.ts`로 저장하세요.
 
 ```ts
 import { createD1Database } from "@sqlbraid/sqlite/d1";
+import { sql } from "@sqlbraid/sqlite";
 
-const db = createD1Database(env.DB);
+interface Env {
+  DB: Parameters<typeof createD1Database>[0];
+}
+
+export default {
+  async fetch(_request: Request, env: Env): Promise<Response> {
+    const db = createD1Database(env.DB);
+    const rows = await db.all(sql.rows<{ id: string; email: string }>`SELECT id, email FROM account`);
+    return Response.json(rows);
+  },
+};
 ```
+
+로컬 테이블을 만들고 Worker를 시작한 다음, 다른 터미널에서 요청하세요.
+
+```bash
+pnpm exec wrangler d1 execute braid --local --command "CREATE TABLE account (id INTEGER PRIMARY KEY, email TEXT NOT NULL); INSERT INTO account (email) VALUES ('ada@example.com');"
+pnpm exec wrangler dev
+```
+
+```bash
+curl http://localhost:8787
+```
+
+응답은 `[{"id":"1","email":"ada@example.com"}]`입니다.
 
 D1은 타입 정보가 없는 JavaScript 숫자를 노출합니다. guarded 프로필은 안전한 범위를 벗어난 정수 숫자를 거부합니다. 범위를 벗어난 정수 값의 REAL도 거부합니다. 공개 결과 API로는 반올림된 INTEGER 값과 구별할 수 없기 때문입니다. 완전한 int64나 정확한 소수 출력을 약속하지 않습니다. API가 `sqlite_version()`을 막기 때문에 `db.environment()`의 서버 버전은 알 수 없음으로 남습니다. Worker 호환성 날짜는 데이터베이스 버전이 아닙니다.
 

@@ -9,22 +9,37 @@ Neither path changes the SQLBraid query rules.
 
 ## SQLite WASM
 
+This example needs Node `>=22.18.0`. It runs in Node. A browser application creates the same `sqlite3` and `oo1.DB` objects.
+
 Install the SQLBraid runtime facade, the SQLite package and the official WASM
 runtime in the application that owns the browser or worker resource:
 
 ```bash
+mkdir braid-wasm-app && cd braid-wasm-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/sqlite @sqlite.org/sqlite-wasm
+mkdir src
 ```
 
-Create one direct database from the OO1-style object in the current realm:
+Create one direct database from the OO1-style object in the current realm. Save this code as `src/index.ts` and run `node src/index.ts`:
 
 ```ts
+import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
 import { sql } from "@sqlbraid/sqlite";
 
+const sqlite3 = await sqlite3InitModule();
+const wasmDatabase = new sqlite3.oo1.DB(":memory:");
+wasmDatabase.exec("CREATE TABLE account (id INTEGER PRIMARY KEY, email TEXT NOT NULL)");
+wasmDatabase.exec("INSERT INTO account (email) VALUES ('ada@example.com')");
+
 const db = createSqliteWasmDatabase(wasmDatabase, { sqlite3 });
-const rows = await db.all(sql.rows<{ id: string }>`SELECT id FROM account`);
+const rows = await db.all(sql.rows<{ id: string; email: string }>`SELECT id, email FROM account`);
+console.log(rows);
+wasmDatabase.close();
 ```
+
+The output is `[{ id: '1', email: 'ada@example.com' }]`.
 
 INTEGER storage is exposed as a canonical decimal string. The WASM adapter uses
 native column types and `sqlite3_column_int64`. It does not guess from the
@@ -46,20 +61,61 @@ incomplete async-context polyfill.
 
 ## Cloudflare D1
 
-Install the facade and SQLite package. D1 does not need the WASM runtime:
+This example needs Node `>=22.18.0`. It runs a Worker with a local D1 database.
+
+Install the facade and SQLite package. D1 does not need the WASM runtime. Wrangler runs the Worker locally:
 
 ```bash
+mkdir braid-d1-app && cd braid-d1-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/sqlite
+pnpm add --save-dev wrangler
+mkdir src
+```
+
+Save this configuration as `wrangler.jsonc`:
+
+```jsonc
+{
+  "name": "braid-d1-app",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "d1_databases": [{ "binding": "DB", "database_name": "braid", "database_id": "local" }],
+}
 ```
 
 D1 stays SQLite. It uses a structural binding interface. Thus, the package does
-not need a Cloudflare type package at runtime:
+not need a Cloudflare type package at runtime. Save this Worker as `src/index.ts`:
 
 ```ts
 import { createD1Database } from "@sqlbraid/sqlite/d1";
+import { sql } from "@sqlbraid/sqlite";
 
-const db = createD1Database(env.DB);
+interface Env {
+  DB: Parameters<typeof createD1Database>[0];
+}
+
+export default {
+  async fetch(_request: Request, env: Env): Promise<Response> {
+    const db = createD1Database(env.DB);
+    const rows = await db.all(sql.rows<{ id: string; email: string }>`SELECT id, email FROM account`);
+    return Response.json(rows);
+  },
+};
 ```
+
+Create the local table, start the Worker and request it from a second terminal:
+
+```bash
+pnpm exec wrangler d1 execute braid --local --command "CREATE TABLE account (id INTEGER PRIMARY KEY, email TEXT NOT NULL); INSERT INTO account (email) VALUES ('ada@example.com');"
+pnpm exec wrangler dev
+```
+
+```bash
+curl http://localhost:8787
+```
+
+The response is `[{"id":"1","email":"ada@example.com"}]`.
 
 D1 exposes untyped JavaScript numbers. Its guarded profile rejects integral
 numbers outside the safe range. This also excludes integral REAL values outside
