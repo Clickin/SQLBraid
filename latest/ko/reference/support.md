@@ -1326,7 +1326,7 @@ Oracle의 guarded 조건 `oracle.connection-break`는 협력적인 방식입니�
 
 ## 드라이버·런타임 경계
 
-공식 루트는 PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server를 다룹니다. 프로토콜과 정리 동작은 드라이버 하위 경로가 맡습니다. `pg`, `mysql2`, MariaDB Connector/Node.js, `node:sqlite`, SQLite WASM, D1, node-oracledb Thin, Tedious가 있습니다.
+공식 루트는 PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server를 다룹니다. 프로토콜과 정리 동작은 드라이버 하위 경로가 맡습니다. `pg`, postgres.js, Neon, PGlite, `mysql2`, MariaDB Connector/Node.js, `node:sqlite`, `better-sqlite3`, libSQL, SQLite WASM, D1, node-oracledb Thin, Tedious가 있습니다.
 
 Bun은 SQL 어댑터 계열 하나를 쓰며, 사용자가 `dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`를 고릅니다. 커넥션에서 SQL 의미를 추론하지 않습니다.
 

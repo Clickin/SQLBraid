@@ -96,9 +96,24 @@
 </thead>
 <tbody>
 <tr>
-<td>PostgreSQL / <code dir="auto">pg</code></td>
+<td>PostgreSQL / <code dir="auto">pg</code>, Neon(WebSocket)</td>
 <td><code dir="auto">pg-cursor</code> 묶음 읽기</td>
 <td>선택 사항인 피어 의존성이며, 없으면 <code dir="auto">BRAID_STREAM_UNSUPPORTED</code>. 중단 시 물리 클라이언트 취소를 쓰고, 필요하면 리스를 폐기합니다.</td>
+</tr>
+<tr>
+<td>PostgreSQL / postgres.js</td>
+<td>예약한 연결의 <code dir="auto">cursor(batchSize)</code></td>
+<td>일찍 빠져나오면 커서를 닫습니다. 활성 신호는 <code dir="auto">BRAID_CANCEL_UNSUPPORTED</code>로 실패합니다.</td>
+</tr>
+<tr>
+<td>PostgreSQL / Neon HTTP</td>
+<td>없음</td>
+<td><code dir="auto">BRAID_STREAM_UNSUPPORTED</code>. 응답이 한 번에 오므로, 행을 버퍼링해 스트림을 흉내 내지 마세요.</td>
+</tr>
+<tr>
+<td>PostgreSQL / PGlite</td>
+<td>없음</td>
+<td><code dir="auto">BRAID_STREAM_UNSUPPORTED</code>. 점진적 결과 프로토콜이 없습니다.</td>
 </tr>
 <tr>
 <td>MySQL / <code dir="auto">mysql2</code></td>

@@ -105,9 +105,24 @@ not cancellation.</p>
 </thead>
 <tbody>
 <tr>
-<td>PostgreSQL / <code dir="auto">pg</code></td>
+<td>PostgreSQL / <code dir="auto">pg</code> and Neon (WebSocket)</td>
 <td><code dir="auto">pg-cursor</code> read batches</td>
 <td>Optional peer; missing capability yields <code dir="auto">BRAID_STREAM_UNSUPPORTED</code>. Abort uses physical client cancellation and discards the lease when required.</td>
+</tr>
+<tr>
+<td>PostgreSQL / postgres.js</td>
+<td><code dir="auto">cursor(batchSize)</code> on a reserved connection</td>
+<td>An early exit closes the cursor. An active signal fails with <code dir="auto">BRAID_CANCEL_UNSUPPORTED</code>.</td>
+</tr>
+<tr>
+<td>PostgreSQL / Neon HTTP</td>
+<td>none</td>
+<td><code dir="auto">BRAID_STREAM_UNSUPPORTED</code>; the response is complete, so do not buffer rows to simulate a stream.</td>
+</tr>
+<tr>
+<td>PostgreSQL / PGlite</td>
+<td>none</td>
+<td><code dir="auto">BRAID_STREAM_UNSUPPORTED</code>; there is no incremental result protocol.</td>
 </tr>
 <tr>
 <td>MySQL / <code dir="auto">mysql2</code></td>
