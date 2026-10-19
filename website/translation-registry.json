@@ -103,7 +103,7 @@
       "source": "website/src/content/docs/getting-started/mssql.md",
       "translation": "website/src/content/docs/ko/getting-started/mssql.md",
       "translationOf": "website/src/content/docs/getting-started/mssql.md",
-      "sourceDigest": "f3c20baf400bc32d2c0c6c1a9cf67926be9276cbbf99d9f4fa7021049e5b0ddd"
+      "sourceDigest": "6d878e68cee297ec48be188321f9bfa1dd4d9eea95445d7dbe8000e22027166c"
     },
     {
       "source": "website/src/content/docs/getting-started/mysql.md",
@@ -115,7 +115,7 @@
       "source": "website/src/content/docs/getting-started/oracle.md",
       "translation": "website/src/content/docs/ko/getting-started/oracle.md",
       "translationOf": "website/src/content/docs/getting-started/oracle.md",
-      "sourceDigest": "96303ccd907f788ea840fae86eb751c94db358668cd96b299914cb0c273b7cdb"
+      "sourceDigest": "2028ba391aa4bf6e4d86682e0e79c4b567440035e02ba15c8bb11f378028643d"
     },
     {
       "source": "website/src/content/docs/getting-started/postgres.md",

@@ -102,8 +102,6 @@ work are `materialize` errors without driver I/O.
 ## Capability boundaries
 
 - The tested target is Tedious 20.0.0 against SQL Server 2022 CU18 Developer on Node 22.18.0 (Linux x64). See the [runtime and driver support matrix](/SQLBraid/reference/support/) for per-capability status.
-- The target uses SQL Server 2022 CU18 Developer, Linux x64. Local ARM
-  emulation is outside the verification scope of this guide.
 - Common values without a hint use the Tedious inference of the adapter. Use an explicit hint for `null`, custom objects, precision and scale, lengths or SQL Server-specific types.
 - The adapter keeps multiple recordsets. It does not flatten them into invented single-row results.
 - `CURSOR VARYING OUTPUT` is not an application cursor channel. It is rejected with `BRAID_CALL_CURSOR_UNSUPPORTED`. Batches that read a local cursor and emit `SELECT` rows return those rows as ordinary result sets.

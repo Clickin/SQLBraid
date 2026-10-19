@@ -79,8 +79,7 @@ I/O.
 
 ## Capability boundaries
 
-- The first-party target is `node-oracledb` Thin mode. Thick mode is outside
-  the verification scope of this guide.
+- The first-party target is `node-oracledb` Thin mode.
 - `sql.call` supports scalar OUT and IN OUT descriptors, and `SYS_REFCURSOR` OUT
   values with `oracleParameter.refCursor()`. Cursor outputs become materialized
   `resultSets`. They are removed from the scalar `output`. Implicit results are
@@ -143,10 +142,7 @@ For the complete `sql.out`/`sql.inOut` and heterogeneous result-set rules, read
 
 ## Oracle Thin representation profile
 
-The first-party profile is node-oracledb Thin mode. The free Oracle 23.9 target
-is the environment that is currently documented. Do not present it as Oracle 19c
-evidence. Thick mode and other server lines are separate, untested profiles,
-until their manifests contain matching evidence.
+The first-party profile is node-oracledb Thin mode.
 
 | Oracle value                              | Driver raw / SQLBraid canonical representation | Notes                                                                                                                        |
 | ----------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
