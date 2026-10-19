@@ -13,12 +13,12 @@ export interface UsersRow {
 }
 
 export interface UsersInsert {
-  id?: string;
+  id?: number | string;
   email: string;
 }
 
 export interface UsersUpdate {
-  id?: string;
+  id?: number | string;
   email?: string;
 }
 ```
