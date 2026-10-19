@@ -24,7 +24,7 @@ SQLBraid 런타임 파사드, MariaDB 방언 패키지, 공식 Connector/Node.js
 ```bash
 mkdir braid-mariadb-app && cd braid-mariadb-app
 pnpm init --init-type module
-pnpm add sqlbraid @sqlbraid/mariadb mariadb
+pnpm add sqlbraid @sqlbraid/mariadb mariadb@3.5.4
 mkdir src
 ```
 

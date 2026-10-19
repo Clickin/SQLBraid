@@ -31,9 +31,11 @@ Install the SQLBraid runtime facade, the SQL Server dialect package and Tedious 
 ```bash
 mkdir braid-mssql-app && cd braid-mssql-app
 pnpm init --init-type module
-pnpm add sqlbraid @sqlbraid/mssql tedious
+pnpm add sqlbraid @sqlbraid/mssql tedious@20.0.0
 mkdir src
 ```
+
+`@sqlbraid/mssql` declares the exact peer version Tedious 20.0.0. A later Tedious version causes a peer dependency warning.
 
 ## 3. Run a query
 

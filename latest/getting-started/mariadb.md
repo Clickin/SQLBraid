@@ -24,7 +24,7 @@ Install the SQLBraid runtime facade, the MariaDB dialect package and the officia
 ```bash
 mkdir braid-mariadb-app && cd braid-mariadb-app
 pnpm init --init-type module
-pnpm add sqlbraid @sqlbraid/mariadb mariadb
+pnpm add sqlbraid @sqlbraid/mariadb mariadb@3.5.4
 mkdir src
 ```
 
