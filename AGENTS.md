@@ -7,7 +7,7 @@ in `docs/mental-model.ko.md`. Each boundary has its own durable authority:
 
 - application compatibility: `docs/public-api-audit.md`;
 - driver implementation rules: `docs/driver-author-guide.md`;
-- release mechanics: `docs/SQLBraid_release_readiness.md` and the release workflows;
+- release mechanics: `scripts/release.mjs` and the release workflows;
 - user-facing behavior: the README and the website;
 - documentation style: `docs/writing-style.md`.
 

@@ -43,6 +43,5 @@ These include `@sqlbraid/core@1.0.4`, `@sqlbraid/template@1.0.3` and `@sqlbraid/
 The published semver lower bounds do not bypass that release evidence rule.
 After staging, a maintainer reviews the artifacts and approves publication interactively.
 
-See the [release procedure](SQLBraid_release_readiness.md),
-[security review](security-review-2026-10-10.ko.md) and
+See the [security review](security-review-2026-10-10.ko.md) and
 [migration tool comparison](migration-security-comparison.ko.md).

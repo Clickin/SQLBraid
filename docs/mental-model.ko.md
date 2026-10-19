@@ -431,6 +431,5 @@ SQLBraid는 처음 발생한 실패를 보존합니다. 그러면서도 자신�
 
 - [공개 API 감사](./public-api-audit.md)
 - [드라이버 작성 가이드](./driver-author-guide.md)
-- [릴리스 준비 상태](./SQLBraid_release_readiness.md)
 - [글쓰기 스타일](./writing-style.md)
 - [저장소 규칙](../AGENTS.md)

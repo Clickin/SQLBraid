@@ -431,6 +431,5 @@ If a change seems to cross several of these boundaries, first find out if a smal
 
 - [Public API audit](./public-api-audit.md)
 - [Driver-author guide](./driver-author-guide.md)
-- [Release readiness](./SQLBraid_release_readiness.md)
 - [Writing style](./writing-style.md)
 - [Repository rules](../AGENTS.md)
