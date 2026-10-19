@@ -28,9 +28,11 @@ Install the SQLBraid runtime facade, the Oracle dialect package and the `oracled
 ```bash
 mkdir braid-oracle-app && cd braid-oracle-app
 pnpm init --init-type module
-pnpm add sqlbraid @sqlbraid/oracle oracledb
+pnpm add sqlbraid @sqlbraid/oracle oracledb@7
 mkdir src
 ```
+
+`@sqlbraid/oracle` declares the peer range `oracledb >=7.0.1 <8`. A newer major version causes a peer dependency warning. The Thin mode needs no install script of `oracledb`. If pnpm stops with `ERR_PNPM_IGNORED_BUILDS` for `oracledb`, the packages are installed and the example runs without that script.
 
 ## 3. Run a query
 

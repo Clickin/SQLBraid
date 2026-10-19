@@ -3,7 +3,7 @@
 Oracle SQL dialect and `node-oracledb` adapters for SQLBraid.
 
 ```sh
-pnpm add @sqlbraid/oracle oracledb
+pnpm add @sqlbraid/oracle oracledb@7
 ```
 
 Use this package through the `@sqlbraid/oracle/oracledb` adapter. Give it a connected `node-oracledb` connection or pool.

@@ -32,9 +32,11 @@ SQLBraid 런타임 파사드, SQL Server 방언 패키지, Tedious를 함께 설
 ```bash
 mkdir braid-mssql-app && cd braid-mssql-app
 pnpm init --init-type module
-pnpm add sqlbraid @sqlbraid/mssql tedious
+pnpm add sqlbraid @sqlbraid/mssql tedious@20.0.0
 mkdir src
 ```
+
+`@sqlbraid/mssql`은 피어 의존성으로 Tedious 20.0.0 정확한 버전을 선언합니다. 더 새로운 Tedious를 설치하면 피어 의존성 경고가 납니다.
 
 ## 3. 쿼리 실행하기
 

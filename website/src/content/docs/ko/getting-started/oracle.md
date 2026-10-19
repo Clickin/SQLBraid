@@ -28,9 +28,11 @@ SQLBraid 런타임 파사드, Oracle 방언 패키지, `oracledb` 드라이버�
 ```bash
 mkdir braid-oracle-app && cd braid-oracle-app
 pnpm init --init-type module
-pnpm add sqlbraid @sqlbraid/oracle oracledb
+pnpm add sqlbraid @sqlbraid/oracle oracledb@7
 mkdir src
 ```
+
+`@sqlbraid/oracle`은 피어 의존성으로 `oracledb >=7.0.1 <8` 범위를 선언합니다. 더 새로운 메이저 버전은 피어 의존성 경고가 납니다. Thin 모드는 `oracledb`의 설치 스크립트가 필요 없습니다. pnpm이 `oracledb`에 대해 `ERR_PNPM_IGNORED_BUILDS`로 멈춰도 패키지는 설치되어 있고, 예제는 그 스크립트 없이 실행됩니다.
 
 ## 3. 쿼리 실행하기
 

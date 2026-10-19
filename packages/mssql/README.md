@@ -3,7 +3,7 @@
 Microsoft SQL Server dialect and `tedious` adapters for SQLBraid.
 
 ```sh
-pnpm add @sqlbraid/mssql tedious
+pnpm add @sqlbraid/mssql tedious@20.0.0
 ```
 
 Use this package through the `@sqlbraid/mssql/tedious` adapter. Give it a connected `tedious` connection or pool.
