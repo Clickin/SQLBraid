@@ -1,15 +1,19 @@
 # 릴리스 노트
 
-> SQLBraid 2.0.0 공동 릴리스, 드라이버 직접 import, 기능 경계입니다.
+> SQLBraid 2.0.0 릴리스, 드라이버 직접 import, 기능 경계입니다.
 
 이 페이지는 SQLBraid GA 릴리스 계열을 기록합니다. GA로 공개 인터페이스가 안정화되었습니다. 그렇다고 모든 드라이버에서 모든 기능을 쓸 수 있는 것은 아닙니다.
 
 지원하는 데이터베이스, 드라이버, 프로필, 런타임, 기능 조합은 [런타임·드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)에 있습니다.
 
-## 2.0.0 공동 릴리스
+## 2.0.0 릴리스
 
-배포 대상인 모든 자체 패키지와 VS Code 확장이 함께 `2.0.0`으로 올라갑니다.
-파사드만 메이저 버전을 올리려던 이전 계획을 대체합니다.
+`2.0.0`이 되는 것은 `sqlbraid`뿐입니다. 다른 자체 패키지는 각자의 버전 계열을 유지합니다.
+패키지마다 따로 태그하고 따로 릴리스합니다. `sqlbraid`는 `v2.0.0`, 나머지는 `<package>-v<version>`입니다.
+
+`@sqlbraid/postgres` 1.2.0은 postgres.js와 PGlite 어댑터에 파라미터 타입 힌트를 추가합니다.
+`sql.bind(value, postgresParameter.int8())`처럼 파라미터 하나의 타입을 정하세요.
+`pg`와 Neon 어댑터는 계속 모든 힌트를 거부합니다. [파라미터 타입 힌트](/SQLBraid/latest/concepts/parameter-hints.md)를 보세요.
 
 `sqlbraid`는 루트와 `sqlbraid/compiled` 진입점만 유지합니다.
 의존성은 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`뿐입니다.

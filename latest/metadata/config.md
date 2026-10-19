@@ -28,10 +28,10 @@ export default defineConfig({
 Run this command from the project that contains the config:
 
 ```bash
-sqlbraid codegen
-sqlbraid codegen --config ./sqlbraid.config.mjs
-sqlbraid codegen --target main --check
-sqlbraid codegen --json
+pnpm exec sqlbraid codegen
+pnpm exec sqlbraid codegen --config ./sqlbraid.config.mjs
+pnpm exec sqlbraid codegen --target main --check
+pnpm exec sqlbraid codegen --json
 ```
 
 The metadata and output paths are relative to the config file.

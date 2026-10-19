@@ -5,7 +5,7 @@
 SQLBraid는 표준 stdio LSP 서버를 제공합니다. `vscode-languageserver`로 만들었지만 VS Code 전용 프로토콜이 아닙니다. 다음 명령으로 실행하세요.
 
 ```bash
-sqlbraid-language-server --config ./sqlbraid.config.mjs
+pnpm exec sqlbraid-language-server --config ./sqlbraid.config.mjs
 ```
 
 서버는 SQLBraid 설정 파일을 Node 코드로 실행합니다. LSP에는 워크스페이스 신뢰 신호가 없습니다. 그래서 신뢰하는 프로젝트에서만 서버를 시작하세요. VS Code 확장은 신뢰한 워크스페이스에서만 실행됩니다. 다른 에디터는 신뢰하지 않는 폴더에서 서버가 자동으로 시작되지 않도록 클라이언트를 설정하세요.

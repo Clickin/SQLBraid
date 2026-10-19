@@ -1,6 +1,6 @@
 # Release notes
 
-> The coordinated SQLBraid 2.0.0 release, direct driver imports and capability boundaries.
+> The SQLBraid 2.0.0 release, direct driver imports and capability boundaries.
 
 This page records the SQLBraid GA release line. GA makes the public interfaces
 stable. It does not make each capability available on each driver.
@@ -8,10 +8,14 @@ stable. It does not make each capability available on each driver.
 The [runtime and driver support matrix](/SQLBraid/latest/reference/support.md) lists
 the supported combinations of database, driver, profile, runtime and capability.
 
-## Coordinated 2.0.0 release
+## 2.0.0 release
 
-All publishable first-party packages and the VS Code extension move together to `2.0.0`.
-This replaces the earlier plan to raise only the facade's major version.
+Only `sqlbraid` moves to `2.0.0`. Each other first-party package keeps its own version line.
+Each package is tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v<version>` for the others.
+
+`@sqlbraid/postgres` 1.2.0 adds parameter type hints for the postgres.js and PGlite adapters.
+Use `sql.bind(value, postgresParameter.int8())` to set the type of one parameter.
+The `pg` and Neon adapters still reject every hint. See [parameter type hints](/SQLBraid/latest/concepts/parameter-hints.md).
 
 `sqlbraid` keeps only its root and `sqlbraid/compiled` entry points.
 Its only dependencies are `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template`.

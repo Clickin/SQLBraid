@@ -67,9 +67,10 @@ Assume ordinary SQL knowledge. Use these documents for SQLBraid-specific APIs, g
 - [Troubleshooting](https://clickin.github.io/SQLBraid/latest/reference/troubleshooting.md): Correct the most common mistakes in setup and at runtime boundaries.
 
 ## Release
-- [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations.md): Capabilities and driver behaviors that SQLBraid 1.x does not support or emulate.
-- [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes.md): The coordinated SQLBraid 2.0.0 release, direct driver imports and capability boundaries.
+- [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations.md): Capabilities and driver behaviors that SQLBraid 2.x does not support or emulate.
+- [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes.md): The SQLBraid 2.0.0 release, direct driver imports and capability boundaries.
 - [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap.md): Current behavior, and candidates that need their own design and evidence.
+- [Upgrade from 1.x to 2.0](https://clickin.github.io/SQLBraid/latest/release/upgrade-from-1x.md): Replace the removed sqlbraid driver subpaths with the dialect and adapter packages.
 
 ## Optional
 - [Interactive browser preview](https://clickin.github.io/SQLBraid/latest/interactive-preview.md): Edit and run real SQL on a disposable SQLite WASM database in your browser.

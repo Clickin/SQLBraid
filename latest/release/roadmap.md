@@ -2,7 +2,7 @@
 
 > Current behavior, and candidates that need their own design and evidence.
 
-## Current 1.0.0 GA surface
+## Current GA surface
 
 The current API includes these items:
 

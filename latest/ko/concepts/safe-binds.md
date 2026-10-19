@@ -62,4 +62,4 @@ const query = sql.rows<UserRow>`
 
 SQLBraid의 렌더링 한도는 SQL 바이트 크기, 바인딩 개수, 구조 항목 수, 중첩 깊이를 제한합니다. 더 엄격한 한도가 필요하면 `createSqlTag({ dialect, limits })`로 설정하세요.
 
-PostgreSQL, MySQL, SQLite는 일반 힌트를 `BRAID_BIND_HINT_UNSUPPORTED`로 명시적으로 거부합니다. 힌트를 몰래 무시하지 않습니다. PostgreSQL의 `postgresParameter.refcursor()`는 루틴 전용이며, OUT·INOUT 포털을 구분하는 데만 씁니다. 다른 데이터베이스 타입 API가 필요하면 그에 맞는 공식 Oracle 또는 SQL Server 어댑터를 쓰세요.
+Oracle과 SQL Server 어댑터는 파라미터 타입 힌트를 적용하고, PostgreSQL의 postgres.js·PGlite 어댑터도 적용합니다. `pg`, Neon, MySQL, MariaDB, SQLite, Bun.SQL 어댑터는 힌트를 `BRAID_BIND_HINT_UNSUPPORTED`로 거부하며 몰래 무시하지 않습니다. [파라미터 타입 힌트](/SQLBraid/latest/concepts/parameter-hints.md)를 보세요. PostgreSQL의 `postgresParameter.refcursor()`는 루틴 전용이며, OUT·INOUT 포털을 구분하는 데만 씁니다.

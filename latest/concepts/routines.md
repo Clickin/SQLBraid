@@ -114,6 +114,6 @@ The procedure metadata is an explicit seam to the native driver. It is not a gen
 
 ## Routine streaming
 
-SQLBraid exposes only the materialized `db.call()`. `callStream()` is reserved and not implemented. It is not a 1.0.0 API that you can call. For ordinary queries that produce rows, and for set-returning functions, use `db.stream(sql.rows(...))`. Routine cursor result sets are not independent row streams.
+SQLBraid exposes only the materialized `db.call()`. `callStream()` is reserved and not implemented. It is not an API that you can call. For ordinary queries that produce rows, and for set-returning functions, use `db.stream(sql.rows(...))`. Routine cursor result sets are not independent row streams.
 
 Read [SQL tags and result kinds](/SQLBraid/latest/concepts/sql-tags.md), [streaming](/SQLBraid/latest/runtime/streaming.md) and [diagnostics](/SQLBraid/latest/reference/errors.md).

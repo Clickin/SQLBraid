@@ -11,9 +11,9 @@ pnpm add --save-dev @sqlbraid/cli
 ```
 
 ```bash
-sqlbraid inspect query --file src/query.ts --line 8 --column 20 --json
-sqlbraid inspect symbol UsersRow --json
-sqlbraid inspect diagnostics --file src/query.ts --json
+pnpm exec sqlbraid inspect query --file src/query.ts --line 8 --column 20 --json
+pnpm exec sqlbraid inspect symbol UsersRow --json
+pnpm exec sqlbraid inspect diagnostics --file src/query.ts --json
 ```
 
 The config is executable Node code, and `inspect` runs the config that it finds. Thus, discovery starts at the directory of `--file` and stops at the current directory. It never runs a config above the current directory. If `--file` is outside the current directory, the command fails with exit code 2. Run inspect commands only in a repository that you trust.

@@ -1,10 +1,10 @@
 # Current limitations
 
-> Capabilities and driver behaviors that SQLBraid 1.x does not support or emulate.
+> Capabilities and driver behaviors that SQLBraid 2.x does not support or emulate.
 
 - **Support applies to specific combinations of database, driver and runtime.** The [runtime and driver support matrix](/SQLBraid/latest/reference/support.md) is the authoritative source. It records the exact tuple of database, driver, profile, runtime and capability, and its tested versions.
 - **`db.all()` is materialized.** It returns a readonly array. It uses application memory in proportion to the row count. When bounded application memory is important, use `db.stream()`.
-- **Routine streaming is not included.** `callStream()` is reserved and not implemented. It is not a 1.0.0 API that you can call. The materialized `db.call()` reads and closes routine resources before mapping. Raw cursors, portals, requests and carrier rows never escape.
+- **Routine streaming is not included.** `callStream()` is reserved and not implemented. It is not an API that you can call. The materialized `db.call()` reads and closes routine resources before mapping. Raw cursors, portals, requests and carrier rows never escape.
 - **MySQL and MariaDB prepared CALL OUT/INOUT descriptors are unsupported.** Emitted heterogeneous `CALL` result sets are supported. Neither mysql2 3.x nor MariaDB Connector/Node.js exposes a proven public discriminator for prepared call OUT carriers. Thus, SQLBraid does not guess a carrier row.
 - **PostgreSQL refcursor calls require an existing transaction.** A refcursor is a portal that belongs to a transaction. It is not an independent ResultSet. SQLBraid does not create a hidden transaction.
 - **SQL Server cursor output is not an application cursor.** `CURSOR VARYING OUTPUT` is not exposed as a client ResultSet that you can bind. Emitted `SELECT` rows stay ordinary result sets.

@@ -72,7 +72,7 @@ node src/index.ts
 
 출력은 `[{ id: "1", name: "Ada" }]` 같은 행 배열입니다. 요청한 ID는 드라이버가 바인딩하는 값이며, SQL 텍스트에 끼워 넣지 않습니다.
 
-node:sqlite 어댑터는 논리 문장을 `?` 플레이스홀더가 있는 텍스트로 렌더링한 뒤, 문서화된 `DatabaseSync.prepare(text)`와 `StatementSync` API를 씁니다. 변환과 힌트 검증은 문장 실행 전에 일어납니다. 재사용을 설정하면 어댑터가 맡습니다. SQLBraid는 문서화되지 않은 호출 경로로 `SQLTagStore`를 부르지 않습니다.
+node:sqlite 어댑터는 논리 문장을 `?` 플레이스홀더가 있는 텍스트로 렌더링한 뒤, 문서화된 `DatabaseSync.prepare(text)`와 `StatementSync` API를 씁니다. 변환과 힌트 검증은 문장 실행 전에 일어납니다. 어댑터는 호출할 때마다 문장을 다시 prepare하고 재사용 전략을 `simple`로 보고합니다. SQLBraid는 문서화되지 않은 호출 경로로 `SQLTagStore`를 부르지 않습니다.
 
 ## 3. 동적 @braid를 추가하고 변환하기
 
@@ -148,6 +148,10 @@ node build/index.js
 
 ### better-sqlite3
 
+```bash
+pnpm add @sqlbraid/sqlite better-sqlite3
+```
+
 ```ts
 import Database from "better-sqlite3";
 import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";
@@ -161,6 +165,10 @@ const rows = await db.all(sql.rows`SELECT 1 AS value`);
 SQLBraid는 문장마다 `safeIntegers(true)`를 적용해 정확한 INTEGER 값을 십진 문자열로 노출합니다. `iterate()`가 실제 스트림 기능입니다. 벌크는 `prepared-loop`를 씁니다. 네이티브 호출은 이벤트 루프를 막습니다. 문제가 되면 워커를 쓰세요. 루틴과 활성 취소는 지원하지 않습니다.
 
 ### libSQL
+
+```bash
+pnpm add @sqlbraid/sqlite @libsql/client
+```
 
 ```ts
 import { createClient } from "@libsql/client";

@@ -5,7 +5,7 @@
 SQLBraid ships a standard stdio LSP server. It uses `vscode-languageserver`. It is not a protocol only for VS Code. To start it, run:
 
 ```bash
-sqlbraid-language-server --config ./sqlbraid.config.mjs
+pnpm exec sqlbraid-language-server --config ./sqlbraid.config.mjs
 ```
 
 The server executes the SQLBraid config as Node code. The LSP has no workspace trust signal. Thus, start the server only in a project that you trust. The VS Code extension runs only in a trusted workspace. For other editors, configure the client so that it does not start the server automatically in an untrusted folder.

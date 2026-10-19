@@ -24,9 +24,15 @@ const connection = await mariadb.createConnection({
   ...MARIADB_LOSSLESS_TEXT.connectionOptions,
 });
 const db = createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT });
-const users = await db.all(sql.rows<{ id: string; name: string }>`
-  SELECT id, name FROM users WHERE id = ${1}
-`);
+
+try {
+  const users = await db.all(sql.rows<{ id: string; name: string }>`
+    SELECT id, name FROM users WHERE id = ${1}
+  `);
+  console.log(users);
+} finally {
+  await connection.end();
+}
 ```
 
 The dialect is `mariadb`, not `mysql`. You write MariaDB-specific syntax in your

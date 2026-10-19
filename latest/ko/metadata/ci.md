@@ -11,8 +11,8 @@ pnpm add --save-dev @sqlbraid/cli
 ```
 
 ```bash
-sqlbraid codegen
-sqlbraid codegen --check
+pnpm exec sqlbraid codegen
+pnpm exec sqlbraid codegen --check
 ```
 
 출력이 오래되었거나 없으면 CI가 실패합니다. 메타데이터나 설정을 바꾼 뒤, 그리고 패키징 전에 검사를 실행하세요. 빌드 시스템이 대상별 상태를 기계가 읽을 수 있는 형식으로 받아야 하면 `--json`을 쓰세요.
