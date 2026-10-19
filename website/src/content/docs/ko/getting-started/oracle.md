@@ -100,7 +100,7 @@ Thin 어댑터는 정밀도·스케일 속성과 IN 길이 제약을 거부합�
 - 날짜·시간 값은 guarded 편의 프로필인 `Date`를 씁니다. 원본 시간대 이름이나 밀리초 미만 정밀도는 유지하지 않습니다. 무손실 텍스트 경로가 필요하면 SQL에 `TO_CHAR`나 포맷 식을 쓰세요.
 - 네이티브 JSON은 파싱된 편의 값입니다. 직렬화된 텍스트가 필요하면 검증된 fetch 핸들러나 `JSON_SERIALIZE(... RETURNING CLOB)`를 쓰세요.
 
-실행 가능한 LOB 검증은 `oracle.routine.inout` 지원 픽스처에서 CLOB·BLOB의 OUT·IN OUT 바인딩, 메모리 읽기, 정리를 다룹니다. 대상 매니페스트는 이 테스트와 정확한 Oracle Free 근거를 연결합니다. 이 픽스처는 실제 Oracle Free 통합 테스트입니다. 모의 LOB 객체를 쓰는 별도의 어댑터 단위 테스트는 정리와 오류 경로만 확인하며, 다른 데이터베이스나 드라이버 대상의 등급을 올리지 않습니다.
+CLOB·BLOB의 OUT·IN OUT 바인딩, 메모리 읽기, 정리는 `oracle.routine.inout` 지원 픽스처가 실제 Oracle Free에서 검증합니다.
 
 `sql.out`/`sql.inOut`과 여러 결과 집합에 대한 전체 규칙은 [루틴 호출](/SQLBraid/concepts/routines/)을 보세요.
 

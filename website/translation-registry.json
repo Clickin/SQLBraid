@@ -103,7 +103,7 @@
       "source": "website/src/content/docs/getting-started/mssql.md",
       "translation": "website/src/content/docs/ko/getting-started/mssql.md",
       "translationOf": "website/src/content/docs/getting-started/mssql.md",
-      "sourceDigest": "6d878e68cee297ec48be188321f9bfa1dd4d9eea95445d7dbe8000e22027166c"
+      "sourceDigest": "bae0657cd6a0c3c52fe68626e89cc09ce4f793e19d7e5d38056d76e111e88618"
     },
     {
       "source": "website/src/content/docs/getting-started/mysql.md",
@@ -115,7 +115,7 @@
       "source": "website/src/content/docs/getting-started/oracle.md",
       "translation": "website/src/content/docs/ko/getting-started/oracle.md",
       "translationOf": "website/src/content/docs/getting-started/oracle.md",
-      "sourceDigest": "2028ba391aa4bf6e4d86682e0e79c4b567440035e02ba15c8bb11f378028643d"
+      "sourceDigest": "5d6907c91a42bb43ef3793f36c0d54acc45eed372a7e26dfe5af12e5dc9ee2c1"
     },
     {
       "source": "website/src/content/docs/getting-started/postgres.md",
@@ -133,7 +133,7 @@
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "9d1bd79402bbed4af458c1ecc6e0a514dc8e991af7e06ccc85d6f2bf325cc180"
+      "sourceDigest": "9848c01c10e67949004f8e8d73c48fd621f83f35c53394691cf4a2ff7256baa2"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",

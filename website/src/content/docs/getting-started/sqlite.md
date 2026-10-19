@@ -226,8 +226,7 @@ rewrite SQL or send a compensating query.
 The SQLite inspector uses `introspectionScope: "main"` by default. Metadata
 capture does not inspect attached schemas. Missing fields do not prove that
 indexes or constraints are absent. The better-sqlite3 and libSQL targets are
-Compatible until there is exact runtime and driver evidence. They are not
-certified by analogy.
+Compatible.
 
 libSQL transaction options:
 
