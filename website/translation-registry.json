@@ -199,13 +199,13 @@
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "8d6e967313598bc6f510ac1ae3c02753f11ec44f32e9cb73fbe34897bf384021"
+      "sourceDigest": "113895d7a3908059c107c44c9d49455b23bae4bcc732aa62d7f37ce5a11b2028"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
       "translation": "website/src/content/docs/ko/reference/support.mdx",
       "translationOf": "website/src/content/docs/reference/support.mdx",
-      "sourceDigest": "075918a4b49a4953a6a133e61577713f2fdb54df3d740cd7ee09e4263f683f12"
+      "sourceDigest": "98549dd7b01b4a5c8fee17ff6efa4f2cdf8470da00f368846e3e1254c75d565e"
     },
     {
       "source": "website/src/content/docs/reference/troubleshooting.md",
@@ -265,7 +265,7 @@
       "source": "website/src/content/docs/runtime/streaming.md",
       "translation": "website/src/content/docs/ko/runtime/streaming.md",
       "translationOf": "website/src/content/docs/runtime/streaming.md",
-      "sourceDigest": "07dd32e63b1fd0f0203dda66c13e093bc8760d5c94956b96468ae6533e169a99"
+      "sourceDigest": "378c2ee326fac68fa433520596eaa58fd598db954416a3577fd667c55157e0ba"
     },
     {
       "source": "website/src/content/docs/runtime/transaction-profiles.md",

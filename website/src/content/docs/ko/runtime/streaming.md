@@ -38,19 +38,22 @@ controller.abort();
 
 ## 공식 어댑터별 기본 수단
 
-| 어댑터                      | 기본 수단                           | 경계                                                                                                                             |
-| --------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| PostgreSQL / `pg`           | `pg-cursor` 묶음 읽기               | 선택 사항인 피어 의존성이며, 없으면 `BRAID_STREAM_UNSUPPORTED`. 중단 시 물리 클라이언트 취소를 쓰고, 필요하면 리스를 폐기합니다. |
-| MySQL / `mysql2`            | 원시 준비된 문장 `Execute.stream()` | 준비된 문장의 바이너리 실행을 유지합니다. 리스 반환 전에 비우거나 폐기합니다.                                                    |
-| MariaDB / Connector/Node.js | 네이티브 스트림 이터레이터          | MariaDB 드라이버 자체의 근거를 씁니다. `mysql2`에서 물려받지 않습니다.                                                           |
-| SQLite / `node:sqlite`      | `StatementSync.iterate()`           | 네이티브 이터레이터 종료가 정리 경계입니다.                                                                                      |
-| SQLite / `better-sqlite3`   | `Statement#iterate()`               | 동기 호출이며 이벤트 루프를 막습니다. 이터레이터 return이 정리 경계입니다.                                                       |
-| SQLite / libSQL             | 지원하는 클라이언트 API에는 없음    | `BRAID_STREAM_UNSUPPORTED`. 전체 ResultSet을 버퍼링하지 마세요.                                                                  |
-| SQLite / WASM               | OO1 step/reset/finalize             | 브라우저·Worker의 직접 연결 리소스이며, 한 번에 소유자는 하나입니다.                                                             |
-| Cloudflare D1               | 없음                                | `BRAID_STREAM_UNSUPPORTED`. 스트리밍을 흉내 내려고 페이지 단위로 나눠 읽지 마세요.                                               |
-| Oracle Thin                 | `ResultSet`                         | 모든 ResultSet을 닫습니다. 닫기가 실패하면 리스를 폐기합니다.                                                                    |
-| SQL Server / Tedious        | 요청 행 이벤트 + 크기 제한 큐       | 요청이 끝난 다음에 리스를 반환합니다.                                                                                            |
-| Bun.SQL                     | 없음                                | `BRAID_STREAM_UNSUPPORTED`. 전체 결과를 버퍼링하지 마세요.                                                                       |
+| 어댑터                             | 기본 수단                           | 경계                                                                                                                             |
+| ---------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL / `pg`, Neon(WebSocket) | `pg-cursor` 묶음 읽기               | 선택 사항인 피어 의존성이며, 없으면 `BRAID_STREAM_UNSUPPORTED`. 중단 시 물리 클라이언트 취소를 쓰고, 필요하면 리스를 폐기합니다. |
+| PostgreSQL / postgres.js           | 예약한 연결의 `cursor(batchSize)`   | 일찍 빠져나오면 커서를 닫습니다. 활성 신호는 `BRAID_CANCEL_UNSUPPORTED`로 실패합니다.                                            |
+| PostgreSQL / Neon HTTP             | 없음                                | `BRAID_STREAM_UNSUPPORTED`. 응답이 한 번에 오므로, 행을 버퍼링해 스트림을 흉내 내지 마세요.                                      |
+| PostgreSQL / PGlite                | 없음                                | `BRAID_STREAM_UNSUPPORTED`. 점진적 결과 프로토콜이 없습니다.                                                                     |
+| MySQL / `mysql2`                   | 원시 준비된 문장 `Execute.stream()` | 준비된 문장의 바이너리 실행을 유지합니다. 리스 반환 전에 비우거나 폐기합니다.                                                    |
+| MariaDB / Connector/Node.js        | 네이티브 스트림 이터레이터          | MariaDB 드라이버 자체의 근거를 씁니다. `mysql2`에서 물려받지 않습니다.                                                           |
+| SQLite / `node:sqlite`             | `StatementSync.iterate()`           | 네이티브 이터레이터 종료가 정리 경계입니다.                                                                                      |
+| SQLite / `better-sqlite3`          | `Statement#iterate()`               | 동기 호출이며 이벤트 루프를 막습니다. 이터레이터 return이 정리 경계입니다.                                                       |
+| SQLite / libSQL                    | 지원하는 클라이언트 API에는 없음    | `BRAID_STREAM_UNSUPPORTED`. 전체 ResultSet을 버퍼링하지 마세요.                                                                  |
+| SQLite / WASM                      | OO1 step/reset/finalize             | 브라우저·Worker의 직접 연결 리소스이며, 한 번에 소유자는 하나입니다.                                                             |
+| Cloudflare D1                      | 없음                                | `BRAID_STREAM_UNSUPPORTED`. 스트리밍을 흉내 내려고 페이지 단위로 나눠 읽지 마세요.                                               |
+| Oracle Thin                        | `ResultSet`                         | 모든 ResultSet을 닫습니다. 닫기가 실패하면 리스를 폐기합니다.                                                                    |
+| SQL Server / Tedious               | 요청 행 이벤트 + 크기 제한 큐       | 요청이 끝난 다음에 리스를 반환합니다.                                                                                            |
+| Bun.SQL                            | 없음                                | `BRAID_STREAM_UNSUPPORTED`. 전체 결과를 버퍼링하지 마세요.                                                                       |
 
 이것은 드라이버 기능이며 방언의 속성이 아닙니다. 직접 만든 실행기는 `QueryExecutor.stream`을 구현하거나, 항상 `BRAID_STREAM_UNSUPPORTED`로 실패해야 합니다. 루틴 커서 스트리밍은 메모리로 읽는 루틴 규칙에 포함되지 않습니다. 정규화되고 닫힌, 서로 다른 결과 집합이 필요하면 `db.call()`을 쓰세요.
 

@@ -115,8 +115,8 @@ holds the physical lease until settlement.
 
 The first-party roots cover PostgreSQL, MySQL, MariaDB, SQLite, Oracle and SQL
 Server. The driver subpaths own the protocol and the cleanup behavior: `pg`,
-`mysql2`, MariaDB Connector/Node.js, `node:sqlite`, SQLite WASM, D1,
-node-oracledb Thin and Tedious.
+postgres.js, Neon, PGlite, `mysql2`, MariaDB Connector/Node.js, `node:sqlite`,
+`better-sqlite3`, libSQL, SQLite WASM, D1, node-oracledb Thin and Tedious.
 
 Bun uses one SQL adapter family with a user-selected
 `dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`. It does not infer SQL

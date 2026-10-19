@@ -18,6 +18,7 @@ description: 각 역할을 맡는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/mssql`           | SQL Server 방언·TypePolicy와 파라미터 힌트, `/tedious` 어댑터, `/inspector`                          |
 | `@sqlbraid/compiler`        | TypeScript 소스 탐색과 조건부 템플릿 변환                                                            |
 | `@sqlbraid/vite`            | 소스 맵을 유지하며 조건부 템플릿을 변환하는 Vite 8 사전 변환                                         |
+| `@sqlbraid/webpack`         | 조건부 템플릿을 변환하는 Webpack 로더. Rspack과 Turbopack에서도 같은 로더를 실행할 수 있음           |
 | `@sqlbraid/opentelemetry`   | 옵저버를 통한 선택 사항 OpenTelemetry DB 클라이언트 span과 실행 시간 지표                            |
 | `@sqlbraid/metadata`        | DB 정보 스냅샷, 검증, 식별, 변경 비교                                                                |
 | `@sqlbraid/migrate`         | 선택 사항인 SQL 마이그레이션과 시작 검사, `/node` 로더, `/vite` manifest 플러그인, `/drift` 어댑터   |
