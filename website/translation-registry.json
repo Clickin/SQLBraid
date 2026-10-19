@@ -199,7 +199,7 @@
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "6b6902fa713712d8b137185ac2ebbe076e285c48cfc3efd5d2adadd9ce8a9352"
+      "sourceDigest": "20399e9e780199d4cf3feaa43148379a1b2a174275a08c82af66e175ed158003"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
@@ -223,7 +223,7 @@
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "d48cfc4a3b8793f5d90c2223861863cbf6612b7933186d45f1ac12083d822dd6"
+      "sourceDigest": "c141a02084bff05c24a3ebc4e97f25747b26b55736abbcfa67ac9b1aebce7bd1"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",

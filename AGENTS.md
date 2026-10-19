@@ -748,6 +748,7 @@ If DB or runtime infrastructure is unavailable, report the gate as not run. Neve
   - Runtime package imports must be declared in production, peer or optional dependencies. Type-only imports can use devDependencies.
   - Oxfmt checks are separate from formatting changes. Do not mass-format unrelated legacy files.
 - `pnpm install` sets `core.hooksPath` to `.githooks`. The pre-commit hook runs `pnpm run fmt:check` and `pnpm run lint`, the same checks as the CI formatting and lint job. Do not bypass it with `--no-verify` to push a failing change.
+  The pre-push hook checks only release tags (`v*` and `*-v*`): the tag must be annotated, have a message, and match the package version. It runs no tests. The Release workflow runs the same check.
 - Write documentation in the style that `docs/writing-style.md` defines: Simplified Technical English at about 80% strictness. This applies to all Markdown: READMEs, `docs/`, website pages in both languages, package READMEs, examples and skills.
 - Documentation must state facts that the current code proves. Before you write or change a page, check each claim against the source:
   - file paths and links exist, and point to the file that actually contains the code;

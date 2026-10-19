@@ -1,10 +1,10 @@
 # Changelog
 
-This changelog covers SQLBraid package releases. The initial 1.0.0 release is coordinated; subsequent workspace packages may version and release independently. It
-summarizes durable compatibility and release information; detailed behavior
-and support evidence live in the [public API audit](docs/public-api-audit.md),
-[current release notes](website/src/content/docs/release/notes.md), and
-[versioned support records](support/targets/).
+This changelog records only large, durable changes: breaking changes, new packages, and security fixes.
+The summary of each release is the message of its annotated Git tag. CI publishes that message, the install
+command and the diff since the previous tag as the GitHub Release. Detailed behavior and support evidence live in
+the [public API audit](docs/public-api-audit.md), [current release notes](website/src/content/docs/release/notes.md),
+and [versioned support records](support/targets/).
 
 ## Unreleased
 
@@ -31,7 +31,8 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   ```
 
   All publishable first-party packages and the VS Code extension move together to `2.0.0`.
-  This coordinated release replaces the earlier facade-only major version plan.
+  This replaces the earlier plan to raise only the facade's major version.
+  Each package is still tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v2.0.0` for the others.
   Query APIs and runtime behavior remain unchanged.
 
 - Update installation instructions for explicit dialect and driver dependencies.

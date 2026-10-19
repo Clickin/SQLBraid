@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fast feedback for release tags only: the tag must be annotated, have a message and match the package version.
+# The Release workflow runs the same check, so a skipped hook does not skip the gate. Bypass once with `git push --no-verify`.
+exec node scripts/release-notes.mjs --pre-push

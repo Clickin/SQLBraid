@@ -542,7 +542,8 @@ test("staging has no approval or direct publication path and draft release remai
         "--draft",
         "--title",
         `SQLBraid ${tag}`,
-        "--generate-notes",
+        "--notes-file",
+        join(directory, "release-notes.md"),
         ...(version.includes("-") ? ["--prerelease"] : []),
         join(directory, "staged-evidence", "release-manifest.json"),
         join(directory, "staged-evidence", "staged-publication.json"),
@@ -555,6 +556,12 @@ test("staging has no approval or direct publication path and draft release remai
   assert.equal(releasePrereleaseArg("0.1.0-rc.2"), "--prerelease");
   assert.equal(releasePrereleaseArg("0.1.0"), undefined);
   assert.match(draft.steps.find((step) => step.run?.includes("--mode durable-evidence"))?.run ?? "", /--artifact-dir/u);
+  const notes = draft.steps.find((step) => step.run?.includes("scripts/release-notes.mjs"));
+  assert.doesNotMatch(notes?.run ?? "", /--require-changelog/u);
+  const check = release.jobs["release-prep"].steps.find((step) => step.name === "Check the release tag annotation");
+  assert.equal(check?.if, "github.ref_type == 'tag'");
+  assert.match(check?.run ?? "", /release-notes\.mjs --tag "\$GITHUB_REF_NAME" --check/u);
+  assert.ok(draft.steps.indexOf(notes!) < draft.steps.indexOf(create!));
 });
 
 test("fresh staging and recovery share tools but only recovery downloads prior staged evidence", () => {
