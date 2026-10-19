@@ -13,6 +13,7 @@
     "**/.astro/**",
     "**/.compatibility-packages/**",
     "tests/fixtures/**",
+    "docs/performance/results/**",
     "website/.vercel/**",
     "sqlbraid.vsix"
   ]

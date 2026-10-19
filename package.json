@@ -48,6 +48,8 @@
     "test:bulk": "vitest run pv16-bulk pv16-native-bulk pv16-oracle pv16-mariadb pv16-sqlite-cloud tests/db",
     "test:browser": "node tests/scripts/test-browser.mjs",
     "test:d1": "node tests/scripts/test-d1.mjs",
+    "benchmark:performance": "node tests/performance/run.mjs",
+    "benchmark:performance:profile": "node tests/performance/profile.mjs",
     "benchmark:bulk-execution": "node tests/scripts/bulk-execution-benchmark.mjs",
     "benchmark:row-materialization": "pnpm run build:packages && node --expose-gc tests/scripts/row-materialization-benchmark.mjs",
     "benchmark:sync-boundary": "node tests/scripts/sync-boundary-benchmark.mjs",

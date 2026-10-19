@@ -15,3 +15,6 @@ tests/.doc-snippets-*/
 
 # Next.js build output (examples)
 .next/
+
+# Local performance measurements, profiles, and verification logs
+/docs/performance/results/
