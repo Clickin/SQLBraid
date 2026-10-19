@@ -48,10 +48,10 @@
     "@sqlbraid/tooling": "workspace:^2.0.0"
   },
   "devDependencies": {
-    "@sqlbraid/migrate": "workspace:^2.0.0"
+    "@sqlbraid/migrate": "workspace:^0.2.0"
   },
   "peerDependencies": {
-    "@sqlbraid/migrate": "workspace:^2.0.0"
+    "@sqlbraid/migrate": "workspace:^0.2.0"
   },
   "peerDependenciesMeta": {
     "@sqlbraid/migrate": {
