@@ -107,7 +107,7 @@ const query = sql.command`
 
 ## PostgreSQL 힌트
 
-PostgreSQL 힌트는 Parse 메시지에서 파라미터 하나의 타입 OID를 정합니다. postgres.js와 PGlite 어댑터가 적용하고, `pg`와 Neon 어댑터는 거부합니다. `pg`에는 파라미터 타입을 정하는 API가 없기 때문입니다.
+PostgreSQL 힌트는 Parse 메시지에서 파라미터 하나의 타입 OID를 정합니다. postgres.js와 PGlite 어댑터가 적용하고, `pg`와 Neon 어댑터는 거부합니다. `pg`에는 파라미터별 타입 옵션이 없기 때문입니다.
 
 ```ts
 import { postgresParameter, sql } from "@sqlbraid/postgres";
@@ -137,7 +137,7 @@ const query = sql.rows<UserRow>`
 
 팩토리는 드라이버가 변환 없이 보내는 입력만 받습니다. SQLBraid는 값을 변환하지 않습니다. 그래서 `int8`과 `numeric`은 `number`를 받지 않고, `timestamp`(시간대 없음)에는 힌트가 없습니다.
 
-`json`과 `jsonb`에는 힌트가 없습니다. postgres.js는 JSON 텍스트를 JSON 문자열 값으로 바꾸지만 PGlite는 바꾸지 않습니다. SQL에 `CAST(${text} AS jsonb)`를 쓰세요. enum, 복합 타입, 확장 타입에도 같은 규칙을 적용합니다.
+`json`과 `jsonb`에는 힌트가 없습니다. SQL에 `CAST(${text} AS jsonb)`를 쓰세요. enum, 복합 타입, 확장 타입에도 같은 규칙을 적용합니다.
 
 ## 힌트가 없는 타입
 
@@ -164,13 +164,14 @@ enum, 복합 타입, 사용자 정의 타입, `citext` 같은 확장 타입에 �
 
 ## 어댑터 지원
 
-| 어댑터                                     | 파라미터 타입 힌트                                                               |
-| ------------------------------------------ | -------------------------------------------------------------------------------- |
-| SQL Server(Tedious), Oracle(node-oracledb) | 적용합니다. 위 절을 보세요.                                                      |
-| PostgreSQL의 postgres.js, PGlite           | 적용합니다. [PostgreSQL 힌트](#postgresql-힌트)를 보세요.                        |
-| PostgreSQL의 `pg`, Neon                    | `BRAID_BIND_HINT_UNSUPPORTED`로 거부합니다. 드라이버에 API가 없습니다.           |
-| MySQL, MariaDB                             | `BRAID_BIND_HINT_UNSUPPORTED`로 거부합니다. 드라이버에 API가 없습니다.           |
-| SQLite 어댑터                              | `BRAID_BIND_HINT_UNSUPPORTED`로 거부합니다. SQLite에는 파라미터 타입이 없습니다. |
+| 어댑터                                     | 파라미터 타입 힌트                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------- |
+| SQL Server(Tedious), Oracle(node-oracledb) | 적용합니다. 위 절을 보세요.                                                           |
+| PostgreSQL의 postgres.js, PGlite           | 적용합니다. [PostgreSQL 힌트](#postgresql-힌트)를 보세요.                             |
+| PostgreSQL의 `pg`, Neon(WebSocket, HTTP)   | `BRAID_BIND_HINT_UNSUPPORTED`로 거부합니다. `pg`에는 파라미터별 타입 옵션이 없습니다. |
+| MySQL, MariaDB                             | `BRAID_BIND_HINT_UNSUPPORTED`로 거부합니다.                                           |
+| SQLite 어댑터                              | `BRAID_BIND_HINT_UNSUPPORTED`로 거부합니다.                                           |
+| Bun.SQL(모든 방언)                         | `BRAID_BIND_HINT_UNSUPPORTED`로 거부합니다.                                           |
 
 힌트를 몰래 무시하는 어댑터는 없습니다. PostgreSQL의 `postgresParameter.refcursor()`는 별개입니다. 루틴 전용이며 OUT·INOUT 포털을 구분하는 데만 씁니다.
 

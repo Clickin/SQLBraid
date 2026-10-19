@@ -61,7 +61,7 @@
       "source": "website/src/content/docs/concepts/parameter-hints.md",
       "translation": "website/src/content/docs/ko/concepts/parameter-hints.md",
       "translationOf": "website/src/content/docs/concepts/parameter-hints.md",
-      "sourceDigest": "f53f6ade284751a197ccd82e59524eec21f621a6efd2cb25fb883010a4fdb7fb"
+      "sourceDigest": "818a3a9c71bc54e28bc73425cf23f9797fb72c3b5f74f4d62d15ebe9c4082000"
     },
     {
       "source": "website/src/content/docs/concepts/result-mapping.md",
@@ -79,7 +79,7 @@
       "source": "website/src/content/docs/concepts/safe-binds.md",
       "translation": "website/src/content/docs/ko/concepts/safe-binds.md",
       "translationOf": "website/src/content/docs/concepts/safe-binds.md",
-      "sourceDigest": "29a77e003eb91ffd7fc6a3c24c8d7857bf837ef29725f0633325b92999304a39"
+      "sourceDigest": "8e912b01b0b0c3ce1c8e30158d65fae03708c383559f55940ae26d7d7159192a"
     },
     {
       "source": "website/src/content/docs/concepts/sql-tags.md",
@@ -121,7 +121,7 @@
       "source": "website/src/content/docs/getting-started/postgres.md",
       "translation": "website/src/content/docs/ko/getting-started/postgres.md",
       "translationOf": "website/src/content/docs/getting-started/postgres.md",
-      "sourceDigest": "747c7c30339747eab3e5cfaf4899d8f217a2614c2f02624728753f2dce1dd802"
+      "sourceDigest": "32dc2d76795154ab9f3de22ac849ada2cb2afc0df3ac70077c4079fde662b943"
     },
     {
       "source": "website/src/content/docs/getting-started/sqlite-browser.md",

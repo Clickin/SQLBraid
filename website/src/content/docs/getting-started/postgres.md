@@ -67,7 +67,7 @@ materializes text-positional `$1`, `$2`, … placeholders and the ordered value
 array. The driver owns this step. It occurs after the pure binding description
 and before lease acquisition. The PostgreSQL dialect does not supply the
 placeholder spelling. The adapter reports simple reuse that the driver owns. It
-rejects every parameter hint before I/O, because `pg` has no API that sets a parameter type. The postgres.js and PGlite adapters apply hints. See [parameter type hints](/SQLBraid/concepts/parameter-hints/).
+rejects every parameter hint before I/O, because `pg` exposes no per-parameter type option. The postgres.js and PGlite adapters apply hints. See [parameter type hints](/SQLBraid/concepts/parameter-hints/).
 
 :::caution Do not pass a pool to `createPgDatabase`
 SQLBraid does not duck-type pools. If you pass `pg.Pool` to the direct factory, the ownership model is wrong. Use `createPgPoolDatabase(pool)`.

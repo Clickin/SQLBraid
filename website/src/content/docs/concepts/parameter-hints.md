@@ -107,7 +107,7 @@ const query = sql.command`
 
 ## PostgreSQL hints
 
-A PostgreSQL hint sets the type OID of one parameter in the Parse message. The postgres.js and PGlite adapters apply it. The `pg` and Neon adapters reject it, because `pg` has no API that sets a parameter type.
+A PostgreSQL hint sets the type OID of one parameter in the Parse message. The postgres.js and PGlite adapters apply it. The `pg` and Neon adapters reject it, because `pg` exposes no per-parameter type option.
 
 ```ts
 import { postgresParameter, sql } from "@sqlbraid/postgres";
@@ -137,7 +137,7 @@ The hint carries no length, precision or scale, because the protocol sends only 
 
 The factories accept only inputs that the driver sends without a conversion. SQLBraid does not convert the value. For this reason, `int8` and `numeric` do not accept a `number`, and `timestamp` (without time zone) has no hint.
 
-`json` and `jsonb` have no hint. The postgres.js driver turns a JSON text into a JSON string value and PGlite does not. Write `CAST(${text} AS jsonb)` in your SQL. The same rule applies to enum, composite and extension types.
+`json` and `jsonb` have no hint. Write `CAST(${text} AS jsonb)` in your SQL. The same rule applies to enum, composite and extension types.
 
 ## A type without a hint
 
@@ -169,13 +169,14 @@ and its ordered hint signature.
 
 ## Adapter support
 
-| Adapter                                      | Parameter type hints                                                        |
-| -------------------------------------------- | --------------------------------------------------------------------------- |
-| SQL Server (Tedious), Oracle (node-oracledb) | Applied. See the sections above.                                            |
-| PostgreSQL with postgres.js or PGlite        | Applied. See [PostgreSQL hints](#postgresql-hints).                         |
-| PostgreSQL with `pg` or Neon                 | Rejected with `BRAID_BIND_HINT_UNSUPPORTED`. The driver has no API.         |
-| MySQL, MariaDB                               | Rejected with `BRAID_BIND_HINT_UNSUPPORTED`. The driver has no API.         |
-| SQLite adapters                              | Rejected with `BRAID_BIND_HINT_UNSUPPORTED`. SQLite has no parameter types. |
+| Adapter                                      | Parameter type hints                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------- |
+| SQL Server (Tedious), Oracle (node-oracledb) | Applied. See the sections above.                                                        |
+| PostgreSQL with postgres.js or PGlite        | Applied. See [PostgreSQL hints](#postgresql-hints).                                     |
+| PostgreSQL with `pg`, Neon (WebSocket, HTTP) | Rejected with `BRAID_BIND_HINT_UNSUPPORTED`. `pg` exposes no per-parameter type option. |
+| MySQL, MariaDB                               | Rejected with `BRAID_BIND_HINT_UNSUPPORTED`.                                            |
+| SQLite adapters                              | Rejected with `BRAID_BIND_HINT_UNSUPPORTED`.                                            |
+| Bun.SQL (all dialects)                       | Rejected with `BRAID_BIND_HINT_UNSUPPORTED`.                                            |
 
 No adapter silently ignores a hint. The PostgreSQL `postgresParameter.refcursor()` is a separate case. It is only for routines, and it classifies an OUT or INOUT portal.
 

@@ -70,6 +70,6 @@ const query = sql.rows<UserRow>`
 The render limits of SQLBraid also limit the SQL byte size, the bind count, the structural items and the nesting depth. If an application needs stricter limits, configure them with `createSqlTag({ dialect, limits })`.
 
 The Oracle and SQL Server adapters apply parameter type hints, and so do the PostgreSQL adapters for postgres.js and
-PGlite. The `pg`, Neon, MySQL, MariaDB and SQLite adapters reject a hint with `BRAID_BIND_HINT_UNSUPPORTED`. They never
+PGlite. The `pg`, Neon, MySQL, MariaDB, SQLite and Bun.SQL adapters reject a hint with `BRAID_BIND_HINT_UNSUPPORTED`. They never
 silently ignore a hint. See [parameter type hints](/SQLBraid/concepts/parameter-hints/). The PostgreSQL
 `postgresParameter.refcursor()` is only for routines. It classifies an OUT or INOUT portal.

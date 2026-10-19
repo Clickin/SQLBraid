@@ -53,7 +53,7 @@ and [versioned support records](support/targets/).
 - `@sqlbraid/postgres` 1.2.0: parameter type hints for the postgres.js and PGlite adapters. A hint sets the type OID
   of one parameter in the Parse message. New factories: `postgresParameter.boolean`, `int2`, `int4`, `int8`, `float4`,
   `float8`, `numeric`, `text`, `varchar`, `uuid`, `bytea`, `date`, `time`, `timestamptz` and `interval`.
-  The `pg`, Neon and neon-http adapters still reject every hint, because `pg` has no API that sets a parameter type.
+  The `pg`, Neon and neon-http adapters still reject every hint, because `pg` exposes no per-parameter type option.
   A hint cannot carry length, precision or scale. `json`, `jsonb`, `timestamp` and custom types have no hint: use
   `CAST(${value} AS type)` in the SQL. The adapter checks every hint before it runs the statement.
 - `@sqlbraid/postgres` 1.1.0: four optional adapter subpaths. All four use the lossless text profile and have the
