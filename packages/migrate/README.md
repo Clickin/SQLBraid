@@ -298,6 +298,38 @@ For the CLI, return `inspector` from the database factory alongside `db` and `cl
 Set `options.schemaCheck: "hash"` for checks and optionally set `snapshot` to the committed snapshot path.
 `sqlbraid migrate snapshot` writes `migrations/schema.snapshot.json` by default.
 
+`snapshot` and `accept-schema` read the database schema. They need an inspector or a drift adapter.
+Without one, `snapshot` fails with `migrate snapshot requires an inspector or drift adapter.`
+and `accept-schema` fails with `acceptSchema requires the drift option.`
+Add the inspector of your dialect to the object that the factory returns.
+This `sqlbraid.config.ts` adds the SQLite inspector to the configuration above:
+
+```ts
+import { DatabaseSync } from "node:sqlite";
+import { defineConfig } from "@sqlbraid/cli/config";
+import { dialect } from "@sqlbraid/sqlite";
+import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+
+export default defineConfig({
+  migrations: {
+    directory: "./migrations",
+    dialect,
+    database() {
+      const native = new DatabaseSync("application.sqlite");
+      return {
+        db: createNodeSqliteDatabase(native),
+        inspector: createSqliteInspector(native),
+        cleanup: () => native.close(),
+      };
+    },
+  },
+});
+```
+
+Run `pnpm exec sqlbraid migrate up` first, so that the schema exists. Then run `pnpm exec sqlbraid migrate snapshot`.
+The other dialects export their inspector from the `/inspector` subpath of the dialect package.
+
 The runtime root, Node loader and optional drift helper require Node 16.20.2 or later.
 Vite and CLI integration require Node 22.18.0 or later.
 Runtime-only SQLBraid installs do not pull in this migration package.

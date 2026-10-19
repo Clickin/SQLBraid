@@ -30,9 +30,10 @@ and [versioned support records](support/targets/).
   pnpm add sqlbraid @sqlbraid/sqlite
   ```
 
-  All publishable first-party packages and the VS Code extension move together to `2.0.0`.
+  The first-party packages and the VS Code extension move to `2.0.0`, except `@sqlbraid/migrate`.
+  `@sqlbraid/migrate` keeps its own version line and moves from `0.1.1` to `0.2.0`.
   This replaces the earlier plan to raise only the facade's major version.
-  Each package is still tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v2.0.0` for the others.
+  Each package is still tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v<version>` for the others.
   Query APIs and runtime behavior remain unchanged.
 
 - Update installation instructions for explicit dialect and driver dependencies.
@@ -52,6 +53,11 @@ and [versioned support records](support/targets/).
   - Evidence: `support/targets/{neon,neon-http,postgres-js,pglite}.json` and the cells `node-16-20-2-postgres-js-3-4-9`,
     `node-22-18-0-neon-serverless-1-2-0` and `node-22-18-0-pglite-0-5-8` in `support/runtime-compatibility.json`.
   - The published runtime floor of `@sqlbraid/postgres` stays `node >=16.20.2`. The Neon driver needs Node 19 or later.
+
+### Fixed
+
+- `@sqlbraid/bun-sql`: the execution plan of a SQLite statement reports the reuse mode `simple`. Before, it reported
+  `reuse`, but Bun.SQL does not keep a prepared statement for SQLite. PostgreSQL, MySQL and MariaDB are unchanged.
 
 ### Security
 
