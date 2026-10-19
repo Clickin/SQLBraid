@@ -199,7 +199,7 @@
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "20399e9e780199d4cf3feaa43148379a1b2a174275a08c82af66e175ed158003"
+      "sourceDigest": "2a7e34a3f453c3af17bf328743e984957ecdbd51f7a8cddda1d32c3f360dfb14"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
@@ -223,13 +223,19 @@
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "c141a02084bff05c24a3ebc4e97f25747b26b55736abbcfa67ac9b1aebce7bd1"
+      "sourceDigest": "9f95c1d3e815d0f30159d7db5e4108362bf01715eb38efc248d38185fcf8af2d"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",
       "translation": "website/src/content/docs/ko/release/roadmap.md",
       "translationOf": "website/src/content/docs/release/roadmap.md",
       "sourceDigest": "72bf82cf6d1a9852cbd25fe9639fc3ad5f24ccb59a1f79cd186bfb9ba18ad86c"
+    },
+    {
+      "source": "website/src/content/docs/release/upgrade-from-1x.md",
+      "translation": "website/src/content/docs/ko/release/upgrade-from-1x.md",
+      "translationOf": "website/src/content/docs/release/upgrade-from-1x.md",
+      "sourceDigest": "0f0b923234750317ef816a8237c808abf3e8c0514c712d366063ee6a89510324"
     },
     {
       "source": "website/src/content/docs/runtime/direct-pools.md",

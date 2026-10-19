@@ -230,7 +230,12 @@ export default defineConfig({
           label: "Release",
           translations: { ko: "릴리스" },
           items: [
-            { label: "1.0.0 notes", translations: { ko: "1.0.0 릴리스 노트" }, link: "/release/notes/" },
+            { label: "Release notes", translations: { ko: "릴리스 노트" }, link: "/release/notes/" },
+            {
+              label: "Upgrade from 1.x",
+              translations: { ko: "1.x에서 업그레이드" },
+              link: "/release/upgrade-from-1x/",
+            },
             { label: "Current limitations", translations: { ko: "현재 제한 사항" }, link: "/release/limitations/" },
             { label: "Roadmap", translations: { ko: "로드맵" }, link: "/release/roadmap/" },
           ],

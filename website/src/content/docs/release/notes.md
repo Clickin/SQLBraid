@@ -11,9 +11,10 @@ the supported combinations of database, driver, profile, runtime and capability.
 
 ## 2.0.0 release
 
-All publishable first-party packages and the VS Code extension use the version `2.0.0`.
+The first-party packages and the VS Code extension use the version `2.0.0`, except `@sqlbraid/migrate`.
+`@sqlbraid/migrate` keeps its own version line and is at `0.2.0`.
 This replaces the earlier plan to raise only the facade's major version.
-Each package is tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v2.0.0` for the others.
+Each package is tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v<version>` for the others.
 
 `sqlbraid` keeps only its root and `sqlbraid/compiled` entry points.
 Its only dependencies are `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template`.
