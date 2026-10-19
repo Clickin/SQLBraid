@@ -12,6 +12,10 @@ description: SQLBraid 2.0.0 릴리스, 드라이버 직접 import, 기능 경계
 `2.0.0`이 되는 것은 `sqlbraid`뿐입니다. 다른 자체 패키지는 각자의 버전 계열을 유지합니다.
 패키지마다 따로 태그하고 따로 릴리스합니다. `sqlbraid`는 `v2.0.0`, 나머지는 `<package>-v<version>`입니다.
 
+`@sqlbraid/postgres` 1.2.0은 postgres.js와 PGlite 어댑터에 파라미터 타입 힌트를 추가합니다.
+`sql.bind(value, postgresParameter.int8())`처럼 파라미터 하나의 타입을 정하세요.
+`pg`와 Neon 어댑터는 계속 모든 힌트를 거부합니다. [파라미터 타입 힌트](/SQLBraid/concepts/parameter-hints/)를 보세요.
+
 `sqlbraid`는 루트와 `sqlbraid/compiled` 진입점만 유지합니다.
 의존성은 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`뿐입니다.
 선택적 피어를 포함하여 방언이나 어댑터 의존성은 없습니다.

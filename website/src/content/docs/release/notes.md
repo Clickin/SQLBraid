@@ -14,6 +14,10 @@ the supported combinations of database, driver, profile, runtime and capability.
 Only `sqlbraid` moves to `2.0.0`. Each other first-party package keeps its own version line.
 Each package is tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v<version>` for the others.
 
+`@sqlbraid/postgres` 1.2.0 adds parameter type hints for the postgres.js and PGlite adapters.
+Use `sql.bind(value, postgresParameter.int8())` to set the type of one parameter.
+The `pg` and Neon adapters still reject every hint. See [parameter type hints](/SQLBraid/concepts/parameter-hints/).
+
 `sqlbraid` keeps only its root and `sqlbraid/compiled` entry points.
 Its only dependencies are `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template`.
 It has no dialect or adapter dependencies, including optional peers.
