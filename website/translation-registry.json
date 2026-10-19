@@ -97,13 +97,13 @@
       "source": "website/src/content/docs/getting-started/mariadb.md",
       "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
       "translationOf": "website/src/content/docs/getting-started/mariadb.md",
-      "sourceDigest": "9f703a2ef69412b24dac5e167aab36707964e027b5bd77d039d395efe105b750"
+      "sourceDigest": "6fccf3e14409eeb0a9abc2ea9bf189d95293ccb2251b3cf0f59c1231c0a40a5d"
     },
     {
       "source": "website/src/content/docs/getting-started/mssql.md",
       "translation": "website/src/content/docs/ko/getting-started/mssql.md",
       "translationOf": "website/src/content/docs/getting-started/mssql.md",
-      "sourceDigest": "5faf66efd7842dbe5af8b573c16bf367d05e02bb9fe135a91698e9ed31b27996"
+      "sourceDigest": "2badb88281e6823f711b9e9096bf9895c686cee68cfcc89a458d9f10362e0933"
     },
     {
       "source": "website/src/content/docs/getting-started/mysql.md",
@@ -115,7 +115,7 @@
       "source": "website/src/content/docs/getting-started/oracle.md",
       "translation": "website/src/content/docs/ko/getting-started/oracle.md",
       "translationOf": "website/src/content/docs/getting-started/oracle.md",
-      "sourceDigest": "c4f98991173bf58dd8cb278f5b7d3ff7da41e8e1e34609bf9c601e878a32f8bf"
+      "sourceDigest": "8c804b705e9e0cd0e72173e98f022cb741d4aaf59441fe1e631f70c0413244e7"
     },
     {
       "source": "website/src/content/docs/getting-started/postgres.md",

@@ -3,13 +3,42 @@ title: SQL Server 빠른 시작
 description: 결정적인 SQL Server 파라미터 힌트와 함께 SQLBraid를 Tedious에 연결합니다.
 ---
 
+이 페이지에는 Node `>=22.18.0`과 Docker가 필요합니다. Node 22.18.0은 TypeScript 예제를 바로 실행합니다. SQL Server 이미지는 x86-64용입니다. ARM 호스트에서는 에뮬레이션으로 실행되며, 이는 검증 범위 밖입니다.
+
+## 1. 데이터베이스 시작하기
+
+로컬 SQL Server를 시작하고, 예제가 읽는 데이터베이스와 테이블을 만드세요. `users` 테이블이 있는 서버가 이미 있다면 예제의 `SQLSERVER_*` 환경 변수를 설정하고 이 단계를 건너뛰세요.
+
+```bash
+docker run -d --name braid-mssql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD='Password!123' -p 1433:1433 mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
+until docker exec braid-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Password!123' -Q "SELECT 1" >/dev/null 2>&1; do sleep 2; done
+docker exec -i braid-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Password!123' <<'SQL'
+CREATE DATABASE app;
+GO
+USE app;
+CREATE TABLE users (id INT IDENTITY PRIMARY KEY, name NVARCHAR(200) NOT NULL);
+INSERT INTO users (name) VALUES (N'Ada'), (N'Grace');
+GO
+SQL
+export SQLSERVER_TRUST_SERVER_CERTIFICATE=true
+```
+
+컨테이너는 자체 서명 인증서를 씁니다. 마지막 명령은 이 로컬 서버에 한해서만 그 인증서를 신뢰하게 합니다.
+
+## 2. 프로젝트 만들기
+
 SQLBraid 런타임 파사드, SQL Server 방언 패키지, Tedious를 함께 설치하세요.
 
 ```bash
+mkdir braid-mssql-app && cd braid-mssql-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/mssql tedious
+mkdir src
 ```
 
-방언 루트는 SQL Server 방언과 힌트 팩토리를 제공합니다. Node 드라이버 어댑터는 `/tedious`에 있습니다.
+## 3. 쿼리 실행하기
+
+방언 루트는 SQL Server 방언과 힌트 팩토리를 제공합니다. Node 드라이버 어댑터는 `/tedious`에 있습니다. 이 코드를 `src/index.ts`로 저장하고 `node src/index.ts`로 실행하세요.
 
 ```ts
 import { Connection } from "tedious";
@@ -54,6 +83,8 @@ try {
   connection.close();
 }
 ```
+
+작업을 마쳤다면 `docker rm -f braid-mssql`로 서버를 멈추세요.
 
 TLS 암호화와 인증서 검증은 기본으로 켜져 있습니다. 자체 서명 인증서를 쓰는 격리된 로컬 개발 서버에서만 `SQLSERVER_TRUST_SERVER_CERTIFICATE=true`를 명시적으로 설정하세요. 원격 서버나 운영 서버에는 이 우회 설정을 쓰지 말고, 신뢰할 수 있는 인증서를 구성하세요.
 

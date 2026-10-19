@@ -3,14 +3,36 @@ title: MariaDB quickstart
 description: Connect SQLBraid to MariaDB Connector/Node.js while keeping MariaDB syntax explicit.
 ---
 
+This page needs Node `>=22.18.0` and Docker. Node 22.18.0 runs the TypeScript example directly.
+
+## 1. Start a database
+
+Start a local MariaDB server and create the table that the example reads. If you have a server with a `users` table, change the connection options in the example and skip this step.
+
+```bash
+docker run -d --name braid-mariadb -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=app -e MARIADB_USER=sqlbraid -e MARIADB_PASSWORD=password -p 3306:3306 mariadb:11.8
+until docker exec braid-mariadb mariadb -h 127.0.0.1 -usqlbraid -ppassword app -e "SELECT 1" >/dev/null 2>&1; do sleep 1; done
+docker exec -i braid-mariadb mariadb -usqlbraid -ppassword app <<'SQL'
+CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL);
+INSERT INTO users (name) VALUES ('Ada'), ('Grace');
+SQL
+```
+
+## 2. Create a project
+
 Install the SQLBraid runtime facade, the MariaDB dialect package and the official Connector/Node.js driver together:
 
 ```bash
+mkdir braid-mariadb-app && cd braid-mariadb-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/mariadb mariadb
+mkdir src
 ```
 
+## 3. Run a query
+
 Use the `/mariadb` adapter subpath with a connected connection or with an explicit
-pool factory:
+pool factory. Save this code as `src/index.ts` and run `node src/index.ts`:
 
 ```ts
 import mariadb from "mariadb";
@@ -35,6 +57,8 @@ try {
   await connection.end();
 }
 ```
+
+When you finish, stop the server with `docker rm -f braid-mariadb`.
 
 The dialect is `mariadb`, not `mysql`. You write MariaDB-specific syntax in your
 SQL. The current capability fixtures cover the documented

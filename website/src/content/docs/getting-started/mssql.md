@@ -3,13 +3,42 @@ title: SQL Server quickstart
 description: Connect SQLBraid to Tedious with deterministic SQL Server parameter hints.
 ---
 
+This page needs Node `>=22.18.0` and Docker. Node 22.18.0 runs the TypeScript example directly. The SQL Server image is built for x86-64. On an ARM host it runs under emulation, which is outside the tested scope.
+
+## 1. Start a database
+
+Start a local SQL Server and create the database and the table that the example reads. If you have a server with a `users` table, set the `SQLSERVER_*` variables of the example and skip this step.
+
+```bash
+docker run -d --name braid-mssql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD='Password!123' -p 1433:1433 mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
+until docker exec braid-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Password!123' -Q "SELECT 1" >/dev/null 2>&1; do sleep 2; done
+docker exec -i braid-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Password!123' <<'SQL'
+CREATE DATABASE app;
+GO
+USE app;
+CREATE TABLE users (id INT IDENTITY PRIMARY KEY, name NVARCHAR(200) NOT NULL);
+INSERT INTO users (name) VALUES (N'Ada'), (N'Grace');
+GO
+SQL
+export SQLSERVER_TRUST_SERVER_CERTIFICATE=true
+```
+
+The container uses a self-signed certificate. The last command trusts it for this local server only.
+
+## 2. Create a project
+
 Install the SQLBraid runtime facade, the SQL Server dialect package and Tedious together:
 
 ```bash
+mkdir braid-mssql-app && cd braid-mssql-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/mssql tedious
+mkdir src
 ```
 
-The portable root exposes the SQL Server dialect and the hint factories. The Node driver adapter is under `/tedious`:
+## 3. Run a query
+
+The portable root exposes the SQL Server dialect and the hint factories. The Node driver adapter is under `/tedious`. Save this code as `src/index.ts` and run `node src/index.ts`:
 
 ```ts
 import { Connection } from "tedious";
@@ -54,6 +83,8 @@ try {
   connection.close();
 }
 ```
+
+When you finish, stop the server with `docker rm -f braid-mssql`.
 
 TLS encryption and certificate verification are enabled by default. Set
 `SQLSERVER_TRUST_SERVER_CERTIFICATE=true` explicitly only for an isolated local
