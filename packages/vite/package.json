@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/vite",
-  "version": "2.0.0",
+  "version": "1.0.2",
   "description": "Vite integration for SQLBraid guarded-template lowering",
   "keywords": [
     "compiler",
@@ -32,7 +32,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/compiler": "workspace:^2.0.0"
+    "@sqlbraid/compiler": "workspace:^1.1.0"
   },
   "devDependencies": {
     "vite": ">=8.0.0"

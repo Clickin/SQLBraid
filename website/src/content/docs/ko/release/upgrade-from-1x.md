@@ -5,7 +5,7 @@ description: 제거된 sqlbraid 드라이버 하위 경로를 방언·어댑터 
 
 SQLBraid 2.0은 `sqlbraid` 패키지의 드라이버·방언 하위 경로를 제거합니다. 쿼리 API와 런타임 동작은 바뀌지 않습니다. 업그레이드에서 바꿀 것은 설치하는 패키지와 import 경로뿐입니다.
 
-대부분의 자체 패키지는 버전이 `2.0.0`입니다. `@sqlbraid/migrate`는 독자적인 버전 계열을 유지하며 `0.1.1`에서 `0.2.0`으로 올라갑니다.
+`2.0.0`이 되는 것은 `sqlbraid`뿐입니다. 다른 자체 패키지는 각자의 버전 계열을 유지합니다.
 
 ## 무엇이 바뀌나요
 
@@ -35,7 +35,7 @@ grep -rEn "from \"sqlbraid/(pg|postgres|mysql2|mysql|mariadb|node-sqlite|better-
 애플리케이션이 쓰는 데이터베이스마다 방언 패키지를 설치하세요. 공용 타입과 런타임 생성 함수 때문에 `sqlbraid`도 유지합니다.
 
 ```bash
-pnpm add sqlbraid@2 @sqlbraid/sqlite@2
+pnpm add sqlbraid@2 @sqlbraid/sqlite
 ```
 
 데이터베이스에 맞는 패키지를 표에서 고르세요.
@@ -96,7 +96,7 @@ pnpm exec tsc --noEmit
 ## 다른 패키지
 
 - `@sqlbraid/migrate`는 `0.1.1`에서 `0.2.0`으로 올라갑니다.
-- CLI, 언어 서버, Vite 플러그인 등 다른 도구 패키지는 `sqlbraid`와 함께 `2.0.0`으로 올리세요.
-- VS Code 확장의 버전은 `2.0.0`입니다.
+- `@sqlbraid/compiler`와 `@sqlbraid/cli`는 `1.1.0`으로 올리세요. 이전 compiler는 제거된 하위 경로만 인식합니다.
+- 컴파일된 쿼리를 쓰는 애플리케이션에는 `@sqlbraid/template`을 직접 의존성으로 설치하세요.
 
 전체 변경 목록은 [릴리스 노트](/SQLBraid/release/notes/)를 보세요.

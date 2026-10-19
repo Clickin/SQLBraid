@@ -10,7 +10,7 @@
   "dependencies": {
     "@hono/node-server": "2.1.4",
     "@sqlbraid/migrate": "0.2.0",
-    "@sqlbraid/postgres": "2.0.0",
+    "@sqlbraid/postgres": "1.1.0",
     "hono": "4.13.13",
     "pg": "8.23.0",
     "pg-cursor": "2.22.0",

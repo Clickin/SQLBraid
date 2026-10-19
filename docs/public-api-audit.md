@@ -4,8 +4,8 @@ This inventory records the stable public boundary of SQLBraid. It classifies
 the API and is a compatibility reference. It is not a publication claim and not a
 support claim.
 
-All publishable first-party packages and the VS Code extension move together to
-2.0.0. The `sqlbraid` facade keeps only its root and `sqlbraid/compiled` entry
+Each first-party package keeps its own version line. `sqlbraid` moves to 2.0.0 and its
+facade keeps only its root and `sqlbraid/compiled` entry
 points. Applications import dialects and adapters from their owning
 `@sqlbraid/*` packages. The facade has no dialect or adapter peer dependencies.
 
@@ -89,7 +89,7 @@ alias for prepare.
 data. The compiler and tooling read it. It records the identities of supported
 modules that export tags, and the dialect evidence. It is not an execution API
 and not an error API.
-In 2.0.0, the catalog contains `@sqlbraid/template` and the six dialect roots.
+In `@sqlbraid/core` 1.1.0, the catalog contains `@sqlbraid/template` and the six dialect roots.
 Driver facade entries and the `helperFamily` field are removed.
 The compiler imports generated helpers directly from `@sqlbraid/template`.
 

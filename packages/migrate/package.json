@@ -44,15 +44,15 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:^2.0.0",
-    "@sqlbraid/template": "workspace:^2.0.0"
+    "@sqlbraid/core": "workspace:^1.1.0",
+    "@sqlbraid/template": "workspace:^1.0.3"
   },
   "devDependencies": {
-    "@sqlbraid/metadata": "workspace:^",
+    "@sqlbraid/metadata": "workspace:^1.0.3",
     "vite": ">=8.0.0"
   },
   "peerDependencies": {
-    "@sqlbraid/metadata": "workspace:^2.0.0",
+    "@sqlbraid/metadata": "workspace:^1.0.3",
     "vite": ">=8.0.0"
   },
   "peerDependenciesMeta": {

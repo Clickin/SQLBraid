@@ -5,7 +5,7 @@ description: Replace the removed sqlbraid driver subpaths with the dialect and a
 
 SQLBraid 2.0 removes the driver and dialect subpaths of the `sqlbraid` package. Query APIs and runtime behavior do not change. An upgrade changes the installed packages and the import paths.
 
-Most first-party packages use the version `2.0.0`. `@sqlbraid/migrate` keeps its own version line and moves from `0.1.1` to `0.2.0`.
+Only `sqlbraid` moves to `2.0.0`. Each other first-party package keeps its own version line.
 
 ## What changes
 
@@ -35,7 +35,7 @@ Keep imports from `sqlbraid` and `sqlbraid/compiled`. Replace all other matches.
 Install the dialect package for each database that your application uses. Keep `sqlbraid` for the shared types and the runtime factories.
 
 ```bash
-pnpm add sqlbraid@2 @sqlbraid/sqlite@2
+pnpm add sqlbraid@2 @sqlbraid/sqlite
 ```
 
 Use the package from the table for your database:
@@ -96,7 +96,7 @@ An old import fails with one of these errors:
 ## Other packages
 
 - `@sqlbraid/migrate` goes from `0.1.1` to `0.2.0`.
-- Upgrade the CLI, the language server, the Vite plugin and the other tooling packages to `2.0.0` together with `sqlbraid`.
-- The VS Code extension uses the version `2.0.0`.
+- Upgrade `@sqlbraid/compiler` and `@sqlbraid/cli` to `1.1.0`. Older compiler versions recognize only the removed subpaths.
+- Install `@sqlbraid/template` as a direct dependency if your application uses compiled queries.
 
 See the [release notes](/SQLBraid/release/notes/) for the full list of changes.

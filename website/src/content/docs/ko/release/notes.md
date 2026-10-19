@@ -9,9 +9,7 @@ description: SQLBraid 2.0.0 릴리스, 드라이버 직접 import, 기능 경계
 
 ## 2.0.0 릴리스
 
-`@sqlbraid/migrate`를 제외한 자체 패키지와 VS Code 확장의 버전이 `2.0.0`이 됩니다.
-`@sqlbraid/migrate`는 독자적인 버전 계열을 유지하며 `0.2.0`입니다.
-파사드만 메이저 버전을 올리려던 이전 계획을 대체합니다.
+`2.0.0`이 되는 것은 `sqlbraid`뿐입니다. 다른 자체 패키지는 각자의 버전 계열을 유지합니다.
 패키지마다 따로 태그하고 따로 릴리스합니다. `sqlbraid`는 `v2.0.0`, 나머지는 `<package>-v<version>`입니다.
 
 `sqlbraid`는 루트와 `sqlbraid/compiled` 진입점만 유지합니다.

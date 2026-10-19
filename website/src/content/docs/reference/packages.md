@@ -32,7 +32,7 @@ It has no dialect or adapter dependencies, including optional peers.
 Install each dialect or adapter package and external driver that your application uses.
 Import `sql` and dialect hints from the package root, and factories from its adapter subpath.
 Driver and dialect facade subpaths are removed in 2.0.0.
-The first-party packages and the VS Code extension use the version `2.0.0`, except `@sqlbraid/migrate`, which is at `0.2.0`. Each package is tagged and released on its own.
+Only `sqlbraid` uses the version `2.0.0`. Each other first-party package keeps its own version line. Each package is tagged and released on its own.
 
 For Bun.SQL, use `@sqlbraid/bun-sql`. Import `sql` from the selected dialect
 root and give that dialect explicitly:

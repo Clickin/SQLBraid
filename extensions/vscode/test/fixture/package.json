@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@sqlbraid/template": "2.0.0"
+    "@sqlbraid/template": "1.0.3"
   }
 }

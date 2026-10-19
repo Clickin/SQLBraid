@@ -11,7 +11,7 @@ pnpm add --save-dev @sqlbraid/cli
 ```
 
 Use SQLBraid 2.x packages, including `@sqlbraid/cli` and `@sqlbraid/tooling` for CLI commands.
-Optional schema drift needs the `@sqlbraid/metadata` peer dependency at version `^2.0.0`.
+Optional schema drift needs the `@sqlbraid/metadata` peer dependency at version `^1.0.3`.
 
 Installing these tools does not configure the application's database.
 Install the matching dialect or adapter package and its driver for your application.

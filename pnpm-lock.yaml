@@ -176,10 +176,10 @@ importers:
   extensions/vscode:
     dependencies:
       '@sqlbraid/cli':
-        specifier: workspace:2.0.0
+        specifier: workspace:1.1.0
         version: link:../../packages/cli
       '@sqlbraid/language-server':
-        specifier: workspace:2.0.0
+        specifier: workspace:1.0.4
         version: link:../../packages/language-server
       vscode-languageclient:
         specifier: 9.0.1
@@ -201,31 +201,31 @@ importers:
   packages/bun-sql:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/runtime':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
 
   packages/cli:
     dependencies:
       '@sqlbraid/codegen':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.2
         version: link:../codegen
       '@sqlbraid/compiler':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../compiler
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
       '@sqlbraid/operations':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.2
         version: link:../operations
       '@sqlbraid/tooling':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../tooling
     devDependencies:
       '@sqlbraid/migrate':
@@ -235,10 +235,10 @@ importers:
   packages/codegen:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
 
   packages/compiler:
@@ -247,10 +247,10 @@ importers:
         specifier: 0.3.13
         version: 0.3.13
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/template':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../template
       typescript:
         specifier: 5.9.3
@@ -265,16 +265,16 @@ importers:
   packages/language-server:
     dependencies:
       '@sqlbraid/compiler':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../compiler
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
       '@sqlbraid/tooling':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../tooling
       vscode-languageserver:
         specifier: 9.0.1
@@ -286,16 +286,16 @@ importers:
   packages/mariadb:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
       '@sqlbraid/runtime':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
       '@sqlbraid/template':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../template
       mariadb:
         specifier: 3.5.4
@@ -306,14 +306,14 @@ importers:
   packages/migrate:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/template':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../template
     devDependencies:
       '@sqlbraid/metadata':
-        specifier: workspace:^
+        specifier: workspace:^1.0.3
         version: link:../metadata
       vite:
         specifier: '>=8.0.0'
@@ -322,17 +322,17 @@ importers:
   packages/mssql:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/runtime':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
       '@sqlbraid/template':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../template
     devDependencies:
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
       tedious:
         specifier: 20.0.0
@@ -341,23 +341,23 @@ importers:
   packages/mysql:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/runtime':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
       '@sqlbraid/template':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../template
     devDependencies:
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
 
   packages/opentelemetry:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
     devDependencies:
       '@opentelemetry/api':
@@ -367,23 +367,23 @@ importers:
   packages/operations:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
 
   packages/oracle:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/runtime':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
       '@sqlbraid/template':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../template
     devDependencies:
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
       '@types/oracledb':
         specifier: 7.0.3
@@ -395,17 +395,17 @@ importers:
   packages/postgres:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/runtime':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
       '@sqlbraid/template':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../template
     devDependencies:
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
       '@types/pg-cursor':
         specifier: 2.7.2
@@ -417,56 +417,56 @@ importers:
   packages/runtime:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
 
   packages/sqlbraid:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/runtime':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
       '@sqlbraid/template':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../template
 
   packages/sqlite:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/runtime':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../runtime
       '@sqlbraid/template':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../template
     devDependencies:
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
 
   packages/template:
     dependencies:
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
 
   packages/tooling:
     dependencies:
       '@sqlbraid/codegen':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.2
         version: link:../codegen
       '@sqlbraid/compiler':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../compiler
       '@sqlbraid/core':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../core
       '@sqlbraid/metadata':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.0.3
         version: link:../metadata
       typescript:
         specifier: 5.9.3
@@ -475,7 +475,7 @@ importers:
   packages/vite:
     dependencies:
       '@sqlbraid/compiler':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../compiler
     devDependencies:
       vite:
@@ -491,7 +491,7 @@ importers:
         specifier: 0.3.31
         version: 0.3.31
       '@sqlbraid/compiler':
-        specifier: workspace:^2.0.0
+        specifier: workspace:^1.1.0
         version: link:../compiler
 
   tests:

@@ -30,18 +30,27 @@ and [versioned support records](support/targets/).
   pnpm add sqlbraid @sqlbraid/sqlite
   ```
 
-  The first-party packages and the VS Code extension move to `2.0.0`, except `@sqlbraid/migrate`.
-  `@sqlbraid/migrate` keeps its own version line and moves from `0.1.1` to `0.2.0`.
-  This replaces the earlier plan to raise only the facade's major version.
-  Each package is still tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v<version>` for the others.
+  Only `sqlbraid` moves to `2.0.0`. Each other package keeps its own version line and is tagged and released on its own
+  (`v2.0.0` for `sqlbraid`, `<package>-v<version>` for the others). Packages with changes in this release:
+  `@sqlbraid/core` 1.1.0, `@sqlbraid/compiler` 1.1.0, `@sqlbraid/cli` 1.1.0, `@sqlbraid/migrate` 0.2.0,
+  `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/bun-sql` 1.0.3, `@sqlbraid/language-server` 1.0.4 and `@sqlbraid/mssql` 1.0.4.
   Query APIs and runtime behavior remain unchanged.
 
 - Update installation instructions for explicit dialect and driver dependencies.
   Mark the 1.0 release notes as historical and remove obsolete facade examples.
 
+### Changed
+
+- `@sqlbraid/core` 1.1.0: `AUTHORING_MODULE_CATALOG` lists only `@sqlbraid/template` and the six dialect roots. The
+  `helperFamily` field and the driver facade entries are removed. Only the compiler and the tooling read this catalog.
+  This narrows a public type in a minor release on purpose: a major version of `core` would force a new major version
+  on every package that depends on it.
+- `@sqlbraid/compiler` 1.1.0: generated code always imports its helpers from `@sqlbraid/template`.
+  Install `@sqlbraid/template` as a direct dependency of an application with compiled queries.
+
 ### Added
 
-- `@sqlbraid/postgres` 2.0.0: four optional adapter subpaths. All four use the lossless text profile and have the
+- `@sqlbraid/postgres` 1.1.0: four optional adapter subpaths. All four use the lossless text profile and have the
   support label Compatible. They have no verification in real applications yet.
   - `@sqlbraid/postgres/neon`: Neon over WebSocket (`@neondatabase/serverless` `Pool` and `Client`).
   - `@sqlbraid/postgres/neon-http`: Neon over HTTP. It is stateless. `db.tx`, `db.session`, streams and cancellation
