@@ -2,16 +2,26 @@
 
 > TypeScript·TSX 변환은 그대로 두고, Vite 8에서 SQLBraid 조건부 템플릿을 변환합니다.
 
+이 페이지에는 Node `>=22.18.0`이 필요합니다. 예제는 메모리 SQLite를 쓰므로 데이터베이스 서버가 필요 없습니다.
+
+## 1. 프로젝트 만들기
+
 애플리케이션의 SQLBraid 방언 패키지와 함께 Vite 플러그인을 설치하세요.
 다음 명령은 SQLite를 사용합니다.
 
 ```bash
-pnpm add sqlbraid @sqlbraid/sqlite @sqlbraid/template @sqlbraid/vite
+mkdir braid-vite-app && cd braid-vite-app
+pnpm init --init-type module
+pnpm add sqlbraid @sqlbraid/sqlite @sqlbraid/template
+pnpm add --save-dev vite @sqlbraid/vite
+mkdir src
 ```
 
 생성된 코드는 `@sqlbraid/template`에서 헬퍼를 import합니다. 애플리케이션의 직접 런타임 의존성으로 유지하세요.
 
-프레임워크와 무관한 이 플러그인을 일반 Vite 변환보다 앞에 추가하세요.
+## 2. 플러그인 추가하기
+
+프레임워크와 무관한 이 플러그인을 일반 Vite 변환보다 앞에 추가하세요. 이 코드를 `vite.config.ts`로 저장하세요.
 
 ```ts
 import { defineConfig } from "vite";
@@ -21,6 +31,51 @@ export default defineConfig({
   plugins: [sqlbraid()],
 });
 ```
+
+## 3. 동적 쿼리 작성하기
+
+이 코드를 `src/main.ts`로 저장하세요.
+
+```ts
+import { DatabaseSync } from "node:sqlite";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { sql } from "@sqlbraid/sqlite";
+
+interface UserRow {
+  id: string;
+  name: string;
+}
+
+const native = new DatabaseSync(":memory:");
+native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
+native.exec("INSERT INTO users (name) VALUES ('Ada'), ('Grace')");
+
+const db = createNodeSqliteDatabase(native);
+const name: string | null = "Ada";
+const users = await db.all(sql.rows<UserRow>`
+  SELECT id, name FROM users
+  /*@braid where*/
+    /*@braid if ${name != null}*/
+      AND name = ${name}
+    /*@braid end*/
+  /*@braid end*/
+`);
+console.log(users);
+native.close();
+```
+
+## 4. 빌드하고 실행하기
+
+Node용으로 파일을 빌드한 다음 결과를 실행하세요.
+
+```bash
+pnpm exec vite build --ssr src/main.ts
+node dist/main.js
+```
+
+출력은 `[{ id: '1', name: 'Ada' }]`입니다. `AND name = ...` 줄은 `name`이 `null`이 아닐 때만 SQL에 남습니다.
+
+## 플러그인 옵션
 
 `@sqlbraid/vite`는 Vite 8을 대상으로 하며 사전 변환으로 실행됩니다. `@sqlbraid/*` 방언 루트와 `@sqlbraid/template`에서 import한 태그를 인식합니다. 애플리케이션이 태그를 감싸서 쓴다면 사용자 정의 태그를 설정하세요.
 
