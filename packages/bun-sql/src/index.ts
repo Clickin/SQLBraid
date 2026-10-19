@@ -391,8 +391,11 @@ function normalizeRow(row: unknown, dialect: BunSqlDialect): unknown {
   if (row !== null && typeof row === "object" && !(row instanceof Date) && !(row instanceof Uint8Array)) {
     const normalized: Record<string, unknown> = {};
     for (const key in row) {
-      if (Object.hasOwn(row, key))
-        defineResultProperty(normalized, key, normalizeRowValue((row as Record<string, unknown>)[key], dialect));
+      if (!Object.hasOwn(row, key)) continue;
+      const value = normalizeRowValue((row as Record<string, unknown>)[key], dialect);
+      // An assignment is much cheaper than a property definition. Only "__proto__" needs the definition.
+      if (key === "__proto__") defineResultProperty(normalized, key, value);
+      else normalized[key] = value;
     }
     return Object.freeze(normalized);
   }

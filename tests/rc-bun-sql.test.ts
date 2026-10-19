@@ -157,6 +157,32 @@ test("Bun.SQL rejects ambiguous MySQL byte carriers without decoding PostgreSQL 
   assert.deepEqual(await postgresDb.one(postgres.rows`SELECT ${bytes}`), { value: bytes });
 });
 
+test("Bun.SQL object rows keep own __proto__ and constructor keys, convert BigInt to text and freeze", async () => {
+  const base = fakeClient([], { count: 0 });
+  const native = JSON.parse('{"__proto__":"own","constructor":"c","toString":"t","big":1,"plain":"x"}') as Record<
+    string,
+    unknown
+  >;
+  native.big = 9007199254740993n;
+  const result = (): PromiseLike<unknown> =>
+    immediateQuery(Object.assign([native], { command: "SELECT", count: 1, lastInsertRowid: null, affectedRows: 1 }));
+  const client = Object.assign(result as unknown as BunSqlClient, {
+    unsafe: result as unknown as BunSqlClient["unsafe"],
+    reserve: base.reserve,
+  });
+  Object.defineProperty(client, "options", { value: { prepare: true } });
+  const db = createBunSqlDatabase(client, { dialect: "sqlite" });
+  const rows = await db.all(sqlite.rows`SELECT 1`);
+  const row = rows[0] as Record<string, unknown>;
+  assert.equal(Object.getPrototypeOf(row), Object.prototype);
+  assert.deepEqual(Object.keys(row), ["__proto__", "constructor", "toString", "big", "plain"]);
+  assert.equal(Object.getOwnPropertyDescriptor(row, "__proto__")?.value, "own");
+  assert.equal(row.constructor, "c");
+  assert.equal(row.big, "9007199254740993");
+  assert.ok(Object.isFrozen(row));
+  assert.ok(Object.isFrozen(rows));
+});
+
 test("Bun.SQL reserved connections pin sessions and transactions", async () => {
   const logs: Log[] = [];
   const releaseCounts = { count: 0 };
