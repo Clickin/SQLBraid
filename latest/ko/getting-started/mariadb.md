@@ -2,13 +2,35 @@
 
 > MariaDB 문법을 명시적으로 쓰면서 SQLBraid를 MariaDB Connector/Node.js에 연결합니다.
 
+이 페이지에는 Node `>=22.18.0`과 Docker가 필요합니다. Node 22.18.0은 TypeScript 예제를 바로 실행합니다.
+
+## 1. 데이터베이스 시작하기
+
+로컬 MariaDB 서버를 시작하고, 예제가 읽는 테이블을 만드세요. `users` 테이블이 있는 서버가 이미 있다면 예제의 연결 옵션을 바꾸고 이 단계를 건너뛰세요.
+
+```bash
+docker run -d --name braid-mariadb -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=app -e MARIADB_USER=sqlbraid -e MARIADB_PASSWORD=password -p 3306:3306 mariadb:11.8
+until docker exec braid-mariadb mariadb -h 127.0.0.1 -usqlbraid -ppassword app -e "SELECT 1" >/dev/null 2>&1; do sleep 1; done
+docker exec -i braid-mariadb mariadb -usqlbraid -ppassword app <<'SQL'
+CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL);
+INSERT INTO users (name) VALUES ('Ada'), ('Grace');
+SQL
+```
+
+## 2. 프로젝트 만들기
+
 SQLBraid 런타임 파사드, MariaDB 방언 패키지, 공식 Connector/Node.js 드라이버를 함께 설치하세요.
 
 ```bash
+mkdir braid-mariadb-app && cd braid-mariadb-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/mariadb mariadb
+mkdir src
 ```
 
-연결된 커넥션이나 명시적인 풀 팩토리와 함께 `/mariadb` 어댑터 하위 경로를 쓰세요.
+## 3. 쿼리 실행하기
+
+연결된 커넥션이나 명시적인 풀 팩토리와 함께 `/mariadb` 어댑터 하위 경로를 쓰세요. 이 코드를 `src/index.ts`로 저장하고 `node src/index.ts`로 실행하세요.
 
 ```ts
 import mariadb from "mariadb";
@@ -33,6 +55,8 @@ try {
   await connection.end();
 }
 ```
+
+작업을 마쳤다면 `docker rm -f braid-mariadb`로 서버를 멈추세요.
 
 방언은 `mysql`이 아니라 `mariadb`입니다. MariaDB 전용 문법은 SQL에 직접 씁니다. 현재 기능 검증 픽스처는 문서에 나온 `INSERT ... RETURNING`, `DELETE ... RETURNING`, `REPLACE ... RETURNING`, 시퀀스, CTE, JSON 함수를 다룹니다.
 
