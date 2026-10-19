@@ -127,10 +127,8 @@ For the shape of the explicit procedure metadata and the heterogeneous
 
 ## Tedious representation profile
 
-The documented free test target is SQL Server 2022 CU18 Developer with
-Tedious 20.0.0 on Node 22.18.0/Linux x64. The support manifest assigns the
-evidence label. This page does not. A different SQL Server edition or runtime is
-a separate profile.
+This profile applies to SQL Server 2022 CU18 Developer with Tedious 20.0.0 on
+Node 22.18.0/Linux x64.
 
 | SQL Server value                               | Driver raw / SQLBraid canonical representation | Status/caveat                                                                                               |
 | ---------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |

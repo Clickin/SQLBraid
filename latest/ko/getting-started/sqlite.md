@@ -189,7 +189,7 @@ const rows = await db.all(sql.rows`SELECT 1 AS value`);
 
 로컬 `file:` libSQL 클라이언트와 프로토콜을 알 수 없는 libSQL 클라이언트는 선택 사항인 `command.insertId`를 생략합니다. 네이티브 바인딩이 bigint를 반환하기 전에 ROWID를 Number로 거치면서 반올림하기 때문입니다. 이것은 모든 `intMode`에서 일어납니다. 행 조회, 트랜잭션, 벌크 실행, `affectedRows`는 계속 지원합니다. 정확한 ID가 필요하면 SQL에 `INSERT ... RETURNING id`를 쓰고 `sql.rows`를 쓰세요. SQLBraid는 SQL을 고쳐 쓰거나 보완 쿼리를 보내지 않습니다.
 
-SQLite 인스펙터는 기본으로 `introspectionScope: "main"`을 씁니다. 메타데이터 수집은 연결(attach)된 스키마를 검사하지 않습니다. 필드가 없다고 인덱스나 제약이 없다는 증거가 되지는 않습니다. better-sqlite3와 libSQL 대상은 정확한 런타임·드라이버 근거가 생기기 전까지 Compatible입니다. 비슷하다는 이유로 인증되지 않습니다.
+SQLite 인스펙터는 기본으로 `introspectionScope: "main"`을 씁니다. 메타데이터 수집은 연결(attach)된 스키마를 검사하지 않습니다. 필드가 없다고 인덱스나 제약이 없다는 증거가 되지는 않습니다. better-sqlite3와 libSQL 대상은 Compatible입니다.
 
 libSQL 트랜잭션 옵션:
 

@@ -129,12 +129,8 @@ schema.
 - Native JSON is a parsed convenience value. When you need serialized text, use
   a tested fetch handler or `JSON_SERIALIZE(... RETURNING CLOB)`.
 
-The executable LOB audit covers CLOB and BLOB OUT and IN OUT binds,
-materialization and cleanup in the `oracle.routine.inout` support fixture. The
-target manifest links that test and its exact Oracle Free evidence. The fixture
-is a real Oracle Free integration test. The separate adapter unit tests for
-mocked LOB carriers verify only the cleanup and error paths. They do not promote
-a different database or driver target.
+The `oracle.routine.inout` support fixture checks CLOB and BLOB OUT and IN OUT
+binds, materialization and cleanup on a real Oracle Free database.
 
 For the complete `sql.out`/`sql.inOut` and heterogeneous result-set rules, read
 [routine calls](/SQLBraid/latest/concepts/routines.md).

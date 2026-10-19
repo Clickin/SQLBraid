@@ -111,7 +111,7 @@
 <li>날짜·시간 값은 guarded 편의 프로필인 <code dir="auto">Date</code>를 씁니다. 원본 시간대 이름이나 밀리초 미만 정밀도는 유지하지 않습니다. 무손실 텍스트 경로가 필요하면 SQL에 <code dir="auto">TO_CHAR</code>나 포맷 식을 쓰세요.</li>
 <li>네이티브 JSON은 파싱된 편의 값입니다. 직렬화된 텍스트가 필요하면 검증된 fetch 핸들러나 <code dir="auto">JSON_SERIALIZE(... RETURNING CLOB)</code>를 쓰세요.</li>
 </ul>
-<p>실행 가능한 LOB 검증은 <code dir="auto">oracle.routine.inout</code> 지원 픽스처에서 CLOB·BLOB의 OUT·IN OUT 바인딩, 메모리 읽기, 정리를 다룹니다. 대상 매니페스트는 이 테스트와 정확한 Oracle Free 근거를 연결합니다. 이 픽스처는 실제 Oracle Free 통합 테스트입니다. 모의 LOB 객체를 쓰는 별도의 어댑터 단위 테스트는 정리와 오류 경로만 확인하며, 다른 데이터베이스나 드라이버 대상의 등급을 올리지 않습니다.</p>
+<p>CLOB·BLOB의 OUT·IN OUT 바인딩, 메모리 읽기, 정리는 <code dir="auto">oracle.routine.inout</code> 지원 픽스처가 실제 Oracle Free에서 검증합니다.</p>
 <p><code dir="auto">sql.out</code>/<code dir="auto">sql.inOut</code>과 여러 결과 집합에 대한 전체 규칙은 <a href="/SQLBraid/latest/ko/concepts/routines/">루틴 호출</a>을 보세요.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="oracle-thin-표현-방식-프로필">Oracle Thin 표현 방식 프로필</h2><a class="sl-anchor-link" href="#oracle-thin-표현-방식-프로필"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “Oracle Thin 표현 방식 프로필”</span></a></div>
 <p>공식 프로필은 node-oracledb Thin 모드입니다.</p>
