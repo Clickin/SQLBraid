@@ -34,6 +34,7 @@ import {
 import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { mariaDbEnvironment, mariaDbProfile } from "./mariadb/environment.js";
 import { fieldTypes } from "./mariadb/types.js";
+import { resolveCellDecoder } from "./type-policy.js";
 import type {
   MariaDbCommandResult,
   MariaDbConnectionLike,
@@ -281,13 +282,21 @@ function prepareMariaDbRowProjector(
     if (name === undefined) return [];
     const type = databaseType(field);
     const validate = prepareMariaDbNumericValidator(type);
+    const cell = type === undefined ? undefined : resolveCellDecoder(policy, type);
     const decode =
       type === undefined
         ? identityResultValue
-        : (entry: unknown): unknown => {
-            validate(entry);
-            return policy.decode(type, entry);
-          };
+        : cell === undefined
+          ? (entry: unknown): unknown => {
+              validate?.(entry);
+              return policy.decode(type, entry);
+            }
+          : validate === undefined
+            ? cell
+            : (entry: unknown): unknown => {
+                validate(entry);
+                return cell(entry);
+              };
     return [{ name, index, decode }];
   });
   const projectArray = preparePositionalResultProjector(columns, rowCountHint);
@@ -306,8 +315,8 @@ function prepareMariaDbRowProjector(
   };
 }
 
-function prepareMariaDbNumericValidator(databaseTypeName: string | undefined): (value: unknown) => void {
-  if (databaseTypeName === undefined) return () => undefined;
+function prepareMariaDbNumericValidator(databaseTypeName: string | undefined): ((value: unknown) => void) | undefined {
+  if (databaseTypeName === undefined) return undefined;
   const type = databaseTypeName.toUpperCase();
   if (type === "TINYINT" || type === "SMALLINT" || type === "MEDIUMINT" || type === "INT") {
     return (value) => {
@@ -343,7 +352,7 @@ function prepareMariaDbNumericValidator(databaseTypeName: string | undefined): (
       throw new ResultExactnessError(`MariaDB ${type} result must remain a JavaScript number.`);
     };
   }
-  return () => undefined;
+  return undefined;
 }
 
 function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
