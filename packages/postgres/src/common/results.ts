@@ -1,6 +1,7 @@
 import type { TypePolicy } from "@sqlbraid/core";
 import { defineResultProperty, identityResultValue, preparePositionalResultProjector } from "@sqlbraid/core/driver";
 import type { RenderedStatement } from "@sqlbraid/core";
+import { resolveCellDecoder } from "../type-policy.js";
 import { pgOidTypes } from "../pg/types.js";
 import type { PgFieldLike, PgResultLike } from "../pg/types.js";
 
@@ -15,10 +16,11 @@ export function preparePgRowProjector(
 ): (value: unknown) => Record<string, unknown> {
   const columns = fields.map((field, index) => {
     const databaseType = pgDatabaseType(field);
+    const cell = databaseType ? resolveCellDecoder(policy, databaseType) : undefined;
     return {
       name: field.name,
       index,
-      decode: databaseType ? (entry: unknown) => policy.decode(databaseType, entry) : identityResultValue,
+      decode: databaseType ? (cell ?? ((entry: unknown) => policy.decode(databaseType, entry))) : identityResultValue,
     };
   });
   const arrayProjector = preparePositionalResultProjector(columns, rowCountHint);

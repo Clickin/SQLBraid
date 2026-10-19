@@ -291,7 +291,20 @@ const temporalTypeNames: Readonly<Record<string, true>> = Object.freeze({
   interval: true,
 });
 
+// Only known mapping names enter this lookup; arbitrary type names never grow a cache.
+const canonicalTypeNames: Readonly<Record<string, true>> = Object.fromEntries(
+  [
+    ...exactNumericMappings,
+    ...commonMappings,
+    ...jsonMappings,
+    ...temporalMappings,
+    ...arrayMappings,
+    ...arrayAliases,
+  ].map((mapping) => [mapping.databaseType, true] as const),
+);
+
 function canonical(databaseType: string): string {
+  if (Object.hasOwn(canonicalTypeNames, databaseType)) return databaseType;
   return databaseType
     .trim()
     .toLowerCase()
@@ -335,60 +348,134 @@ function makeMappings(profile: PgRepresentationProfileOptions): readonly TypeMap
   );
 }
 
-function makeDecoder(profile: PgRepresentationProfileOptions): TypePolicy["decode"] {
+const decodeKind = {
+  none: 0,
+  integer: 1,
+  decimal: 2,
+  money: 3,
+  json: 4,
+  container: 5,
+  temporalText: 6,
+  temporalDate: 7,
+} as const;
+
+const decodeKindByType: Readonly<Record<string, number>> = Object.freeze(
+  Object.assign(
+    Object.create(null) as Record<string, number>,
+    Object.fromEntries([
+      ...["int2", "smallint", "int4", "integer", "int8", "bigint", "oid"].map((name) => [name, decodeKind.integer]),
+      ["numeric", decodeKind.decimal],
+      ["decimal", decodeKind.decimal],
+      ["money", decodeKind.money],
+      ["json", decodeKind.json],
+      ["jsonb", decodeKind.json],
+      ...["time", "timetz", "time with time zone", "interval"].map((name) => [name, decodeKind.temporalText]),
+      ...["date", "timestamp", "timestamp without time zone", "timestamp with time zone", "timestamptz"].map((name) => [
+        name,
+        decodeKind.temporalDate,
+      ]),
+    ]),
+  ),
+);
+
+function decodeKindOf(type: string): number {
+  const kind = decodeKindByType[type];
+  if (kind !== undefined) return kind;
+  return type.startsWith("_") || type.endsWith("[]") ? decodeKind.container : decodeKind.none;
+}
+
+type CellDecoder = (value: unknown) => unknown;
+
+const identityDecoder: CellDecoder = (value) => value;
+const integerDecoder: CellDecoder = (value) =>
+  value === null || value === undefined ? value : normalizeExactInteger(value);
+const decimalDecoder: CellDecoder = (value) => {
+  if (value !== null && value !== undefined && typeof value !== "string") {
+    throw new ResultExactnessError("PostgreSQL exact decimal transport must remain text.");
+  }
+  return value;
+};
+const moneyDecoder: CellDecoder = (value) => {
+  if (value === null || value === undefined) return value;
+  throw new ResultExactnessError(
+    "PostgreSQL money is locale-formatted; use an explicit user-authored numeric cast for exact text.",
+  );
+};
+const policyResolvers = new WeakMap<TypePolicy, (databaseType: string) => CellDecoder>();
+
+/** Returns the decoder for one database type. The type name is classified once, not for each value. */
+function makeCellResolver(profile: PgRepresentationProfileOptions): (databaseType: string) => CellDecoder {
   const json = profile.json === "native" ? "native" : "text";
   const temporal = profile.temporal === "native" ? "native" : "text";
-  return (databaseType, value) => {
-    if (value === null || value === undefined) return value;
-    const type = canonical(databaseType);
-    if (["int2", "smallint", "int4", "integer", "int8", "bigint", "oid"].includes(type))
-      return normalizeExactInteger(value);
-    if (type === "numeric" || type === "decimal") {
-      if (typeof value !== "string")
-        throw new ResultExactnessError("PostgreSQL exact decimal transport must remain text.");
-      return value;
+  const jsonDecoder: CellDecoder =
+    json === "text"
+      ? (value) => {
+          if (value !== null && value !== undefined && typeof value !== "string") {
+            throw new ResultExactnessError("PostgreSQL lossless JSON profile requires text-format results.");
+          }
+          return value;
+        }
+      : identityDecoder;
+  const containerDecoder: CellDecoder =
+    json === "text" && temporal === "text"
+      ? (value) => {
+          if (value !== null && value !== undefined && typeof value !== "string") {
+            throw new ResultExactnessError("PostgreSQL lossless container profile requires text-format results.");
+          }
+          return value;
+        }
+      : identityDecoder;
+  const temporalTextDecoder: CellDecoder =
+    temporal === "text"
+      ? (value) => {
+          if (value !== null && value !== undefined && typeof value !== "string") {
+            throw new ResultExactnessError("PostgreSQL lossless temporal profile requires text-format results.");
+          }
+          return value;
+        }
+      : identityDecoder;
+  const temporalDateDecoder: CellDecoder =
+    temporal === "text"
+      ? (value) => {
+          if (value !== null && value !== undefined && typeof value !== "string") {
+            throw new ResultExactnessError("PostgreSQL lossless temporal profile requires text-format results.");
+          }
+          return value;
+        }
+      : (value) => {
+          if (value !== null && value !== undefined && !(value instanceof Date)) {
+            throw new ResultExactnessError("PostgreSQL native temporal profile expected a Date result.");
+          }
+          return value;
+        };
+  return (databaseType) => {
+    switch (decodeKindOf(canonical(databaseType))) {
+      case decodeKind.integer:
+        return integerDecoder;
+      case decodeKind.decimal:
+        return decimalDecoder;
+      case decodeKind.money:
+        return moneyDecoder;
+      case decodeKind.json:
+        return jsonDecoder;
+      case decodeKind.container:
+        return containerDecoder;
+      case decodeKind.temporalText:
+        return temporalTextDecoder;
+      case decodeKind.temporalDate:
+        return temporalDateDecoder;
+      default:
+        return identityDecoder;
     }
-    if (type === "money")
-      throw new ResultExactnessError(
-        "PostgreSQL money is locale-formatted; use an explicit user-authored numeric cast for exact text.",
-      );
-    if (json === "text" && (type === "json" || type === "jsonb") && typeof value !== "string") {
-      throw new ResultExactnessError("PostgreSQL lossless JSON profile requires text-format results.");
-    }
-    if (
-      json === "text" &&
-      temporal === "text" &&
-      (type.startsWith("_") || type.endsWith("[]")) &&
-      typeof value !== "string"
-    ) {
-      throw new ResultExactnessError("PostgreSQL lossless container profile requires text-format results.");
-    }
-    if (
-      temporal === "text" &&
-      [
-        "date",
-        "time",
-        "timetz",
-        "time with time zone",
-        "timestamp",
-        "timestamp without time zone",
-        "timestamp with time zone",
-        "timestamptz",
-        "interval",
-      ].includes(type) &&
-      typeof value !== "string"
-    ) {
-      throw new ResultExactnessError("PostgreSQL lossless temporal profile requires text-format results.");
-    }
-    if (
-      temporal === "native" &&
-      ["date", "timestamp", "timestamp without time zone", "timestamp with time zone", "timestamptz"].includes(type) &&
-      !(value instanceof Date)
-    ) {
-      throw new ResultExactnessError("PostgreSQL native temporal profile expected a Date result.");
-    }
-    return value;
   };
+}
+
+/**
+ * The decoder for one result column of a first-party policy, resolved once per column.
+ * A policy that this module did not create returns undefined, and its caller keeps using `policy.decode`.
+ */
+export function resolveCellDecoder(policy: TypePolicy, databaseType: string): CellDecoder | undefined {
+  return policyResolvers.get(policy)?.(databaseType);
 }
 
 function makeEncoder(): TypePolicy["encode"] {
@@ -423,6 +510,7 @@ export function typePolicyForProfile(profile: PgRepresentationProfileOptions = {
   if (existing) return existing;
   const isDefault = key === "text/text";
   const isNative = key === "native/native";
+  const resolve = makeCellResolver(profile);
   const policy = Object.freeze<TypePolicy>({
     id: isDefault
       ? "postgres-lossless-text"
@@ -438,9 +526,10 @@ export function typePolicyForProfile(profile: PgRepresentationProfileOptions = {
       } as Record<string, string>
     )[key]!,
     mappings: makeMappings(profile),
-    decode: makeDecoder(profile),
+    decode: (databaseType, value) => resolve(databaseType)(value),
     encode: makeEncoder(),
   });
+  policyResolvers.set(policy, resolve);
   cache.set(key, policy);
   return policy;
 }
