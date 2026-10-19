@@ -91,7 +91,7 @@
 <div class="sl-heading-wrapper level-h2"><h2 id="분기는-지연-평가됩니다">분기는 지연 평가됩니다</h2><a class="sl-anchor-link" href="#분기는-지연-평가됩니다"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “분기는 지연 평가됩니다”</span></a></div>
 <p><strong>이 보장은 SQLBraid 컴파일러로 변환했을 때만 성립합니다.</strong> 일반 JavaScript, <code dir="auto">tsc</code>, 런타임 태그 호출은 태그를 호출하기 전에 모든 <code dir="auto">${...}</code>를 평가합니다. 분기를 지연 평가하려면 다음 순서를 따르세요.</p>
 <ol>
-<li><code dir="auto">@sqlbraid/cli</code>를 설치합니다.</li>
+<li><code dir="auto">@sqlbraid/cli</code>를 개발 의존성으로, <code dir="auto">@sqlbraid/template</code>을 의존성으로 설치합니다. 생성된 코드는 <code dir="auto">@sqlbraid/template</code>에서 헬퍼를 import합니다.</li>
 <li><code dir="auto">pnpm exec sqlbraid build --file src/query.ts --out-file build/query.js</code>로 조건부 소스를 빌드합니다.</li>
 <li>생성된 JavaScript를 실행합니다.</li>
 </ol>
