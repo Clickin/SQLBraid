@@ -3,16 +3,26 @@ title: Vite integration
 description: Lower SQLBraid guarded templates in Vite 8 without taking over TypeScript or TSX transforms.
 ---
 
+This page needs Node `>=22.18.0`. The example uses SQLite in memory, so it needs no database server.
+
+## 1. Create a project
+
 Install the Vite plugin together with the SQLBraid dialect package of your application.
-The following command uses SQLite:
+The following commands use SQLite:
 
 ```bash
-pnpm add sqlbraid @sqlbraid/sqlite @sqlbraid/template @sqlbraid/vite
+mkdir braid-vite-app && cd braid-vite-app
+pnpm init --init-type module
+pnpm add sqlbraid @sqlbraid/sqlite @sqlbraid/template
+pnpm add --save-dev vite @sqlbraid/vite
+mkdir src
 ```
 
 Generated code imports helpers from `@sqlbraid/template`. Keep it as a direct runtime dependency of the application.
 
-Add the framework-neutral plugin before the normal Vite transforms:
+## 2. Add the plugin
+
+Add the framework-neutral plugin before the normal Vite transforms. Save this code as `vite.config.ts`:
 
 ```ts
 import { defineConfig } from "vite";
@@ -22,6 +32,51 @@ export default defineConfig({
   plugins: [sqlbraid()],
 });
 ```
+
+## 3. Write a dynamic query
+
+Save this code as `src/main.ts`:
+
+```ts
+import { DatabaseSync } from "node:sqlite";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { sql } from "@sqlbraid/sqlite";
+
+interface UserRow {
+  id: string;
+  name: string;
+}
+
+const native = new DatabaseSync(":memory:");
+native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
+native.exec("INSERT INTO users (name) VALUES ('Ada'), ('Grace')");
+
+const db = createNodeSqliteDatabase(native);
+const name: string | null = "Ada";
+const users = await db.all(sql.rows<UserRow>`
+  SELECT id, name FROM users
+  /*@braid where*/
+    /*@braid if ${name != null}*/
+      AND name = ${name}
+    /*@braid end*/
+  /*@braid end*/
+`);
+console.log(users);
+native.close();
+```
+
+## 4. Build and run
+
+Build the file for Node. Then run the result:
+
+```bash
+pnpm exec vite build --ssr src/main.ts
+node dist/main.js
+```
+
+The output is `[{ id: '1', name: 'Ada' }]`. The `AND name = ...` line stays in the SQL only when `name` is not `null`.
+
+## Plugin options
 
 `@sqlbraid/vite` targets Vite 8 and runs as a pre-transform. It recognizes tags imported from `@sqlbraid/*` dialect roots and `@sqlbraid/template`. If an application wraps a tag, configure custom tags:
 
