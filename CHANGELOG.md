@@ -45,6 +45,15 @@ and [versioned support records](support/targets/).
   `helperFamily` field and the driver facade entries are removed. Only the compiler and the tooling read this catalog.
 - `@sqlbraid/compiler` 1.1.0: generated code always imports its helpers from `@sqlbraid/template`.
   Install `@sqlbraid/template` as a direct dependency of an application with compiled queries.
+- Faster result rows. Query results, error classes and error messages do not change.
+  - `@sqlbraid/mysql` 1.0.4, `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/postgres` 1.2.0, `@sqlbraid/oracle` 1.0.3 and
+    `@sqlbraid/mssql` 1.0.4 pick the type decoder once for each result column. They no longer normalize the type name
+    for each cell. A custom `TypePolicy` keeps the `policy.decode` path.
+  - `@sqlbraid/bun-sql` 1.0.3 assigns object row properties instead of defining each one.
+  - `@sqlbraid/runtime` 1.0.4 builds no result or mapping event when no observer is registered.
+  - In local measurements, a query of 10,000 rows with 10 columns takes 4% to 38% less time on a real database than
+    before the decoder change, depending on the driver. Queries of 1 row do not change. The report lists each driver
+    and its method: [performance report](docs/performance/2.0.0-performance-report.md).
 
 ### Added
 
