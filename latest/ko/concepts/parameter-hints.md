@@ -134,7 +134,7 @@ const query = sql.rows<UserRow>`
 
 힌트에는 길이, 정밀도, 스케일이 없습니다. 프로토콜이 타입 OID만 보내기 때문입니다. 이런 속성이 있는 힌트는 어댑터가 거부합니다. 같은 이유로 `numeric`과 `varchar` 팩토리는 인자를 받지 않습니다.
 
-팩토리는 드라이버가 변환 없이 보내는 입력만 받습니다. SQLBraid는 값을 변환하지 않습니다. 그래서 `int8`과 `numeric`은 `number`를 받지 않고, `timestamp`(시간대 없음)에는 힌트가 없습니다.
+SQLBraid는 값을 변환하지 않습니다. `int8`과 `numeric`은 `number`를 받지 않습니다. `timestamp`(시간대 없음)에는 힌트가 없습니다.
 
 `json`과 `jsonb`에는 힌트가 없습니다. SQL에 `CAST(${text} AS jsonb)`를 쓰세요. enum, 복합 타입, 확장 타입에도 같은 규칙을 적용합니다.
 

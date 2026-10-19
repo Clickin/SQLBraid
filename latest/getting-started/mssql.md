@@ -2,7 +2,7 @@
 
 > Connect SQLBraid to Tedious with deterministic SQL Server parameter hints.
 
-This page needs Node `>=22.18.0` and Docker. Node 22.18.0 runs the TypeScript example directly. The SQL Server image is built for x86-64. On an ARM host it runs under emulation, which is outside the tested scope.
+This page needs Node `>=22.18.0` and Docker. Node 22.18.0 runs the TypeScript example directly.
 
 ## 1. Start a database
 

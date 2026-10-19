@@ -6,7 +6,7 @@
 
 ## 1. 데이터베이스 시작하기
 
-로컬 Oracle Free 서버를 시작하고, 예제가 읽는 테이블을 만드세요. 이미지를 처음 내려받는 데는 시간이 오래 걸립니다. `users` 테이블이 있는 서버가 이미 있다면 예제의 `ORACLE_*` 환경 변수를 설정하고 이 단계를 건너뛰세요.
+로컬 Oracle Free 서버를 시작하고, 예제가 읽는 테이블을 만드세요. `users` 테이블이 있는 서버가 이미 있다면 예제의 `ORACLE_*` 환경 변수를 설정하고 이 단계를 건너뛰세요.
 
 ```bash
 docker run -d --name braid-oracle -e ORACLE_PASSWORD=password -e APP_USER=app -e APP_USER_PASSWORD=password -p 1521:1521 gvenzl/oracle-free:23.9-slim-faststart
