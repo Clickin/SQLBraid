@@ -130,6 +130,69 @@ function freezePolicy(policy: TypePolicy): TypePolicy {
   });
 }
 
+type CellDecoder = (value: unknown) => unknown;
+
+const identityDecoder: CellDecoder = (value) => value;
+const integer: CellDecoder = (value) => (value === null || value === undefined ? value : normalizeExactInteger(value));
+const decimal: CellDecoder = (value) => (value === null || value === undefined ? value : decodeExactDecimal(value));
+const normalizeTypeName = (databaseType: string): string => databaseType.trim().toUpperCase();
+const policyDecoders = new WeakMap<TypePolicy, ReadonlyMap<string, CellDecoder>>();
+
+/** One decoder for each type name that the policy treats specially. Other type names keep their value. */
+function cellDecoders(json: Mysql2JsonProfile, temporal: Mysql2TemporalProfile): ReadonlyMap<string, CellDecoder> {
+  const decoders = new Map<string, CellDecoder>();
+  for (const type of integerTypes) decoders.set(type, integer);
+  decoders.set("DECIMAL", decimal);
+  decoders.set("NEWDECIMAL", decimal);
+  if (json === "text") {
+    decoders.set("JSON", (value) => {
+      if (value !== null && value !== undefined && typeof value !== "string") {
+        throw new ResultExactnessError("mysql2 JSON results must remain strings for the selected text profile.");
+      }
+      return value;
+    });
+  }
+  decoders.set("TIME", (value) => {
+    if (value !== null && value !== undefined && typeof value !== "string") {
+      throw new ResultExactnessError("mysql2 TIME results must remain strings.");
+    }
+    return value;
+  });
+  for (const type of ["DATE", "DATETIME", "TIMESTAMP"]) {
+    decoders.set(
+      type,
+      temporal === "text"
+        ? (value) => {
+            if (value !== null && value !== undefined && typeof value !== "string") {
+              throw new ResultExactnessError(
+                `mysql2 ${type} results must remain strings for the selected text profile.`,
+              );
+            }
+            return value;
+          }
+        : (value) => {
+            if (value !== null && value !== undefined && !(value instanceof Date)) {
+              throw new ResultExactnessError(
+                `mysql2 ${type} results must be Date values for the selected native profile.`,
+              );
+            }
+            return value;
+          },
+    );
+  }
+  return decoders;
+}
+
+/**
+ * The decoder for one result column of a first-party policy, resolved once per column.
+ * A policy that this module did not create returns undefined, and its caller keeps using `policy.decode`.
+ */
+export function resolveCellDecoder(policy: TypePolicy, databaseType: string): CellDecoder | undefined {
+  const decoders = policyDecoders.get(policy);
+  if (decoders === undefined) return undefined;
+  return decoders.get(normalizeTypeName(databaseType)) ?? identityDecoder;
+}
+
 function createTypePolicy(json: Mysql2JsonProfile, temporal: Mysql2TemporalProfile): TypePolicy {
   const mappings = [
     ...commonMappings,
@@ -151,39 +214,18 @@ function createTypePolicy(json: Mysql2JsonProfile, temporal: Mysql2TemporalProfi
           { databaseType: "TIMESTAMP", inputType: "Date | string", outputType: "string", nullable: true },
         ]),
   ];
-  return freezePolicy({
+  const decoders = cellDecoders(json, temporal);
+  const policy = freezePolicy({
     id: profileId(json, temporal),
     hash: profileHashes[json][temporal],
     mappings,
     decode(databaseType, value) {
-      if (value === null || value === undefined) return value;
-      const type = databaseType.trim().toUpperCase();
-      if (integerTypes.includes(type as (typeof integerTypes)[number])) return normalizeExactInteger(value);
-      if (type === "DECIMAL" || type === "NEWDECIMAL") return decodeExactDecimal(value);
-      if (type === "JSON" && json === "text" && typeof value !== "string") {
-        throw new ResultExactnessError("mysql2 JSON results must remain strings for the selected text profile.");
-      }
-      if (type === "TIME" && typeof value !== "string") {
-        throw new ResultExactnessError("mysql2 TIME results must remain strings.");
-      }
-      if (
-        (type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") &&
-        temporal === "text" &&
-        typeof value !== "string"
-      ) {
-        throw new ResultExactnessError(`mysql2 ${type} results must remain strings for the selected text profile.`);
-      }
-      if (
-        (type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") &&
-        temporal === "native" &&
-        !(value instanceof Date)
-      ) {
-        throw new ResultExactnessError(`mysql2 ${type} results must be Date values for the selected native profile.`);
-      }
-      return value;
+      return (decoders.get(normalizeTypeName(databaseType)) ?? identityDecoder)(value);
     },
     encode: (_databaseType, value) => value,
   });
+  policyDecoders.set(policy, decoders);
+  return policy;
 }
 
 const policies = Object.freeze({

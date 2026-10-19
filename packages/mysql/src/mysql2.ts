@@ -38,6 +38,7 @@ import {
 import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { mysql2Environment, mysql2RepresentationProfile, isRepresentationProfile } from "./mysql2/environment.js";
 import { mysqlTypes } from "./mysql2/types.js";
+import { resolveCellDecoder } from "./type-policy.js";
 import type {
   Mysql2ConnectionLike,
   Mysql2DatabaseOptions,
@@ -246,13 +247,21 @@ function prepareMysqlRowProjector(
     if (field.name === undefined) return [];
     const databaseType = mysqlDatabaseType(field);
     const validate = prepareMysqlNumericValidator(databaseType);
+    const cell = databaseType === undefined ? undefined : resolveCellDecoder(policy, databaseType);
     const decode =
       databaseType === undefined
         ? identityResultValue
-        : (entry: unknown): unknown => {
-            validate(entry);
-            return policy.decode(databaseType, entry);
-          };
+        : cell === undefined
+          ? (entry: unknown): unknown => {
+              validate?.(entry);
+              return policy.decode(databaseType, entry);
+            }
+          : validate === undefined
+            ? cell
+            : (entry: unknown): unknown => {
+                validate(entry);
+                return cell(entry);
+              };
     return [
       {
         name: field.name,
@@ -291,8 +300,8 @@ function mysqlDatabaseType(field: Mysql2FieldLike | undefined): string | undefin
   return type;
 }
 
-function prepareMysqlNumericValidator(databaseType: string | undefined): (value: unknown) => void {
-  if (databaseType === undefined) return () => undefined;
+function prepareMysqlNumericValidator(databaseType: string | undefined): ((value: unknown) => void) | undefined {
+  if (databaseType === undefined) return undefined;
   const type = databaseType.toUpperCase();
   if (type === "DECIMAL" || type === "NEWDECIMAL") {
     return (value) => {
@@ -326,7 +335,7 @@ function prepareMysqlNumericValidator(databaseType: string | undefined): (value:
       }
     };
   }
-  return () => undefined;
+  return undefined;
 }
 
 function assertUniqueFields(fields: readonly Mysql2FieldLike[]): void {
