@@ -61,7 +61,7 @@
       "source": "website/src/content/docs/concepts/parameter-hints.md",
       "translation": "website/src/content/docs/ko/concepts/parameter-hints.md",
       "translationOf": "website/src/content/docs/concepts/parameter-hints.md",
-      "sourceDigest": "818a3a9c71bc54e28bc73425cf23f9797fb72c3b5f74f4d62d15ebe9c4082000"
+      "sourceDigest": "2466d60c7b7e978d6eacf07c0e0741e3c6705a9be658be11f79680cd476fa195"
     },
     {
       "source": "website/src/content/docs/concepts/result-mapping.md",
@@ -103,7 +103,7 @@
       "source": "website/src/content/docs/getting-started/mssql.md",
       "translation": "website/src/content/docs/ko/getting-started/mssql.md",
       "translationOf": "website/src/content/docs/getting-started/mssql.md",
-      "sourceDigest": "2badb88281e6823f711b9e9096bf9895c686cee68cfcc89a458d9f10362e0933"
+      "sourceDigest": "f3c20baf400bc32d2c0c6c1a9cf67926be9276cbbf99d9f4fa7021049e5b0ddd"
     },
     {
       "source": "website/src/content/docs/getting-started/mysql.md",
@@ -115,7 +115,7 @@
       "source": "website/src/content/docs/getting-started/oracle.md",
       "translation": "website/src/content/docs/ko/getting-started/oracle.md",
       "translationOf": "website/src/content/docs/getting-started/oracle.md",
-      "sourceDigest": "8c804b705e9e0cd0e72173e98f022cb741d4aaf59441fe1e631f70c0413244e7"
+      "sourceDigest": "96303ccd907f788ea840fae86eb751c94db358668cd96b299914cb0c273b7cdb"
     },
     {
       "source": "website/src/content/docs/getting-started/postgres.md",

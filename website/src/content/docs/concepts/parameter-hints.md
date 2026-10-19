@@ -135,7 +135,7 @@ Each factory accepts `null`. A typed `null` needs no `CAST`.
 
 The hint carries no length, precision or scale, because the protocol sends only the type OID. The adapter rejects a hint with these facets. The factories for `numeric` and `varchar` take no arguments for the same reason.
 
-The factories accept only inputs that the driver sends without a conversion. SQLBraid does not convert the value. For this reason, `int8` and `numeric` do not accept a `number`, and `timestamp` (without time zone) has no hint.
+SQLBraid does not convert the value. `int8` and `numeric` do not accept a `number`. There is no hint for `timestamp` (without time zone).
 
 `json` and `jsonb` have no hint. Write `CAST(${text} AS jsonb)` in your SQL. The same rule applies to enum, composite and extension types.
 

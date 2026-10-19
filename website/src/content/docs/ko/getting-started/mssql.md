@@ -3,7 +3,7 @@ title: SQL Server 빠른 시작
 description: 결정적인 SQL Server 파라미터 힌트와 함께 SQLBraid를 Tedious에 연결합니다.
 ---
 
-이 페이지에는 Node `>=22.18.0`과 Docker가 필요합니다. Node 22.18.0은 TypeScript 예제를 바로 실행합니다. SQL Server 이미지는 x86-64용입니다. ARM 호스트에서는 에뮬레이션으로 실행되며, 이는 검증 범위 밖입니다.
+이 페이지에는 Node `>=22.18.0`과 Docker가 필요합니다. Node 22.18.0은 TypeScript 예제를 바로 실행합니다.
 
 ## 1. 데이터베이스 시작하기
 

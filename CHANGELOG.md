@@ -43,8 +43,6 @@ and [versioned support records](support/targets/).
 
 - `@sqlbraid/core` 1.1.0: `AUTHORING_MODULE_CATALOG` lists only `@sqlbraid/template` and the six dialect roots. The
   `helperFamily` field and the driver facade entries are removed. Only the compiler and the tooling read this catalog.
-  This narrows a public type in a minor release on purpose: a major version of `core` would force a new major version
-  on every package that depends on it.
 - `@sqlbraid/compiler` 1.1.0: generated code always imports its helpers from `@sqlbraid/template`.
   Install `@sqlbraid/template` as a direct dependency of an application with compiled queries.
 

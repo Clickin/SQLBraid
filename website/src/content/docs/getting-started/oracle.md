@@ -7,7 +7,7 @@ This page needs Node `>=22.18.0` and Docker. Node 22.18.0 runs the TypeScript ex
 
 ## 1. Start a database
 
-Start a local Oracle Free server and create the table that the example reads. The first download of the image is large. If you have a server with a `users` table, set the `ORACLE_*` variables of the example and skip this step.
+Start a local Oracle Free server and create the table that the example reads. If you have a server with a `users` table, set the `ORACLE_*` variables of the example and skip this step.
 
 ```bash
 docker run -d --name braid-oracle -e ORACLE_PASSWORD=password -e APP_USER=app -e APP_USER_PASSWORD=password -p 1521:1521 gvenzl/oracle-free:23.9-slim-faststart
