@@ -97,6 +97,7 @@ export function createMaterializedOperations(runtime: MaterializedRuntime) {
         error,
       );
     }
+    if (!options.observers?.length) return result!;
     try {
       await notify(options.observers ?? [], queryResultEvent(operation as RawOperation<ExecutableQuery>, result!));
     } catch (error) {
@@ -123,6 +124,7 @@ export function createMaterializedOperations(runtime: MaterializedRuntime) {
     const queryMapped = operation.query.resultSchema !== undefined;
     const executionMapped = executionSchema !== undefined;
     if (result.kind !== "rows" || (!queryMapped && !executionMapped)) {
+      if (!options.observers?.length) return result;
       try {
         await notify(
           options.observers ?? [],
@@ -226,16 +228,18 @@ export function createMaterializedOperations(runtime: MaterializedRuntime) {
       rows.push(mapped);
     }
     try {
-      await notify(
-        options.observers ?? [],
-        queryMappedEvent(
-          operation as RawOperation<ExecutableQuery>,
-          result.rows.length,
-          queryMapped,
-          executionMapped,
-          now() - mappingStarted,
-        ),
-      );
+      if (options.observers?.length) {
+        await notify(
+          options.observers,
+          queryMappedEvent(
+            operation as RawOperation<ExecutableQuery>,
+            result.rows.length,
+            queryMapped,
+            executionMapped,
+            now() - mappingStarted,
+          ),
+        );
+      }
     } catch (error) {
       await notifyError(
         options.observers ?? [],
@@ -393,6 +397,7 @@ export function createMaterializedOperations(runtime: MaterializedRuntime) {
       );
     }
     if (result.rows.length === 0) {
+      if (!options.observers?.length) return undefined;
       try {
         await notify(
           options.observers ?? [],

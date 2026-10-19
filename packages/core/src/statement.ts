@@ -113,13 +113,21 @@ function copyRenderedParameter(parameter: RenderedParameter): RenderedParameter 
       "Undefined bind values are unsupported; use null for SQL NULL.",
     );
   }
-  return Object.freeze({
-    value: candidate.value,
-    ...(interpolation === undefined ? {} : { interpolation }),
-    ...(hint === undefined ? {} : { hint }),
-    ...(direction === undefined ? {} : { direction }),
-    ...(outputName === undefined ? {} : { outputName }),
-  });
+  if (interpolation === undefined && hint === undefined && direction === undefined && outputName === undefined) {
+    return Object.freeze({ value: candidate.value });
+  }
+  const copy: {
+    value: unknown;
+    interpolation?: number;
+    hint?: ParameterTypeHint;
+    direction?: RoutineParameterDirection;
+    outputName?: string;
+  } = { value: candidate.value };
+  if (interpolation !== undefined) copy.interpolation = interpolation;
+  if (hint !== undefined) copy.hint = hint;
+  if (direction !== undefined) copy.direction = direction;
+  if (outputName !== undefined) copy.outputName = outputName;
+  return Object.freeze(copy) as RenderedParameter;
 }
 
 function copyRoutineProcedure(procedure: RoutineProcedure | undefined): RoutineProcedure | undefined {
@@ -197,44 +205,59 @@ export function createRenderedStatement(statement: {
   if (typeof statement.dialectId !== "string" || !statement.dialectId)
     throw new TypeError("RenderedStatement dialectId must be a non-empty string.");
   const segments = Object.freeze([...statement.segments]);
-  if (segments.some((segment) => typeof segment !== "string"))
-    throw new TypeError("RenderedStatement segments must be an array of strings.");
+  for (let index = 0; index < segments.length; index += 1) {
+    if (typeof segments[index] !== "string")
+      throw new TypeError("RenderedStatement segments must be an array of strings.");
+  }
   const nativeTemplate =
     statement.nativeTemplate === undefined ? undefined : copyNativeTemplate(statement.nativeTemplate, segments);
-  const parameters = Object.freeze(Array.from(statement.parameters, copyRenderedParameter));
-  if (parameters.some((parameter) => parameter.direction === "inout" && statement.resultKind !== "call")) {
+  const copiedParameters: RenderedParameter[] = [];
+  let hasInout = false;
+  let hasOut = false;
+  let hasOutputName = false;
+  for (let index = 0; index < statement.parameters.length; index += 1) {
+    const copy = copyRenderedParameter(statement.parameters[index] as RenderedParameter);
+    copiedParameters.push(copy);
+    if (copy.direction === "inout") hasInout = true;
+    else if (copy.direction === "out") hasOut = true;
+    if (copy.outputName !== undefined) hasOutputName = true;
+  }
+  const parameters = Object.freeze(copiedParameters);
+  if (hasInout && statement.resultKind !== "call") {
     throw new TypeError("INOUT parameters are only valid for call statements.");
   }
-  if (
-    parameters.some(
-      (parameter) =>
-        parameter.direction === "out" && statement.resultKind !== "call" && statement.resultKind !== "rows",
-    )
-  ) {
+  if (hasOut && statement.resultKind !== "call" && statement.resultKind !== "rows") {
     throw new TypeError("OUT parameters are only valid for call and rows statements.");
   }
-  const outputNames = new Set<string>();
-  for (const parameter of parameters) {
-    if (parameter.outputName !== undefined) {
-      if (outputNames.has(parameter.outputName))
-        throw new TypeError(`Duplicate routine outputName: ${parameter.outputName}`);
-      outputNames.add(parameter.outputName);
+  if (hasOutputName) {
+    const outputNames = new Set<string>();
+    for (const parameter of parameters) {
+      if (parameter.outputName !== undefined) {
+        if (outputNames.has(parameter.outputName))
+          throw new TypeError(`Duplicate routine outputName: ${parameter.outputName}`);
+        outputNames.add(parameter.outputName);
+      }
     }
   }
   const routineProcedure = copyRoutineProcedure(statement.routineProcedure);
   if (routineProcedure !== undefined && routineProcedure.parameterNames.length !== parameters.length) {
     throw new TypeError("Routine procedure parameterNames must match the rendered parameter count.");
   }
-  const rendered = Object.freeze({
-    segments,
-    parameters,
-    ...(nativeTemplate === undefined ? {} : { nativeTemplate }),
-    dialectId: statement.dialectId,
-    resultKind: statement.resultKind,
-    ...(routineProcedure === undefined ? {} : { routineProcedure }),
-    ...(statement.fingerprint === undefined ? {} : { fingerprint: statement.fingerprint }),
-    ...(statement.variantFingerprint === undefined ? {} : { variantFingerprint: statement.variantFingerprint }),
-  });
+  const draft: {
+    segments: readonly string[];
+    parameters: readonly RenderedParameter[];
+    nativeTemplate?: TemplateStringsArray;
+    dialectId: string;
+    resultKind: QueryResultKind;
+    routineProcedure?: RoutineProcedure;
+    fingerprint?: string;
+    variantFingerprint?: string;
+  } = { segments, parameters, dialectId: statement.dialectId, resultKind: statement.resultKind };
+  if (nativeTemplate !== undefined) draft.nativeTemplate = nativeTemplate;
+  if (routineProcedure !== undefined) draft.routineProcedure = routineProcedure;
+  if (statement.fingerprint !== undefined) draft.fingerprint = statement.fingerprint;
+  if (statement.variantFingerprint !== undefined) draft.variantFingerprint = statement.variantFingerprint;
+  const rendered = Object.freeze(draft) as RenderedStatement;
   knownRenderedStatements.add(rendered);
   return rendered;
 }

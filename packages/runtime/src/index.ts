@@ -273,6 +273,7 @@ function createScopedDatabase(
   const observePrepared = async <Q extends Query<unknown, QueryResultKind>>(
     operation: PreparedOperation<Q>,
   ): Promise<void> => {
+    if (!options.observers?.length) return;
     try {
       await notify(options.observers ?? [], queryReadyEvent(operation));
     } catch (error) {
