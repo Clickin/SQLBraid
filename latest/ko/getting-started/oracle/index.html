@@ -88,7 +88,7 @@
 <p>Thin 바인딩 어댑터는 논리 문장을 텍스트·위치 기반 <code dir="auto">:1</code>, <code dir="auto">:2</code>, … 바인딩으로 바꿉니다. 지원하는 힌트는 node-oracledb 설명 객체로 매핑합니다. 설명, 힌트 검증, 결정적인 바인딩 구성은 리스를 획득하기 전에 일어납니다. 어댑터는 드라이버가 맡는 실제 재사용 방식을 보고합니다. 지원하지 않는 힌트 속성은 데이터베이스 I/O 전에 <code dir="auto">materialize</code> 단계에서 실패합니다.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="기능-경계">기능 경계</h2><a class="sl-anchor-link" href="#기능-경계"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “기능 경계”</span></a></div>
 <ul>
-<li>공식 대상은 <code dir="auto">node-oracledb</code> Thin 모드입니다. Thick 모드는 이 가이드의 검증 범위가 아닙니다.</li>
+<li>공식 대상은 <code dir="auto">node-oracledb</code> Thin 모드입니다.</li>
 <li><code dir="auto">sql.call</code>은 스칼라 OUT·IN OUT 설명과, <code dir="auto">oracleParameter.refCursor()</code>를 쓴 <code dir="auto">SYS_REFCURSOR</code> OUT 값을 지원합니다. 커서 출력은 메모리로 읽은 <code dir="auto">resultSets</code>가 되고, 스칼라 <code dir="auto">output</code>에서 빠집니다. 암시적 결과도 포함됩니다. 모든 <code dir="auto">ResultSet</code>은 리스 반환 전에 닫힙니다.</li>
 <li>이 어댑터는 네이티브 <code dir="auto">procedure</code> 메타데이터를 지원하지 않습니다. Oracle PL/SQL이나 SQL 호출 텍스트를 직접 쓰세요.</li>
 <li>스트리밍은 드라이버의 ResultSet 프로토콜을 씁니다. 완료, 중단, 반복 조기 종료 시 ResultSet을 닫습니다.</li>
@@ -114,7 +114,7 @@
 <p>실행 가능한 LOB 검증은 <code dir="auto">oracle.routine.inout</code> 지원 픽스처에서 CLOB·BLOB의 OUT·IN OUT 바인딩, 메모리 읽기, 정리를 다룹니다. 대상 매니페스트는 이 테스트와 정확한 Oracle Free 근거를 연결합니다. 이 픽스처는 실제 Oracle Free 통합 테스트입니다. 모의 LOB 객체를 쓰는 별도의 어댑터 단위 테스트는 정리와 오류 경로만 확인하며, 다른 데이터베이스나 드라이버 대상의 등급을 올리지 않습니다.</p>
 <p><code dir="auto">sql.out</code>/<code dir="auto">sql.inOut</code>과 여러 결과 집합에 대한 전체 규칙은 <a href="/SQLBraid/latest/ko/concepts/routines/">루틴 호출</a>을 보세요.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="oracle-thin-표현-방식-프로필">Oracle Thin 표현 방식 프로필</h2><a class="sl-anchor-link" href="#oracle-thin-표현-방식-프로필"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “Oracle Thin 표현 방식 프로필”</span></a></div>
-<p>공식 프로필은 node-oracledb Thin 모드입니다. 현재 문서화된 환경은 무료 Oracle 23.9 대상입니다. 이것을 Oracle 19c 근거로 내세우지 마세요. Thick 모드와 다른 서버 버전은 매니페스트에 맞는 근거가 생기기 전까지 테스트되지 않은 별도 프로필입니다.</p>
+<p>공식 프로필은 node-oracledb Thin 모드입니다.</p>
 <table>
 <thead>
 <tr>
