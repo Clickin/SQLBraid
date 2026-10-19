@@ -12,13 +12,9 @@ import type {
 import { AdapterError, safeDatabaseCount } from "@sqlbraid/core";
 import { assertSavepointName } from "@sqlbraid/core/driver";
 import { createDatabase } from "@sqlbraid/runtime";
-import {
-  assertParameterHintsUnsupported,
-  assertPgBulkBinding,
-  pgStatementBinding,
-  resolvePgBinding,
-} from "../common/binding.js";
+import { assertPgBulkBinding, pgTypedStatementBinding, resolvePgBinding } from "../common/binding.js";
 import { unsupported } from "../common/errors.js";
+import { postgresParameterTypeOids } from "../common/parameter-types.js";
 import { losslessEnvironmentFor, losslessPolicy, rejectActiveSignal } from "../common/lossless.js";
 import { arrayOids, exactNumericOids, jsonOids, temporalOids } from "../common/oids.js";
 import { assertUniqueFields, projectPgRows } from "../common/results.js";
@@ -73,6 +69,11 @@ const losslessParsers: Readonly<Record<number, (value: string) => unknown>> = ((
 
 const queryOptions: PgliteQueryOptionsLike = Object.freeze({ rowMode: "array", parsers: losslessParsers });
 
+/** Add the type OID of each parameter (0 if it has no hint). PGlite sends the OIDs in the Parse message. */
+function withParamTypes(paramTypes: readonly number[] | undefined): PgliteQueryOptionsLike {
+  return paramTypes === undefined ? queryOptions : { ...queryOptions, paramTypes };
+}
+
 function rejectSignal(options: ExecutionOptions | undefined): void {
   rejectActiveSignal("PGlite has no statement cancellation. The adapter rejects an active AbortSignal.", options);
 }
@@ -95,7 +96,7 @@ export function createPgliteExecutor(pg: PgliteLike, options: PgliteExecutorOpti
   };
   return {
     ownershipKey: pg,
-    statementBinding: pgStatementBinding,
+    statementBinding: pgTypedStatementBinding,
     environment: losslessEnvironmentFor(driver, policy),
     async query<Row>(
       rendered: RenderedStatement,
@@ -103,9 +104,8 @@ export function createPgliteExecutor(pg: PgliteLike, options: PgliteExecutorOpti
       executionOptions?: ExecutionOptions,
     ): Promise<QueryExecutionResult<Row>> {
       rejectSignal(executionOptions);
-      assertParameterHintsUnsupported(rendered);
-      const { text, values } = resolvePgBinding(rendered, binding);
-      const result: PgliteResultLike = await pg.query(text, values, queryOptions);
+      const { text, values, paramTypes } = resolvePgBinding(rendered, binding, pgTypedStatementBinding);
+      const result: PgliteResultLike = await pg.query(text, values, withParamTypes(paramTypes));
       const fields = result.fields ?? [];
       assertUniqueFields(fields.map((field) => ({ name: field.name, dataTypeID: field.dataTypeID })));
       const rows = projectPgRows(result.rows, fields, policy);
@@ -122,11 +122,12 @@ export function createPgliteExecutor(pg: PgliteLike, options: PgliteExecutorOpti
     ): Promise<BulkExecutionResult> {
       rejectSignal(executionOptions);
       assertPgBulkBinding(bulk, binding);
+      const bulkOptions = withParamTypes(postgresParameterTypeOids(bulk.statement));
       let affectedRows = 0;
       let affectedKnown = true;
       for (let index = 0; index < binding.itemCount; index += 1) {
         // oxlint-disable-next-line no-await-in-loop -- PGlite runs one statement at a time
-        const result = await pg.query(binding.parameterizedSql!, binding.valuesAt(index), queryOptions);
+        const result = await pg.query(binding.parameterizedSql!, binding.valuesAt(index), bulkOptions);
         if ((result.fields?.length ?? 0) > 0 || result.rows.length > 0) {
           throw new Error("BRAID_BULK_RESULT_KIND: PostgreSQL bulk command returned rows.");
         }

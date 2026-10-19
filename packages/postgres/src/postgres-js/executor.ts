@@ -14,12 +14,8 @@ import type {
 import { AdapterError, safeDatabaseCount } from "@sqlbraid/core";
 import { assertSavepointName } from "@sqlbraid/core/driver";
 import { createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
-import {
-  assertParameterHintsUnsupported,
-  assertPgBulkBinding,
-  pgStatementBinding,
-  resolvePgBinding,
-} from "../common/binding.js";
+import { assertPgBulkBinding, pgTypedStatementBinding, resolvePgBinding } from "../common/binding.js";
+import { postgresParameterTypeOids } from "../common/parameter-types.js";
 import { cleanupAggregate, unsupported } from "../common/errors.js";
 import { assertUniqueFields, preparePgRowProjector, projectPgRows } from "../common/results.js";
 import { postgresBeginSql, resolveStreamBatchSize } from "../common/transaction.js";
@@ -63,6 +59,24 @@ function rejectSignal(options: ExecutionOptions | undefined): void {
   );
 }
 
+/** Wrap each hinted value with its type OID. postgres.js sends the OID in the Parse message. */
+function typedValues(
+  reserved: PostgresJsReservedLike,
+  values: readonly unknown[],
+  paramTypes: readonly number[] | undefined,
+): readonly unknown[] {
+  if (paramTypes === undefined) return values;
+  const typed = reserved.typed;
+  if (typeof typed !== "function") {
+    throw unsupported(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      "The postgres.js reservation has no typed() function, so it cannot set a parameter type.",
+    );
+  }
+  return values.map((value, index) => (paramTypes[index] ? typed.call(reserved, value, paramTypes[index]) : value));
+}
+
 /** Wrap one reserved postgres.js connection. The provider owns the reservation. */
 function createPostgresJsExecutor(
   reserved: PostgresJsReservedLike,
@@ -81,7 +95,7 @@ function createPostgresJsExecutor(
   };
   return {
     ownershipKey: reserved,
-    statementBinding: pgStatementBinding,
+    statementBinding: pgTypedStatementBinding,
     environment: losslessEnvironmentFor(driver, policy),
     async query<Row>(
       rendered: RenderedStatement,
@@ -89,9 +103,10 @@ function createPostgresJsExecutor(
       executionOptions?: ExecutionOptions,
     ): Promise<QueryExecutionResult<Row>> {
       rejectSignal(executionOptions);
-      assertParameterHintsUnsupported(rendered);
-      const { text, values } = resolvePgBinding(rendered, binding);
-      const result = await reserved.unsafe(text, values, { prepare: false }).values();
+      const { text, values, paramTypes } = resolvePgBinding(rendered, binding, pgTypedStatementBinding);
+      const result = await reserved
+        .unsafe(text, typedValues(reserved, values, paramTypes), { prepare: false })
+        .values();
       const fields = fieldsOf(result);
       assertUniqueFields(fields);
       const rows = projectPgRows(result, fields, policy);
@@ -109,13 +124,16 @@ function createPostgresJsExecutor(
     ): Promise<BulkExecutionResult> {
       rejectSignal(executionOptions);
       assertPgBulkBinding(bulk, binding);
+      const paramTypes = postgresParameterTypeOids(bulk.statement);
       let affectedRows = 0;
       let affectedKnown = true;
       for (let index = 0; index < binding.itemCount; index += 1) {
         // postgres.js owns the statement name and the reuse. It prepares each text once per connection.
         // oxlint-disable-next-line no-await-in-loop -- one connection runs one statement at a time
         const result = await reserved
-          .unsafe(binding.parameterizedSql!, binding.valuesAt(index), { prepare: true })
+          .unsafe(binding.parameterizedSql!, typedValues(reserved, binding.valuesAt(index), paramTypes), {
+            prepare: true,
+          })
           .values();
         if ((result.columns?.length ?? 0) > 0 || result.length > 0) {
           throw new Error("BRAID_BULK_RESULT_KIND: PostgreSQL bulk command returned rows.");
@@ -135,11 +153,13 @@ function createPostgresJsExecutor(
       executionOptions?: ExecutionOptions,
     ): AsyncGenerator<Row> {
       rejectSignal(executionOptions);
-      assertParameterHintsUnsupported(rendered);
-      const { text, values } = resolvePgBinding(rendered, binding);
+      const { text, values, paramTypes } = resolvePgBinding(rendered, binding, pgTypedStatementBinding);
       let project: ((value: unknown) => Record<string, unknown>) | undefined;
       // Leaving the loop early closes the cursor. The reserved connection stays usable.
-      for await (const batch of reserved.unsafe(text, values, { prepare: false }).values().cursor(batchSize)) {
+      for await (const batch of reserved
+        .unsafe(text, typedValues(reserved, values, paramTypes), { prepare: false })
+        .values()
+        .cursor(batchSize)) {
         const fields = fieldsOf(batch);
         assertUniqueFields(fields);
         if (fields.length === 0 && batch.length === 0) throw new DatabaseResultKindError("rows", "command");
@@ -182,7 +202,7 @@ export function createPostgresJsProvider(
   assertPostgresJsLossless(sql);
   resolveStreamBatchSize(options.streamBatchSize);
   return {
-    statementBinding: pgStatementBinding,
+    statementBinding: pgTypedStatementBinding,
     environment: losslessEnvironmentFor(driver, options.typePolicy ?? losslessPolicy),
     async acquire(): Promise<ConnectionLease> {
       // postgres.js never settles the first reserve() of a cold pool when fetch_types is off.

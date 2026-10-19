@@ -33,7 +33,7 @@ and [versioned support records](support/targets/).
   Only `sqlbraid` moves to `2.0.0`. Each other package keeps its own version line and is tagged and released on its own
   (`v2.0.0` for `sqlbraid`, `<package>-v<version>` for the others). Packages with changes in this release:
   `@sqlbraid/core` 1.1.0, `@sqlbraid/compiler` 1.1.0, `@sqlbraid/cli` 1.1.0, `@sqlbraid/migrate` 0.2.0,
-  `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/bun-sql` 1.0.3, `@sqlbraid/language-server` 1.0.4, `@sqlbraid/mssql` 1.0.4 and the VS Code extension 0.2.0.
+  `@sqlbraid/postgres` 1.2.0, `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/bun-sql` 1.0.3, `@sqlbraid/language-server` 1.0.4, `@sqlbraid/mssql` 1.0.4 and the VS Code extension 0.2.0.
   Query APIs and runtime behavior remain unchanged.
 
 - Update installation instructions for explicit dialect and driver dependencies.
@@ -50,6 +50,12 @@ and [versioned support records](support/targets/).
 
 ### Added
 
+- `@sqlbraid/postgres` 1.2.0: parameter type hints for the postgres.js and PGlite adapters. A hint sets the type OID
+  of one parameter in the Parse message. New factories: `postgresParameter.boolean`, `int2`, `int4`, `int8`, `float4`,
+  `float8`, `numeric`, `text`, `varchar`, `uuid`, `bytea`, `date`, `time`, `timestamptz` and `interval`.
+  The `pg`, Neon and neon-http adapters still reject every hint, because `pg` has no API that sets a parameter type.
+  A hint cannot carry length, precision or scale. `json`, `jsonb`, `timestamp` and custom types have no hint: use
+  `CAST(${value} AS type)` in the SQL. The adapter checks every hint before it runs the statement.
 - `@sqlbraid/postgres` 1.1.0: four optional adapter subpaths. All four use the lossless text profile and have the
   support label Compatible. They have no verification in real applications yet.
   - `@sqlbraid/postgres/neon`: Neon over WebSocket (`@neondatabase/serverless` `Pool` and `Client`).

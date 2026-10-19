@@ -26,6 +26,8 @@ export interface PostgresJsQueryLike extends PromiseLike<PostgresJsResultLike> {
 /** The part of a postgres.js reserved connection that the adapter uses. */
 export interface PostgresJsReservedLike {
   unsafe(query: string, parameters?: readonly unknown[], options?: { readonly prepare?: boolean }): PostgresJsQueryLike;
+  /** Marks a value with the OID of its PostgreSQL type. The adapter needs it only for a parameter type hint. */
+  typed?(value: unknown, oid: number): unknown;
   release(): void | Promise<void>;
 }
 

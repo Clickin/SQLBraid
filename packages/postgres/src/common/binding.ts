@@ -13,6 +13,7 @@ import {
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { unsupported } from "./errors.js";
+import { postgresParameterTypeOids } from "./parameter-types.js";
 
 export function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   if (
@@ -26,6 +27,12 @@ export function assertParameterHintsUnsupported(rendered: RenderedStatement): vo
       "PostgreSQL adapter does not support explicit bind type hints.",
     );
   }
+}
+
+/** Validate the hints of one statement before acquisition. */
+function assertParameterHints(rendered: RenderedStatement, hints: "reject" | "oid-types"): void {
+  if (hints === "reject") assertParameterHintsUnsupported(rendered);
+  else postgresParameterTypeOids(rendered);
 }
 
 export function assertPgRoutineDirections(rendered: RenderedStatement): void {
@@ -67,67 +74,84 @@ export function hasRefcursor(rendered: RenderedStatement): boolean {
   return rendered.parameters.some(isRefcursor);
 }
 
-export const pgStatementBinding: StatementBindingAdapter = Object.freeze({
-  id: "pg",
-  describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
-    statement = createRenderedStatement(statement);
-    if (hasRefcursor(statement) && context.transactionScoped !== true) {
-      throw unsupported(
-        "routine.out-cursor",
-        "BRAID_CALL_CURSOR_TX_REQUIRED",
-        "PostgreSQL refcursor calls require an existing transaction.",
-      );
-    }
-    assertPgRoutineCallContext(statement);
-    assertPgRoutineDirections(statement);
-    assertParameterHintsUnsupported(statement);
-    const description = createStatementBindingDescription(statement, context, {
-      adapterId: "pg",
-      transport: "text-positional",
-      placeholder: (index) => `$${index}`,
-      reuse: { effective: "simple", owner: "driver" },
-    });
-    describedStatements.set(description, statement);
-    bindingContexts.set(description, context);
-    return description;
-  },
-  describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
-    const statement = createRenderedStatement(bulk.statement);
-    if (statement.resultKind !== "command")
-      throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk requires command queries.");
-    if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
-      throw unsupported("routine.out", "BRAID_BULK_SHAPE", "PostgreSQL bulk does not support OUT or INOUT parameters.");
-    }
-    assertParameterHintsUnsupported(statement);
-    for (const values of bulk.parameterSets) {
-      if (values.length !== statement.parameters.length)
-        throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk parameter cardinality changed.");
-    }
-    const description = createBulkBindingDescription(bulk, context, {
-      adapterId: "pg",
-      transport: "text-positional",
-      placeholder: (index) => `$${index}`,
-      reuse: { effective: "reuse", owner: "driver" },
-    });
-    describedBulks.set(description, bulk);
-    return description;
-  },
-});
+function createPgStatementBinding(hints: "reject" | "oid-types"): StatementBindingAdapter {
+  return Object.freeze({
+    id: "pg",
+    describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+      statement = createRenderedStatement(statement);
+      if (hasRefcursor(statement) && context.transactionScoped !== true) {
+        throw unsupported(
+          "routine.out-cursor",
+          "BRAID_CALL_CURSOR_TX_REQUIRED",
+          "PostgreSQL refcursor calls require an existing transaction.",
+        );
+      }
+      assertPgRoutineCallContext(statement);
+      assertPgRoutineDirections(statement);
+      assertParameterHints(statement, hints);
+      const description = createStatementBindingDescription(statement, context, {
+        adapterId: "pg",
+        transport: "text-positional",
+        placeholder: (index) => `$${index}`,
+        reuse: { effective: "simple", owner: "driver" },
+      });
+      describedStatements.set(description, statement);
+      bindingContexts.set(description, context);
+      return description;
+    },
+    describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
+      const statement = createRenderedStatement(bulk.statement);
+      if (statement.resultKind !== "command")
+        throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk requires command queries.");
+      if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
+        throw unsupported(
+          "routine.out",
+          "BRAID_BULK_SHAPE",
+          "PostgreSQL bulk does not support OUT or INOUT parameters.",
+        );
+      }
+      assertParameterHints(statement, hints);
+      for (const values of bulk.parameterSets) {
+        if (values.length !== statement.parameters.length)
+          throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk parameter cardinality changed.");
+      }
+      const description = createBulkBindingDescription(bulk, context, {
+        adapterId: "pg",
+        transport: "text-positional",
+        placeholder: (index) => `$${index}`,
+        reuse: { effective: "reuse", owner: "driver" },
+      });
+      describedBulks.set(description, bulk);
+      return description;
+    },
+  });
+}
+
+/** The `pg`, Neon and neon-http adapters: no wire API sets a parameter type, so every hint is rejected. */
+export const pgStatementBinding: StatementBindingAdapter = createPgStatementBinding("reject");
+
+/** The postgres.js and PGlite adapters: a hint sets the parameter type OID of the statement. */
+export const pgTypedStatementBinding: StatementBindingAdapter = createPgStatementBinding("oid-types");
 
 const defaultBindingContext: StatementBindingContext = Object.freeze({
   dialectId: "postgres",
   requestedReuse: "auto",
 });
 
-/** Return the parameterized text and the values for one rendered statement. */
+/**
+ * Return the parameterized text and the values for one rendered statement.
+ * `paramTypes` holds the type OID of each parameter (0 if it has no hint). It is `undefined` if no parameter has a hint.
+ * Pass `pgTypedStatementBinding` as `adapter` for a driver that applies type OIDs.
+ */
 export function resolvePgBinding(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
-): { readonly text: string; readonly values: readonly unknown[] } {
+  adapter: StatementBindingAdapter = pgStatementBinding,
+): { readonly text: string; readonly values: readonly unknown[]; readonly paramTypes: readonly number[] | undefined } {
   statement = createRenderedStatement(statement);
   const description =
     binding ??
-    pgStatementBinding.describe(statement, {
+    adapter.describe(statement, {
       dialectId: statement.dialectId,
       requestedReuse: defaultBindingContext.requestedReuse,
     });
@@ -136,7 +160,11 @@ export function resolvePgBinding(
   if (description.parameterizedSql === undefined) {
     throw new Error("BRAID_BIND_TRANSPORT: PostgreSQL binding description did not provide parameterized SQL.");
   }
-  return { text: description.parameterizedSql, values: statement.parameters.map((parameter) => parameter.value) };
+  return {
+    text: description.parameterizedSql,
+    values: statement.parameters.map((parameter) => parameter.value),
+    paramTypes: adapter === pgTypedStatementBinding ? postgresParameterTypeOids(statement) : undefined,
+  };
 }
 
 /** True if the binding description was made for a statement inside a transaction. */

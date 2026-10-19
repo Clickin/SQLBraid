@@ -16,6 +16,8 @@ export interface PgliteResultLike {
 export interface PgliteQueryOptionsLike {
   readonly rowMode?: "array" | "object";
   readonly parsers?: Readonly<Record<number, (value: string) => unknown>>;
+  /** The type OID of each parameter. 0 leaves the type to the server. */
+  readonly paramTypes?: readonly number[];
 }
 
 /** The part of a `PGlite` instance that the adapter uses. */
