@@ -31,7 +31,12 @@ import {
 } from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { utf8ByteLength } from "@sqlbraid/template";
-import { isOracleBinaryNumericType, isOracleExactNumericType, typePolicy as defaultTypePolicy } from "./type-policy.js";
+import {
+  isOracleBinaryNumericType,
+  isOracleExactNumericType,
+  resolveCellDecoder,
+  typePolicy as defaultTypePolicy,
+} from "./type-policy.js";
 import type {
   OracleBindLike,
   OracleConnectionLike,
@@ -227,22 +232,25 @@ function prepareOracleRowProjector(
     const normalizedType = type;
     const exactNumeric = normalizedType !== undefined && isOracleExactNumericType(normalizedType);
     const binaryNumeric = normalizedType !== undefined && isOracleBinaryNumericType(normalizedType);
+    const cell = type !== undefined && policy === defaultTypePolicy ? resolveCellDecoder(type) : undefined;
     const decode =
       type === undefined
         ? identityResultValue
-        : (entry: unknown): unknown => {
-            if (entry !== null && entry !== undefined) {
-              if (exactNumeric && typeof entry !== "string") {
-                throw new ResultExactnessError(`Oracle ${normalizedType} results must remain exact strings.`);
+        : cell !== undefined && !exactNumeric && !binaryNumeric
+          ? cell
+          : (entry: unknown): unknown => {
+              if (entry !== null && entry !== undefined) {
+                if (exactNumeric && typeof entry !== "string") {
+                  throw new ResultExactnessError(`Oracle ${normalizedType} results must remain exact strings.`);
+                }
+                if (binaryNumeric && typeof entry !== "number") {
+                  throw new ResultExactnessError(
+                    `Oracle ${normalizedType} results must remain JavaScript numbers, including native non-finite values.`,
+                  );
+                }
               }
-              if (binaryNumeric && typeof entry !== "number") {
-                throw new ResultExactnessError(
-                  `Oracle ${normalizedType} results must remain JavaScript numbers, including native non-finite values.`,
-                );
-              }
-            }
-            return policy.decode(type, entry);
-          };
+              return cell === undefined ? policy.decode(type, entry) : cell(entry);
+            };
     return [{ name: field.name, index, decode }];
   });
   const projectArray = preparePositionalResultProjector(columns, rowCountHint);

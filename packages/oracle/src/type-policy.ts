@@ -87,7 +87,11 @@ const mappings = Object.freeze(
   ),
 );
 
+// Names that are already canonical skip the trim, case and whitespace passes; other names never enter this set.
+const canonicalTypeNames: ReadonlySet<string> = new Set(mappingDefinitions.map((mapping) => mapping.databaseType));
+
 function normalize(databaseType: string): string {
+  if (canonicalTypeNames.has(databaseType)) return databaseType;
   return databaseType.trim().toUpperCase().replaceAll(/\s+/gu, " ");
 }
 
@@ -140,16 +144,22 @@ function encode(databaseType: string, value: unknown): unknown {
   return value;
 }
 
+type CellDecoder = (value: unknown) => unknown;
+
+const identityDecoder: CellDecoder = (value) => value;
+// Exact Oracle NUMBER-family values are intentionally represented as text.
+// JavaScript Number cannot preserve Oracle precision, and the adapter requests
+// string fetching for exact numeric columns.
+const exactNumericDecoder: CellDecoder = (value) =>
+  value === null || value === undefined ? value : decodeExactDecimal(value, { allowBigInt: true });
+
+/** The decoder for one result column, resolved once per column. */
+export function resolveCellDecoder(databaseType: string): CellDecoder {
+  return isOracleExactNumericType(databaseType) ? exactNumericDecoder : identityDecoder;
+}
+
 function decode(databaseType: string, value: unknown): unknown {
-  if (value === null || value === undefined) return value;
-  const type = normalize(databaseType);
-  // Exact Oracle NUMBER-family values are intentionally represented as text.
-  // JavaScript Number cannot preserve Oracle precision, and the adapter requests
-  // string fetching for exact numeric columns.
-  if (isOracleExactNumericType(type)) {
-    return decodeExactDecimal(value, { allowBigInt: true });
-  }
-  return value;
+  return resolveCellDecoder(databaseType)(value);
 }
 
 export const typePolicy: TypePolicy = Object.freeze({
