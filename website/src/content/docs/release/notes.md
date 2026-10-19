@@ -25,7 +25,7 @@ It has no dialect or adapter dependencies, including optional peers.
 - Install the dialect or adapter package and external driver that your application uses.
 - Import `sql` and dialect hints from the owning `@sqlbraid/*` root.
 - Import database factories from the adapter subpath, such as `@sqlbraid/postgres/pg`.
-- Replace all driver and dialect facade imports. The old subpaths are removed, with no compatibility aliases.
+- Replace all driver and dialect facade imports. The old subpaths are removed, with no compatibility aliases. See the [upgrade guide for 1.x](/SQLBraid/release/upgrade-from-1x/).
 - Query APIs and runtime behavior remain unchanged.
 
 ## What the stable interfaces include
