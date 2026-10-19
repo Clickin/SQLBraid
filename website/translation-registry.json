@@ -169,13 +169,13 @@
       "source": "website/src/content/docs/metadata/inspectors.md",
       "translation": "website/src/content/docs/ko/metadata/inspectors.md",
       "translationOf": "website/src/content/docs/metadata/inspectors.md",
-      "sourceDigest": "ef9669113934ff4c2ca006d13cf0e1dea3f2dcc72362e9c27165164230bb400f"
+      "sourceDigest": "4a244b1a9e1d5e7a1852ee9eefa0ba6a80c7a98ba277fe4f32ffc9c32d96377c"
     },
     {
       "source": "website/src/content/docs/metadata/models.md",
       "translation": "website/src/content/docs/ko/metadata/models.md",
       "translationOf": "website/src/content/docs/metadata/models.md",
-      "sourceDigest": "e593e6b819155460824d1595d018f9faab0eeae699a5e478b14034c4eb161f0c"
+      "sourceDigest": "b6b248b293ab0047fd76ddb692bf4cd23bcc23779d28bbcf647916e4942b97b4"
     },
     {
       "source": "website/src/content/docs/metadata/overrides.md",

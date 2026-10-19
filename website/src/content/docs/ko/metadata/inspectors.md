@@ -14,13 +14,22 @@ pnpm add @sqlbraid/postgres pg @sqlbraid/metadata
 인스펙터는 별도 패키지가 아니라 방언 패키지의 **하위 경로 export**입니다. 이미 연결된 물리 클라이언트를 검사하세요.
 
 ```ts
+import { writeFile } from "node:fs/promises";
+import pg from "pg";
 import { hashSnapshot, validateSnapshot } from "@sqlbraid/metadata";
 import { createPostgresInspector } from "@sqlbraid/postgres/inspector";
+
+const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await client.connect();
 
 const metadata = await createPostgresInspector(client).inspect();
 validateSnapshot(metadata);
 console.log(hashSnapshot(metadata));
+await writeFile("db/main.metadata.json", JSON.stringify(metadata, null, 2));
+await client.end();
 ```
+
+이 코드를 `db` 디렉터리가 있는 프로젝트에 `inspect.mjs`로 저장하고 `node inspect.mjs`를 실행하세요. [코드 생성 설정](/SQLBraid/metadata/config/)은 이 스크립트가 쓴 스냅샷 파일을 읽습니다.
 
 모든 공식 방언은 `/inspector` 하위 경로에서 전용 인스펙터를 export합니다.
 

@@ -14,13 +14,22 @@ pnpm add @sqlbraid/postgres pg @sqlbraid/metadata
 The inspector is a **subpath export** of the dialect package. It is not a separate package. Inspect a physical client that is already connected:
 
 ```ts
+import { writeFile } from "node:fs/promises";
+import pg from "pg";
 import { hashSnapshot, validateSnapshot } from "@sqlbraid/metadata";
 import { createPostgresInspector } from "@sqlbraid/postgres/inspector";
+
+const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await client.connect();
 
 const metadata = await createPostgresInspector(client).inspect();
 validateSnapshot(metadata);
 console.log(hashSnapshot(metadata));
+await writeFile("db/main.metadata.json", JSON.stringify(metadata, null, 2));
+await client.end();
 ```
+
+Save this code as `inspect.mjs` in a project with an existing `db` directory, and run `node inspect.mjs`. The [codegen configuration](/SQLBraid/metadata/config/) reads the snapshot file that this script writes.
 
 All first-party dialects export dedicated inspectors from their `/inspector` subpaths:
 
