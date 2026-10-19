@@ -32,7 +32,7 @@ import {
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
-import { typePolicy as defaultTypePolicy } from "./type-policy.js";
+import { resolveCellDecoder, typePolicy as defaultTypePolicy } from "./type-policy.js";
 import { tediousEnvironment } from "./tedious/environment.js";
 import {
   typeNames,
@@ -450,7 +450,13 @@ function prepareTediousRowProjector(
   const prepared = columns.map((metadata, index) => {
     const name = columnName(metadata, index);
     const type = columnType(metadata);
-    const decode = type === undefined ? cellValue : (raw: unknown): unknown => policy.decode(type, cellValue(raw));
+    const cell = type !== undefined && policy === defaultTypePolicy ? resolveCellDecoder(type) : undefined;
+    const decode =
+      type === undefined
+        ? cellValue
+        : cell === undefined
+          ? (raw: unknown): unknown => policy.decode(type, cellValue(raw))
+          : (raw: unknown): unknown => cell(cellValue(raw));
     return { name, index, decode };
   });
   const projectArray = preparePositionalResultProjector(prepared);

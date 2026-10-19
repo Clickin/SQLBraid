@@ -96,27 +96,54 @@ const mappings = Object.freeze(
   ),
 );
 
-function canonical(databaseType: string): string {
+function normalizeTypeName(databaseType: string): string {
   return databaseType.trim().toLowerCase().replace(/\s+/gu, "");
 }
 
-function decode(databaseType: string, value: unknown): unknown {
-  if (value === null || value === undefined) return value;
+// Mapping names that normalization leaves unchanged skip the passes; other names never enter this set.
+const canonicalTypeNames: ReadonlySet<string> = new Set(
+  mappingDefinitions.map((mapping) => mapping.databaseType).filter((name) => normalizeTypeName(name) === name),
+);
+
+function canonical(databaseType: string): string {
+  return canonicalTypeNames.has(databaseType) ? databaseType : normalizeTypeName(databaseType);
+}
+
+type CellDecoder = (value: unknown) => unknown;
+
+const identityDecoder: CellDecoder = (value) => value;
+const integerDecoder: CellDecoder = (value) =>
+  value === null || value === undefined ? value : normalizeExactInteger(value);
+
+/**
+ * The decoder for one result column, resolved once per column.
+ * The error messages name the type exactly as the caller spelled it.
+ */
+export function resolveCellDecoder(databaseType: string): CellDecoder {
   const type = canonical(databaseType);
-  if (type === "tinyint" || type === "smallint" || type === "int" || type === "bigint") {
-    return normalizeExactInteger(value);
-  }
+  if (type === "tinyint" || type === "smallint" || type === "int" || type === "bigint") return integerDecoder;
   if (type === "decimal" || type === "numeric" || type === "money" || type === "smallmoney") {
-    throw new ResultExactnessError(
-      `SQL Server ${databaseType} results are exposed by Tedious as JavaScript numbers; use an explicit CONVERT(varchar(...), ...) or CAST(... AS varchar(...)) for exact text.`,
-    );
+    return (value) => {
+      if (value === null || value === undefined) return value;
+      throw new ResultExactnessError(
+        `SQL Server ${databaseType} results are exposed by Tedious as JavaScript numbers; use an explicit CONVERT(varchar(...), ...) or CAST(... AS varchar(...)) for exact text.`,
+      );
+    };
   }
   if (type === "real" || type === "float") {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new ResultExactnessError(`SQL Server ${databaseType} results must be finite JavaScript numbers.`);
-    }
+    return (value) => {
+      if (value === null || value === undefined) return value;
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new ResultExactnessError(`SQL Server ${databaseType} results must be finite JavaScript numbers.`);
+      }
+      return value;
+    };
   }
-  return value;
+  return identityDecoder;
+}
+
+function decode(databaseType: string, value: unknown): unknown {
+  return resolveCellDecoder(databaseType)(value);
 }
 
 function encode(databaseType: string, value: unknown): unknown {
