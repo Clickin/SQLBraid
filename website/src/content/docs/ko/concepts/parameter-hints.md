@@ -53,6 +53,71 @@ const query = sql.rows<UserRow>`
 
 `null`이나 애플리케이션 객체처럼 모호한 값에는 힌트를 명시하세요. 정밀도, 스케일, 길이, SQL Server 전용 타입을 JavaScript 런타임 타입에 맡기지 마세요.
 
+## 힌트 타입은 어떻게 선언하나요
+
+힌트의 `databaseType` 필드는 평범한 `string`입니다. 어떤 데이터베이스 타입을 바인딩할 수 있는지는 드라이버를 아는 어댑터가 정하므로, 코어 패키지는 타입 목록을 갖지 않습니다. 사용자 정의 어댑터는 자기만의 타입 이름을 정의할 수 있습니다.
+
+힌트를 만드는 검사된 방법은 방언 루트의 팩토리입니다. 팩토리는 `databaseType`을 대신 설정하고, 받을 수 있는 값의 TypeScript 타입도 함께 기록합니다. TypeScript는 `sql.bind` 호출에서 값과 힌트를 비교합니다.
+
+```ts
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
+
+const ok = sql.bind(accountId, mssqlParameter.int());
+// @ts-expect-error A string is not a valid input for an `int` hint.
+const wrong = sql.bind("42", mssqlParameter.int());
+```
+
+애플리케이션 코드에서는 팩토리를 쓰세요. 팩토리는 닫힌 이름 집합, 에디터 자동 완성, 값 검사를 제공합니다. 직접 쓴 힌트 객체에는 이 셋이 없습니다.
+
+<!-- doc-snippet: skip -->
+
+```ts
+sql.bind(accountId, { databaseType: "int" }); // SQL Server 어댑터는 받아들이지만 TypeScript는 검사하지 않습니다
+```
+
+어댑터는 문장을 바인딩할 때, 문장을 실행하기 전에 이름을 검사합니다. 대소문자와 공백은 구분하지 않고, `int`에 대한 `integer`처럼 드라이버의 별칭을 받아들입니다. 어댑터가 모르는 이름이면 `BRAID_BIND_HINT_UNSUPPORTED`로 실패하며, 타입을 추측하지 않습니다.
+
+## Oracle 힌트
+
+Oracle 루트는 다음 팩토리를 내보냅니다.
+
+| 팩토리                                   | Oracle 타입                                       |
+| ---------------------------------------- | ------------------------------------------------- |
+| `char`, `nchar`, `varchar2`, `nvarchar2` | `CHAR`, `NCHAR`, `VARCHAR2`, `NVARCHAR2`          |
+| `number`                                 | `NUMBER`                                          |
+| `binaryFloat`, `binaryDouble`            | `BINARY_FLOAT`, `BINARY_DOUBLE`                   |
+| `date`, `timestamp`                      | `DATE`, `TIMESTAMP`                               |
+| `timestampTz`, `timestampLtz`            | `TIMESTAMP WITH TIME ZONE`, `... LOCAL TIME ZONE` |
+| `raw`                                    | `RAW`                                             |
+| `rowid`, `urowid`                        | `ROWID`, `UROWID`                                 |
+| `blob`, `clob`, `nclob`                  | `BLOB`, `CLOB`, `NCLOB`                           |
+| `refCursor`                              | `REF CURSOR` (루틴 OUT 전용)                      |
+
+IN 값에는 길이, 정밀도, 스케일 없이 팩토리를 호출하세요. node-oracledb는 이 속성을 IN 값에 적용할 수 없으므로 어댑터가 거부합니다.
+
+```ts
+import { oracleParameter, sql } from "@sqlbraid/oracle";
+
+const query = sql.command`
+  UPDATE accounts
+  SET balance = ${sql.bind(balance, oracleParameter.number())}
+  WHERE id = ${sql.bind(accountId, oracleParameter.number())}
+`;
+```
+
+## 힌트가 없는 타입
+
+힌트는 어댑터가 바인딩할 수 있는 타입에만 있습니다. 그 밖의 타입은 SQL에 변환을 직접 쓰세요. 값은 계속 바인딩 파라미터로 남습니다.
+
+```ts
+const query = sql.rows<DocumentRow>`
+  SELECT id FROM documents
+  WHERE payload = CAST(${payloadText} AS jsonb)
+`;
+```
+
+enum, 복합 타입, 사용자 정의 타입, `citext` 같은 확장 타입에 이 방식을 쓰세요. SQLBraid는 변환을 넣으려고 SQL을 다시 쓰지 않습니다.
+
 ## 렌더링 메타데이터와 준비된 쿼리의 형태
 
 렌더링된 문장은 각 값, 보간 위치, 선택 사항인 힌트를 변경할 수 없는 `parameters` 레코드 하나에 담습니다. `segments.length === parameters.length + 1`입니다. 옵저버는 이 레코드에서 값, 힌트, 보간 위치 정보를 받습니다. 그렇다고 바인딩 값의 가림 정책이 바뀌지는 않습니다.

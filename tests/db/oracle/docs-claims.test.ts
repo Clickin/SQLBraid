@@ -119,3 +119,20 @@ docsClaim("runtime/streaming.md", "the Oracle ResultSet stream supports an early
     assert.equal((await db.all(sql.rows`SELECT 1 AS "x" FROM dual`)).length, 1);
   }),
 );
+
+const PH = "concepts/parameter-hints.md";
+
+docsClaim(PH, "an IN NUMBER hint without facets binds; an IN length facet and an unknown name are rejected", () =>
+  withDb(async (db) => {
+    const row = await db.one(sql.rows<{ x: string }>`SELECT ${sql.bind(7, oracleParameter.number())} AS "x" FROM dual`);
+    assert.equal(row.x, "7");
+    assert.equal(
+      await errorCode(() => db.all(sql.rows`SELECT ${sql.bind("x", oracleParameter.varchar2(10))} AS "x" FROM dual`)),
+      "BRAID_BIND_HINT_UNSUPPORTED",
+    );
+    assert.equal(
+      await errorCode(() => db.all(sql.rows`SELECT ${sql.bind(7, { databaseType: "not_a_type" })} AS "x" FROM dual`)),
+      "BRAID_BIND_HINT_UNSUPPORTED",
+    );
+  }),
+);

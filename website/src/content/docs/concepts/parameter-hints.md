@@ -53,6 +53,71 @@ The available factories are `tinyint()`, `smallint()`, `int()`, `bigint()`, `dec
 
 Use an explicit hint for ambiguous values, such as `null` or an object of the application. Do not depend on a JavaScript runtime type to select a precision, scale, length or SQL Server-specific type.
 
+## How hint types are declared
+
+The `databaseType` field of a hint is a plain `string`. The core package does not list database types, because each adapter owns the type names that its driver can bind. A custom adapter can define its own names.
+
+The dialect roots give you the checked way to create a hint. Each factory sets `databaseType` for you and records the TypeScript type of the accepted value. TypeScript compares the value with the hint at the `sql.bind` call:
+
+```ts
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
+
+const ok = sql.bind(accountId, mssqlParameter.int());
+// @ts-expect-error A string is not a valid input for an `int` hint.
+const wrong = sql.bind("42", mssqlParameter.int());
+```
+
+Use a factory in application code. A factory gives you a closed set of names, an editor completion list and a value check. A hand-written hint object has none of these:
+
+<!-- doc-snippet: skip -->
+
+```ts
+sql.bind(accountId, { databaseType: "int" }); // accepted by the SQL Server adapter, not checked by TypeScript
+```
+
+The adapter checks the name when it binds the statement, before it runs the statement. It compares names without regard to case and spacing, and it accepts the aliases of the driver, such as `integer` for `int`. If the adapter does not know the name, it fails with `BRAID_BIND_HINT_UNSUPPORTED`. It does not guess a type.
+
+## Oracle hints
+
+The Oracle root exports these factories:
+
+| Factory                                  | Oracle type                                       |
+| ---------------------------------------- | ------------------------------------------------- |
+| `char`, `nchar`, `varchar2`, `nvarchar2` | `CHAR`, `NCHAR`, `VARCHAR2`, `NVARCHAR2`          |
+| `number`                                 | `NUMBER`                                          |
+| `binaryFloat`, `binaryDouble`            | `BINARY_FLOAT`, `BINARY_DOUBLE`                   |
+| `date`, `timestamp`                      | `DATE`, `TIMESTAMP`                               |
+| `timestampTz`, `timestampLtz`            | `TIMESTAMP WITH TIME ZONE`, `... LOCAL TIME ZONE` |
+| `raw`                                    | `RAW`                                             |
+| `rowid`, `urowid`                        | `ROWID`, `UROWID`                                 |
+| `blob`, `clob`, `nclob`                  | `BLOB`, `CLOB`, `NCLOB`                           |
+| `refCursor`                              | `REF CURSOR` (routine OUT only)                   |
+
+For an IN value, call the factory without length, precision or scale. The node-oracledb driver cannot apply these facets to an IN value, so the adapter rejects them.
+
+```ts
+import { oracleParameter, sql } from "@sqlbraid/oracle";
+
+const query = sql.command`
+  UPDATE accounts
+  SET balance = ${sql.bind(balance, oracleParameter.number())}
+  WHERE id = ${sql.bind(accountId, oracleParameter.number())}
+`;
+```
+
+## A type without a hint
+
+A hint exists only for the types that an adapter can bind. For all other types, write the conversion in your SQL. The value stays a bound parameter:
+
+```ts
+const query = sql.rows<DocumentRow>`
+  SELECT id FROM documents
+  WHERE payload = CAST(${payloadText} AS jsonb)
+`;
+```
+
+Use this form for enum, composite, user-defined and extension types, such as `citext`. SQLBraid never rewrites your SQL to add a conversion.
+
 ## Rendered metadata and prepared shape
 
 Rendered statements keep each value, its interpolation index and its optional

@@ -56,7 +56,10 @@ declare global {
   const ExtraSchema: S<{ id: number; payload: string }>;
   const AccountSchema: S<{ id: string }>;
 
-  const accountId: number, accountNumber: number;
+  const accountId: number, accountNumber: number, balance: number, payloadText: string;
+  interface DocumentRow {
+    id: string;
+  }
   const tableName: string;
   const ids: readonly number[];
   const row: { id: string };

@@ -137,3 +137,24 @@ docsClaim("runtime/streaming.md", "the Tedious stream supports an early break an
     assert.equal((await db.all(sql.rows`SELECT 1 AS x`)).length, 1);
   }),
 );
+
+const PH = "concepts/parameter-hints.md";
+
+docsClaim(PH, "a factory hint is checked by TypeScript; the adapter accepts hand-written names by alias and case", () =>
+  withDb(async (db) => {
+    assert.deepEqual(
+      await db.all(sql.rows<{ v: string }>`SELECT CAST(${sql.bind(7, mssqlParameter.int())} AS NVARCHAR(10)) AS v`),
+      [{ v: "7" }],
+    );
+    assert.deepEqual(
+      await db.all(
+        sql.rows<{ v: string }>`SELECT CAST(${sql.bind(7, { databaseType: "INTEGER" })} AS NVARCHAR(10)) AS v`,
+      ),
+      [{ v: "7" }],
+    );
+    await assertCode(
+      () => db.all(sql.rows`SELECT ${sql.bind(7, { databaseType: "not_a_type" })} AS v`),
+      "BRAID_BIND_HINT_UNSUPPORTED",
+    );
+  }),
+);
