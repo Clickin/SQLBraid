@@ -3,15 +3,38 @@ title: PostgreSQL 빠른 시작
 description: 직접 클라이언트나 명시적인 풀로 SQLBraid를 pg에 연결합니다.
 ---
 
+이 페이지에는 Node `>=22.18.0`과 Docker가 필요합니다. Node 22.18.0은 TypeScript 예제를 바로 실행합니다.
+
+## 1. 데이터베이스 시작하기
+
+로컬 PostgreSQL 서버를 시작하고, 예제가 읽는 테이블 두 개를 만드세요. 이 테이블이 있는 서버가 이미 있다면 `DATABASE_URL`을 설정하고 이 단계를 건너뛰세요.
+
+```bash
+docker run -d --name braid-postgres -e POSTGRES_PASSWORD=braid -e POSTGRES_DB=braid -p 5432:5432 postgres:17
+until docker exec braid-postgres psql -h 127.0.0.1 -U postgres -d braid -c "SELECT 1" >/dev/null 2>&1; do sleep 1; done
+docker exec -i braid-postgres psql -U postgres -d braid <<'SQL'
+CREATE TABLE users (id serial PRIMARY KEY, name text NOT NULL);
+INSERT INTO users (name) VALUES ('Ada'), ('Grace');
+CREATE TABLE accounts (id serial PRIMARY KEY, email text NOT NULL);
+INSERT INTO accounts (email) VALUES ('ada@example.com');
+SQL
+export DATABASE_URL=postgres://postgres:braid@localhost:5432/braid
+```
+
+## 2. 프로젝트 만들기
+
 SQLBraid 런타임 파사드, PostgreSQL 방언 패키지, `pg` 드라이버를 함께 설치하세요.
 
 ```bash
+mkdir braid-postgres-app && cd braid-postgres-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/postgres pg
+mkdir src
 ```
 
 ## 물리 클라이언트에 직접 연결하기
 
-직접 연결 팩토리는 연결된 `pg.Client`나 `pg.PoolClient`를 받습니다. `pg.Pool`은 받지 않습니다.
+직접 연결 팩토리는 연결된 `pg.Client`나 `pg.PoolClient`를 받습니다. `pg.Pool`은 받지 않습니다. 이 코드를 `src/direct.ts`로 저장하고 `node src/direct.ts`로 실행하세요.
 
 ```ts
 import { Client } from "pg";
@@ -39,7 +62,7 @@ try {
 
 ## 풀 기반 데이터베이스
 
-애플리케이션이 `pg.Pool`을 가지고 있다면 풀 팩토리를 쓰세요.
+애플리케이션이 `pg.Pool`을 가지고 있다면 풀 팩토리를 쓰세요. 이 코드를 `src/pool.ts`로 저장하고 `node src/pool.ts`로 실행하세요.
 
 ```ts
 import { Pool } from "pg";
@@ -59,6 +82,8 @@ try {
   await pool.end();
 }
 ```
+
+작업을 마쳤다면 `docker rm -f braid-postgres`로 서버를 멈추세요.
 
 풀을 쓰는 루트 작업은 커넥션 리스 하나를 획득하고, 물리 I/O를 실행하고, 리스를 반환한 다음, 메모리로 읽은 결과를 매핑합니다. 커넥션을 고정하는 명시적인 경계는 트랜잭션입니다. 트랜잭션 안에서는 모든 작업에 콜백 핸들을 쓰세요. 풀 종료는 애플리케이션이 맡습니다.
 

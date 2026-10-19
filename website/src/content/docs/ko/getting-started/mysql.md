@@ -3,15 +3,36 @@ title: MySQL 빠른 시작
 description: 직접 연결이나 명시적인 풀로 SQLBraid를 mysql2에 연결합니다.
 ---
 
+이 페이지에는 Node `>=22.18.0`과 Docker가 필요합니다. Node 22.18.0은 TypeScript 예제를 바로 실행합니다.
+
+## 1. 데이터베이스 시작하기
+
+로컬 MySQL 서버를 시작하고, 예제가 읽는 테이블을 만드세요. `users` 테이블이 있는 서버가 이미 있다면 `DATABASE_URL`을 설정하고 이 단계를 건너뛰세요.
+
+```bash
+docker run -d --name braid-mysql -e MYSQL_ROOT_PASSWORD=password -e MYSQL_DATABASE=app -p 3306:3306 mysql:8.4
+until docker exec braid-mysql mysql -h 127.0.0.1 -uroot -ppassword -e "SELECT 1" >/dev/null 2>&1; do sleep 1; done
+docker exec -i braid-mysql mysql -uroot -ppassword app <<'SQL'
+CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL);
+INSERT INTO users (name) VALUES ('Ada'), ('Grace');
+SQL
+export DATABASE_URL=mysql://root:password@localhost:3306/app
+```
+
+## 2. 프로젝트 만들기
+
 SQLBraid 런타임 파사드, MySQL 방언 패키지, `mysql2` 드라이버를 함께 설치하세요.
 
 ```bash
+mkdir braid-mysql-app && cd braid-mysql-app
+pnpm init --init-type module
 pnpm add sqlbraid @sqlbraid/mysql mysql2
+mkdir src
 ```
 
 ## 물리 커넥션에 직접 연결하기
 
-직접 연결 팩토리는 `mysql2/promise`의 연결된 `Connection`이나 `PoolConnection` 객체를 받습니다. 아직 resolve되지 않은 Promise나 풀은 받지 않습니다.
+직접 연결 팩토리는 `mysql2/promise`의 연결된 `Connection`이나 `PoolConnection` 객체를 받습니다. 아직 resolve되지 않은 Promise나 풀은 받지 않습니다. 이 코드를 `src/direct.ts`로 저장하고 `node src/direct.ts`로 실행하세요.
 
 ```ts
 import mysql from "mysql2/promise";
@@ -36,7 +57,7 @@ try {
 
 ## 풀 기반 데이터베이스
 
-`mysql2/promise` 풀에는 풀 팩토리를 쓰세요.
+`mysql2/promise` 풀에는 풀 팩토리를 쓰세요. 이 코드를 `src/pool.ts`로 저장하고 `node src/pool.ts`로 실행하세요.
 
 ```ts
 import mysql from "mysql2/promise";
@@ -58,6 +79,8 @@ try {
   await pool.end();
 }
 ```
+
+작업을 마쳤다면 `docker rm -f braid-mysql`로 서버를 멈추세요.
 
 풀은 계속 애플리케이션의 리소스입니다. SQLBraid는 독립된 루트 작업마다 물리 커넥션을 획득하고 반환합니다. `db.tx(...)`는 콜백 동안 리스 하나를 고정합니다.
 
