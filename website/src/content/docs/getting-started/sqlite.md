@@ -182,9 +182,16 @@ import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";
 import { sql } from "@sqlbraid/sqlite";
 
 const native = new Database(":memory:");
-const db = createBetterSqlite3Database(native);
-const rows = await db.all(sql.rows`SELECT 1 AS value`);
+try {
+  const db = createBetterSqlite3Database(native);
+  const rows = await db.all(sql.rows`SELECT 1 AS value`);
+  console.log(rows);
+} finally {
+  native.close();
+}
 ```
+
+Save this code as `src/better-sqlite3.ts` and run `node src/better-sqlite3.ts`. The output is `[ { value: '1' } ]`.
 
 SQLBraid applies `safeIntegers(true)` to each statement. It exposes exact INTEGER
 values as decimal strings. `iterate()` is the real stream primitive. Bulk uses a
@@ -203,9 +210,16 @@ import { createLibsqlDatabase } from "@sqlbraid/sqlite/libsql";
 import { sql } from "@sqlbraid/sqlite";
 
 const client = createClient({ url: "file:app.db", intMode: "string" });
-const db = createLibsqlDatabase(client, { intMode: "string" });
-const rows = await db.all(sql.rows`SELECT 1 AS value`);
+try {
+  const db = createLibsqlDatabase(client, { intMode: "string" });
+  const rows = await db.all(sql.rows`SELECT 1 AS value`);
+  console.log(rows);
+} finally {
+  client.close();
+}
 ```
+
+Save this code as `src/libsql.ts` and run `node src/libsql.ts`. The output is `[ { value: '1' } ]`. The client creates the file `app.db`.
 
 The explicit `intMode: "string"` option is required. SQLBraid cannot infer the
 integer mode of an opaque client.

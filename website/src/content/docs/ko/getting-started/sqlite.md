@@ -160,9 +160,16 @@ import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";
 import { sql } from "@sqlbraid/sqlite";
 
 const native = new Database(":memory:");
-const db = createBetterSqlite3Database(native);
-const rows = await db.all(sql.rows`SELECT 1 AS value`);
+try {
+  const db = createBetterSqlite3Database(native);
+  const rows = await db.all(sql.rows`SELECT 1 AS value`);
+  console.log(rows);
+} finally {
+  native.close();
+}
 ```
+
+이 코드를 `src/better-sqlite3.ts`로 저장하고 `node src/better-sqlite3.ts`를 실행하세요. 출력은 `[ { value: '1' } ]`입니다.
 
 SQLBraid는 문장마다 `safeIntegers(true)`를 적용해 정확한 INTEGER 값을 십진 문자열로 노출합니다. `iterate()`가 실제 스트림 기능입니다. 벌크는 `prepared-loop`를 씁니다. 네이티브 호출은 이벤트 루프를 막습니다. 문제가 되면 워커를 쓰세요. 루틴과 활성 취소는 지원하지 않습니다.
 
@@ -178,9 +185,16 @@ import { createLibsqlDatabase } from "@sqlbraid/sqlite/libsql";
 import { sql } from "@sqlbraid/sqlite";
 
 const client = createClient({ url: "file:app.db", intMode: "string" });
-const db = createLibsqlDatabase(client, { intMode: "string" });
-const rows = await db.all(sql.rows`SELECT 1 AS value`);
+try {
+  const db = createLibsqlDatabase(client, { intMode: "string" });
+  const rows = await db.all(sql.rows`SELECT 1 AS value`);
+  console.log(rows);
+} finally {
+  client.close();
+}
 ```
+
+이 코드를 `src/libsql.ts`로 저장하고 `node src/libsql.ts`를 실행하세요. 출력은 `[ { value: '1' } ]`입니다. 클라이언트가 `app.db` 파일을 만듭니다.
 
 `intMode: "string"` 옵션을 반드시 명시해야 합니다. SQLBraid는 내부를 알 수 없는 클라이언트의 정수 모드를 추론할 수 없습니다.
 
