@@ -15,6 +15,7 @@ import type {
 import { assertSavepointName } from "@sqlbraid/core/driver";
 import { AdapterError, safeDatabaseCount } from "@sqlbraid/core";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
+import { executePgQuery } from "../../../../experiments/driver-extraction/src/pg.js";
 import { representationProfiles, typePolicyForProfile } from "../type-policy.js";
 import {
   assertParameterHintsUnsupported,
@@ -164,7 +165,7 @@ interface PgArrayQueryConfig {
 }
 
 function queryArrayRows(client: PgClientLike, config: PgArrayQueryConfig): Promise<PgResultLike> {
-  return (client.query as unknown as (config: PgArrayQueryConfig) => Promise<PgResultLike>)(config);
+  return executePgQuery(client, config);
 }
 
 function materialize(

@@ -25,6 +25,7 @@ import {
 } from "@sqlbraid/core";
 import { assertSavepointName, defineResultProperty, preparePositionalResultProjector } from "@sqlbraid/core/driver";
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
+import { materializeSqlite } from "../../../experiments/driver-extraction/src/sqlite.js";
 import { typePolicy } from "./type-policy.js";
 
 /** Native node:sqlite column metadata used to preserve exact names and type-policy decoding. */
@@ -81,8 +82,7 @@ function normalizeNodeSqliteValue(value: unknown): unknown {
   return typeof value === "bigint" ? normalizeExactInteger(value) : value;
 }
 
-function resultColumns(statement: SqliteStatementLike): readonly SqliteColumnLike[] {
-  const columns = statement.columns();
+function validateResultColumns(columns: readonly SqliteColumnLike[]): void {
   const names = new Set<string>();
   for (const column of columns) {
     const name = column.name ?? column.column;
@@ -90,6 +90,11 @@ function resultColumns(statement: SqliteStatementLike): readonly SqliteColumnLik
       throw new Error(`BRAID_RESULT_COLUMNS: duplicate SQLite result label ${name}.`);
     if (name != null) names.add(name);
   }
+}
+
+function resultColumns(statement: SqliteStatementLike): readonly SqliteColumnLike[] {
+  const columns = statement.columns();
+  validateResultColumns(columns);
   return columns;
 }
 
@@ -289,6 +294,16 @@ function configureExactIntegerReads(statement: SqliteStatementLike): void {
   setReturnArrays.call(statement, true);
 }
 
+function configureMaterializedStatement(statement: SqliteStatementLike, columns: readonly SqliteColumnLike[]): void {
+  if (columns.length > 0) configureExactIntegerReads(statement);
+  else statement.setReadBigInts?.(true);
+}
+
+const materializationHooks = {
+  validateColumns: validateResultColumns,
+  configure: configureMaterializedStatement,
+};
+
 function nodeSqliteEnvironment(transactionSupported: boolean, streamSupported: boolean): DriverEnvironment {
   return Object.freeze<DriverEnvironment>({
     database: { product: "sqlite" },
@@ -368,20 +383,17 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
       assertRoutineParametersUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
-      const statement = database.prepare(prepared.text);
-      const columns = resultColumns(statement);
+      const result = materializeSqlite(database, prepared.text, prepared.values, materializationHooks);
+      const columns = result.columns;
       if (columns.length > 0) {
-        configureExactIntegerReads(statement);
-        const nativeRows = statement.all(...prepared.values);
+        const nativeRows = result.rows;
         if (nativeRows.length === 0) return { rows: [], rowCount: 0, kind: "rows" };
         const projectRow = prepareNodeSqliteRowProjector(columns, nativeRows.length);
         const rows = nativeRows.map((row) => projectRow(row));
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
-      statement.setReadBigInts?.(true);
-      const result = statement.run(...prepared.values);
-      const changes = result.changes === undefined ? undefined : safeDatabaseCount(result.changes);
-      const insertId = result.lastInsertRowid === undefined ? undefined : normalizeExactInteger(result.lastInsertRowid);
+      const changes = result.affectedRows === undefined ? undefined : safeDatabaseCount(result.affectedRows);
+      const insertId = result.insertId === undefined ? undefined : normalizeExactInteger(result.insertId);
       return {
         rows: [],
         rowCount: changes,

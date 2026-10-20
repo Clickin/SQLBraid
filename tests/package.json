@@ -5,6 +5,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@electric-sql/pglite": "0.5.8",
+    "@execution-lab/driver": "workspace:*",
     "@jridgewell/trace-mapping": "0.3.31",
     "@libsql/client": "0.18.0",
     "@neondatabase/serverless": "1.2.0",

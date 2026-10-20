@@ -48,6 +48,8 @@
     "test:bulk": "vitest run pv16-bulk pv16-native-bulk pv16-oracle pv16-mariadb pv16-sqlite-cloud tests/db",
     "test:browser": "node tests/scripts/test-browser.mjs",
     "test:d1": "node tests/scripts/test-d1.mjs",
+    "test:driver-extraction": "pnpm run build:packages && node tests/driver-extraction/runner.mjs",
+    "benchmark:driver-extraction": "node --expose-gc tests/driver-extraction/benchmark.mjs",
     "benchmark:performance": "node tests/performance/run.mjs",
     "benchmark:performance:profile": "node tests/performance/profile.mjs",
     "benchmark:bulk-execution": "node tests/scripts/bulk-execution-benchmark.mjs",

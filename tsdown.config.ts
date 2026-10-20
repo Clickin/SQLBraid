@@ -104,4 +104,5 @@ export default defineConfig([
   packageBuild("packages/language-server", { index: "src/index.ts", server: "src/server.ts", cli: "src/cli.ts" }),
   packageBuild("packages/cli", { index: "src/index.ts", config: "src/config.ts" }),
   packageBuild("packages/bun-sql", { index: "src/index.ts" }),
+  packageBuild("experiments/driver-extraction", { index: "src/index.ts", pg: "src/pg.ts", sqlite: "src/sqlite.ts" }),
 ]);

@@ -3,6 +3,7 @@ packages:
   - tests
   - extensions/*
   - website
+  - experiments/driver-extraction
 
 allowBuilds:
   "@vscode/vsce-sign": false
