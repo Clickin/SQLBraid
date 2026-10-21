@@ -1,0 +1,113 @@
+# Release notes
+
+> The SQLBraid 2.0.0 release, direct driver imports and capability boundaries.
+
+This page records the SQLBraid GA release line. GA makes the public interfaces
+stable. It does not make each capability available on each driver.
+
+The [runtime and driver support matrix](/SQLBraid/v/2.0.0-rc.1/reference/support.md) lists
+the supported combinations of database, driver, profile, runtime and capability.
+
+## 2.0.0 release
+
+Only `sqlbraid` moves to `2.0.0`. Each other first-party package keeps its own version line.
+Each package is tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v<version>` for the others.
+
+`@sqlbraid/postgres` 1.2.0 adds parameter type hints for the postgres.js and PGlite adapters.
+Use `sql.bind(value, postgresParameter.int8())` to set the type of one parameter.
+The `pg` and Neon adapters still reject every hint. See [parameter type hints](/SQLBraid/v/2.0.0-rc.1/concepts/parameter-hints.md).
+
+`sqlbraid` keeps only its root and `sqlbraid/compiled` entry points.
+Its only dependencies are `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template`.
+It has no dialect or adapter dependencies, including optional peers.
+
+- Install the dialect or adapter package and external driver that your application uses.
+- Import `sql` and dialect hints from the owning `@sqlbraid/*` root.
+- Import database factories from the adapter subpath, such as `@sqlbraid/postgres/pg`.
+- Replace all driver and dialect facade imports. The old subpaths are removed, with no compatibility aliases. See the [upgrade guide for 1.x](/SQLBraid/v/2.0.0-rc.1/release/upgrade-from-1x.md).
+- Query APIs and runtime behavior remain unchanged.
+
+## What the stable interfaces include
+
+- SQL-first templates, safe value binds and the explicit result kinds `rows`,
+  `command`, `call` and `unknown`;
+- bounded `@braid` directives and explicit structural fragments;
+- Standard Schema row mapping that is bound to the query or set for each execution;
+- direct physical executors and explicit ownership of pools through providers and leases;
+- lease pinning with `db.session(callback)`, reuse in nested sessions, and `db.tx`;
+- fixed transaction isolation literals and `readOnly`, with separate errors for
+  malformed, unsupported and nested options;
+- trailing execution, row and stream options, and `AbortSignal` cancellation
+  that depends on capabilities;
+- prepared factories with input and without input, with logical shape locks that
+  render once;
+- native driver streams with cleanup before the lease release, or an explicit
+  `BRAID_STREAM_UNSUPPORTED`;
+- materialized routine `output`, ordered heterogeneous `resultSets`, an optional
+  `returnValue`, and explicit boundaries for OUT, INOUT and cursors;
+- homogeneous bulk for commands only, with validation before I/O and a report of
+  the actual execution mode;
+- execution observers that can only observe or fail, and lazy diagnostic
+  literalization;
+- optional DB client spans and stable duration metrics from
+  `@sqlbraid/opentelemetry`. The application owns the SDK and the exporter;
+- PostgreSQL, MySQL, MariaDB, SQLite, Oracle and SQL Server dialect roots with
+  driver subpaths;
+- one Bun SQL adapter family. The user must select the PostgreSQL, MySQL,
+  MariaDB or SQLite dialect. There is no detection from the connection;
+- the existing first-party driver adapters in Deno, where their public API
+  works, without a Deno-specific dialect;
+- metadata, codegen, CLI JSON inspection, standard LSP, Vite lowering and thin
+  editor integration;
+- exact database integers and decimals as canonical strings, and approximate
+  IEEE values as numbers, with independent JSON, temporal and container profiles.
+
+## Explicit unsupported behavior
+
+`UnsupportedFeatureError(feature, code, message, options?)` carries stable
+`BRAID_*` codes. Active cancellation without physical driver support uses
+`BRAID_CANCEL_UNSUPPORTED`. Already-aborted signals keep their `reason`. Missing
+stream, routine, output, hint, transaction or bulk support fails explicitly.
+SQLBraid does not buffer, guess carriers, ignore hints or create hidden
+transactions.
+
+- MySQL/mysql2 supports emitted heterogeneous `CALL` result sets. OUT and INOUT
+  descriptors stay unsupported, because their carrier cannot be identified
+  reliably.
+- SQLite `db.call()` / `routine.call` is unsupported. This does not restrict
+  ordinary SQLite SQL functions or extensions.
+- `callStream()` is reserved and not implemented. It is not an API that you
+  can call.
+
+Read the [capability limitations](/SQLBraid/v/2.0.0-rc.1/release/limitations.md). They include
+this item: Bun 1.3.14 MySQL and MariaDB reject both explicit `readOnly` boolean
+values. If you omit the option, the native session default stays. Bun.SQL
+PostgreSQL is different.
+
+The canonical capability keys are:
+
+```text
+statement.prepare       statement.stream       statement.bulk
+transaction             transaction.savepoint
+routine.out             routine.result-sets    routine.out-cursor
+routine.return-value
+```
+
+## Deliberate nonfeatures
+
+SQLBraid is not one of these things:
+
+- an ORM;
+- a complete SQL semantic compiler;
+- a universal input codec;
+- an interceptor that rewrites SQL or results;
+- an automatic retry or routing layer;
+- an audit store;
+- a universal native prepared cache.
+
+It does not infer the result models of arbitrary SELECT and JOIN statements. It
+does not hydrate object graphs. DML `RETURNING`/`OUTPUT` is materialized, unless
+the exact evidence of the selected adapter says otherwise. Metadata is
+open-world positive evidence.
+
+Support and release artifacts are validated before publication.

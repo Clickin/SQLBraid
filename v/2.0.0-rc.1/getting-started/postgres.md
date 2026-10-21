@@ -1,0 +1,173 @@
+# PostgreSQL quickstart
+
+> Connect SQLBraid to pg with either a direct client or an explicit pool.
+
+This page needs Node `>=22.18.0` and Docker. Node 22.18.0 runs the TypeScript examples directly.
+
+## 1. Start a database
+
+Start a local PostgreSQL server and create the two tables that the examples read. If you have a server with these tables, set `DATABASE_URL` and skip this step.
+
+```bash
+docker run -d --name braid-postgres -e POSTGRES_PASSWORD=braid -e POSTGRES_DB=braid -p 5432:5432 postgres:17
+until docker exec braid-postgres psql -h 127.0.0.1 -U postgres -d braid -c "SELECT 1" >/dev/null 2>&1; do sleep 1; done
+docker exec -i braid-postgres psql -U postgres -d braid <<'SQL'
+CREATE TABLE users (id serial PRIMARY KEY, name text NOT NULL);
+INSERT INTO users (name) VALUES ('Ada'), ('Grace');
+CREATE TABLE accounts (id serial PRIMARY KEY, email text NOT NULL);
+INSERT INTO accounts (email) VALUES ('ada@example.com');
+SQL
+export DATABASE_URL=postgres://postgres:braid@localhost:5432/braid
+```
+
+## 2. Create a project
+
+Install the SQLBraid runtime facade, the PostgreSQL dialect package and the `pg` driver together:
+
+```bash
+mkdir braid-postgres-app && cd braid-postgres-app
+pnpm init --init-type module
+pnpm add sqlbraid @sqlbraid/postgres pg
+mkdir src
+```
+
+## Direct physical client
+
+A direct factory accepts a connected `pg.Client` or `pg.PoolClient`. It does not accept a `pg.Pool`. Save this code as `src/direct.ts` and run `node src/direct.ts`:
+
+```ts
+import { Client } from "pg";
+import { createPgDatabase } from "@sqlbraid/postgres/pg";
+import { sql } from "@sqlbraid/postgres";
+
+interface UserRow {
+  id: string;
+  name: string;
+}
+
+const client = new Client({ connectionString: process.env.DATABASE_URL });
+await client.connect();
+const db = createPgDatabase(client);
+
+try {
+  const users = await db.all<UserRow>(sql.rows<UserRow>`
+    SELECT id, name FROM users ORDER BY id
+  `);
+  console.log(users);
+} finally {
+  await client.end();
+}
+```
+
+## Pool-backed database
+
+Use the pool factory when the application owns a `pg.Pool`. Save this code as `src/pool.ts` and run `node src/pool.ts`:
+
+```ts
+import { Pool } from "pg";
+import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";
+import { sql } from "@sqlbraid/postgres";
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = createPgPoolDatabase(pool);
+const accountId = 1;
+
+try {
+  const account = await db.one(sql.rows<{ id: string; email: string }>`
+    SELECT id, email FROM accounts WHERE id = ${accountId}
+  `);
+  console.log(account);
+} finally {
+  await pool.end();
+}
+```
+
+When you finish, stop the server with `docker rm -f braid-postgres`.
+
+A pooled root operation does these steps: it acquires one connection lease, does its physical I/O, releases the lease and then maps the materialized results. A transaction is the explicit boundary that pins a connection. Inside a transaction, use its callback handle for each operation. The application owns the shutdown of the pool.
+
+The pg binding adapter receives a logical `RenderedStatement`. Then it
+materializes text-positional `$1`, `$2`, … placeholders and the ordered value
+array. The driver owns this step. It occurs after the pure binding description
+and before lease acquisition. The PostgreSQL dialect does not supply the
+placeholder spelling. The adapter reports simple reuse that the driver owns. It
+rejects every parameter hint before I/O, because `pg` exposes no per-parameter type option. The postgres.js and PGlite adapters apply hints. See [parameter type hints](/SQLBraid/v/2.0.0-rc.1/concepts/parameter-hints.md).
+
+:::caution Do not pass a pool to `createPgDatabase`
+SQLBraid does not duck-type pools. If you pass `pg.Pool` to the direct factory, the ownership model is wrong. Use `createPgPoolDatabase(pool)`.
+:::
+
+For the details of this boundary, read [direct connections and pools](/SQLBraid/v/2.0.0-rc.1/runtime/direct-pools.md) and [transactions](/SQLBraid/v/2.0.0-rc.1/runtime/transactions.md).
+
+## Streaming and routines
+
+Install `pg-cursor` only if this application uses `db.stream()`:
+
+```bash
+pnpm add pg-cursor
+```
+
+Ordinary queries do not need this peer.
+
+- PostgreSQL streaming uses cursor batch reads. If the capability is absent, it
+  reports `BRAID_STREAM_UNSUPPORTED`.
+- An abort waits for the physical `Client.end()` and discards the connection.
+  This includes a pending batch read.
+- Pools replace that connection. You must replace a direct client.
+- For abortable streams, custom wrappers must expose `end()`.
+
+For a routine with a `refcursor` OUT or INOUT parameter, use
+`postgresParameter.refcursor()`. Call the routine inside an existing
+`db.tx(async (tx) => tx.call(query))` scope. SQLBraid fetches and closes the
+portal of the transaction. It removes the portal from the scalar `output` and
+returns its rows in `resultSets`. It never creates a hidden transaction.
+
+## pg representation profile
+
+The default `pg` profile is `pg-lossless-text`. JSON and temporal values stay
+text where the driver can supply text. `@sqlbraid/postgres` exports
+`typePolicyForProfile({ json, temporal })` and immutable
+`representationProfiles` descriptors. Thus, the runtime and codegen can use
+exactly the same policy:
+
+```ts
+import { typePolicyForProfile } from "@sqlbraid/postgres/pg";
+import { generateModels } from "@sqlbraid/codegen";
+
+const typePolicy = typePolicyForProfile({ json: "text", temporal: "text" });
+const generated = generateModels(snapshot, { typePolicy });
+```
+
+`{ json: "native", temporal: "native" }` selects the separate `pg-native`
+compatibility profile. Native means the normal per-OID parser behavior of
+node-postgres. It does not mean that each temporal type becomes `Date`. A custom
+`pg-types` parser is another profile. It needs its own raw-value evidence.
+
+| Value                                | Driver raw / SQLBraid canonical output | Fidelity boundary                                                                                                        |
+| ------------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `int2` / `int4` / `int8` / `oid`     | driver-dependent → `string`            | Exact output is canonical text, never `number` or `bigint`.                                                              |
+| `numeric` / `decimal`                | text → `string`                        | A JavaScript `number` is not accepted as exact.                                                                          |
+| `float4` / `float8`                  | number → `number`                      | Approximate binary value; `SHOW extra_float_digits` must be positive for the lossless text read profile.                 |
+| `money`                              | unsupported                            | PostgreSQL's locale-formatted text is not a canonical numeric value; use an authored conversion with an explicit format. |
+| `json` / `jsonb`                     | text → `string`; native → `unknown`    | Parsed roots may be string, number, boolean, `null`, array, or object; native nested numeric fidelity is not guaranteed. |
+| `date` / `timestamp` / `timestamptz` | text → `string`; native → `Date`       | `time`/`timetz` remain text in native mode; `interval` is `unknown`.                                                     |
+| `bytea`                              | `Buffer`                               | Keep bytes or explicitly encode them.                                                                                    |
+| `uuid`                               | string                                 | Validate format in the application schema when needed.                                                                   |
+
+- Exact string inputs are supported through the text-positional bind path, when
+  the documented profile proves a full round trip.
+- Ordinary `undefined` binds fail with `BRAID_BIND_VALUE_UNSUPPORTED` before
+  acquisition. `null` is SQL `NULL`.
+- Arrays, domains, ranges, multiranges and composites are unclassified
+  containers. This is also true when their scalar element types are exact.
+
+`db.environment()` reports the selected profile (for example, `pg-lossless-text`) along with the `id` and `hash` of its `TypePolicy`. It checks the server setting `extra_float_digits` without exposing the raw setting value: when `extra_float_digits > 0`, `numeric.approximate-float` is reported as `guaranteed`; otherwise it is `guarded` with condition `pg.extra-float-digits`. See the [runtime and driver support matrix](/SQLBraid/v/2.0.0-rc.1/reference/support.md) for the tested database, driver, profile, and runtime combinations.
+
+- `pg-cursor` supplies the native pull stream. A missing peer gives
+  `BRAID_STREAM_UNSUPPORTED`.
+- Routine refcursors require an existing transaction. They are materialized into
+  result sets.
+- Bulk uses the proven native or prepared strategy of the adapter. It does not
+  rewrite SQL.
+- Native PostgreSQL SQL, including `RETURNING`, passes through without change.
+  This does not mean that SQLBraid supports the PostgreSQL grammar.

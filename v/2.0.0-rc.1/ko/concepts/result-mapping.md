@@ -1,0 +1,68 @@
+# Standard Schema 결과 매핑
+
+> 특정 스키마 라이브러리에 묶이지 않고 행을 검증하고 변환합니다.
+
+SQLBraid는 특정 검증 라이브러리가 아니라 Standard Schema 프로토콜에 의존합니다. 쿼리에 스키마를 연결할 수 있습니다.
+
+```ts
+import * as v from "valibot";
+import { sql } from "@sqlbraid/postgres";
+
+const EventSchema = v.object({
+  id: v.pipe(v.string(), v.transform(Number)),
+  payload: v.string(),
+});
+
+const events = sql.rows(EventSchema)`
+  SELECT id, payload FROM events
+`;
+const rows = await db.all(events);
+```
+
+스키마의 출력 타입이 쿼리의 행 타입이 됩니다. 매핑은 `all`, `one`, `maybeOne`, `batch`, 준비된 쿼리, 스트림, 트랜잭션 범위 안의 작업에 똑같이 적용됩니다. 실행 단계에서 지정한 스키마는 그 위에 추가로 적용됩니다.
+
+```ts
+await db.all(events, { schema: ExtraSchema });
+```
+
+정확한 데이터베이스 숫자는 문자열로, 근사 IEEE 값은 숫자로 도착합니다. 애플리케이션에서 쓸 의미는 드라이버 프로필을 바꾸지 말고 스키마에서 고르세요.
+
+```ts
+const Account = v.object({
+  id: v.pipe(
+    v.string(),
+    v.transform((value) => BigInt(value)),
+  ),
+  amount: v.string(), // or v.transform(value => new Decimal(value))
+});
+```
+
+`Decimal`과 Money 객체는 애플리케이션이 고르는 것이며 SQLBraid의 의존성이 아닙니다. 파싱된 JSON 숫자나 네이티브 날짜·시간 `Date`가 이미 잃어버린 정밀도는 스키마로 되살릴 수 없습니다.
+
+- JSON 안에 중첩된 숫자에는 무손실 텍스트 프로필과 애플리케이션이 고른 파서를 쓰세요.
+- 소수 초나 오프셋까지 정확해야 하는 날짜·시간에는 검증된 텍스트 프로필이나 SQL 안의 변환을 쓰세요.
+
+루틴 선언은 채널마다 따로 매핑합니다. `sql.call({ output, resultSets: [UserSchema, PaymentSchema] as const, returnValue })`는 다음과 같이 적용됩니다.
+
+- 출력 스키마는 스칼라 객체에 적용됩니다.
+- 튜플의 각 스키마는 같은 위치의 결과 집합 행에 적용됩니다.
+- 반환 스키마는 실제 반환 값이나 상태 값에 적용됩니다.
+
+`returnValue` 스키마를 선언하면, 성공한 `db.call()` 결과에는 그 스키마의 출력 타입을 가진 `returnValue` 속성이 반드시 있습니다. 드라이버에 반환 채널이 없으면 호출은 `BRAID_CALL_RETURN_UNSUPPORTED`로 실패합니다. 선택한 대상이 `routine.return-value`를 명시적으로 미지원으로 표시하면, 같은 오류가 리스를 획득하기 전에 발생합니다. 선언 없이 쓰거나 반환 스키마 없이 선언하면 이 속성은 선택 사항으로 남습니다.
+
+커서 출력은 스칼라 `output`에서 빠집니다. 어댑터는 비동기 매핑이 시작되기 전에 리소스를 읽고 닫습니다. 결과 집합 개수가 맞지 않으면 `BRAID_CALL_RESULT_SETS`입니다. 루틴 매핑이 실패하면 `BRAID_CALL_MAP`이 실패 위치를 알려 줍니다.
+
+전체 흐름은 다음과 같습니다.
+
+```text
+driver row -> dialect TypePolicy normalization -> plain row -> query schema -> execution schema -> application model
+```
+
+`DatabaseResultValidationError`(코드 `BRAID_RESULT_VALIDATION`)는 실패한 단계(`query` 또는 `execution`)와 행 인덱스를 알려 줍니다. 오류 메시지 자체에는 원본 행 데이터나 바인딩 값이 포함되지 않으며, `issues` 속성에는 스키마 라이브러리가 반환한 오류 목록이 그대로 담깁니다. 일부 검증 라이브러리는 각 issue 객체에 원본 입력 값을 포함하므로, 민감한 데이터가 있는 경우 로그에 남기기 전에 `issues`를 마스킹하세요. 결과 매핑은 항상 행 하나를 값 하나로 변환하며, 연관 관계 자동 로딩이나 아이덴티티 맵, 객체 그래프 조립은 수행하지 않습니다.
+
+입력 파라미터 처리는 단순하고 명확한 규칙을 따릅니다.
+
+- 일반 `${value}` 보간은 별도의 입력 코덱 계층을 거치지 않고 드라이버 바인딩 파라미터로 그대로 전달됩니다.
+- 정밀 숫자의 바인딩 정확도는 사용하는 드라이버의 지원 여부에 따릅니다.
+- 일반 IN 파라미터에 `undefined`를 전달하면 커넥션 획득 전에 즉시 실패(`BRAID_BIND_VALUE_UNSUPPORTED`)하며, `null`은 SQL `NULL`로 바인딩됩니다.
+- JSON, 날짜·시간, 바이너리 입력 값은 대상 드라이버의 기본 바인딩 규칙을 따릅니다.
