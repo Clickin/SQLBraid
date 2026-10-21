@@ -33,8 +33,8 @@
   },
   "dependencies": {
     "@jridgewell/gen-mapping": "0.3.13",
-    "@sqlbraid/core": "workspace:^1.1.0",
-    "@sqlbraid/template": "workspace:^1.0.3",
+    "@sqlbraid/core": "workspace:^1.1.0-rc.1",
+    "@sqlbraid/template": "workspace:^1.0.4-rc.1",
     "typescript": "5.9.3"
   },
   "engines": {
