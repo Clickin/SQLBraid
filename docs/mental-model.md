@@ -40,7 +40,7 @@ flowchart TB
   CORE -. TypePolicy .-> CODEGEN
 ```
 
-The `sqlbraid` package is mainly the canonical facade. It re-exports the other packages. When you read the implementation code, start with the four execution layers above.
+The `sqlbraid` package is the database-neutral runtime facade. It re-exports `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template`, plus `sqlbraid/compiled`. When you read the implementation code, start with the four execution layers above.
 
 ## 2. The central invariant: SQL structure and values stay separate
 
@@ -381,7 +381,7 @@ Missing metadata stays unresolved evidence. It does not prove that user SQL is i
 
 Do not read the repository in alphabetical order. Use this sequence:
 
-1. the README sections "Key Concepts" and "Runtime API";
+1. the README sections "How It Works", "Result Declarations & Schema Validation" and "Core Execution Features";
 2. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`);
 3. `packages/template/src/`: `tag.ts` (`createSqlTag()`) → `render.ts` (`renderTemplateIr()` / `renderNodes()`);
 4. `packages/runtime/src/index.ts`: `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepareObserved` → `prepare`. Then `operations/materialized.ts`: `runPrepared` → `leaseForUse` (in `operations/lease.ts`) → `physical` → `finalizePhysical` → `processRows`;

@@ -170,5 +170,4 @@ node-postgres. It does not mean that each temporal type becomes `Date`. A custom
   result sets.
 - Bulk uses the proven native or prepared strategy of the adapter. It does not
   rewrite SQL.
-- Native PostgreSQL SQL, including `RETURNING`, passes through without change.
-  This does not mean that SQLBraid supports the PostgreSQL grammar.
+- Native PostgreSQL SQL, including `RETURNING`, passes through to the server without rewriting; SQLBraid does not parse or validate the full PostgreSQL grammar itself.

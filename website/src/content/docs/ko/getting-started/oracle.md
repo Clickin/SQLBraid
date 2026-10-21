@@ -83,16 +83,16 @@ Thin 바인딩 어댑터는 논리 문장을 텍스트·위치 기반 `:1`, `:2`
 - 취소는 guarded 상태의 `connection.break()` 경로를 씁니다. 협력적인 방식이라 즉시 멈추거나 시간 제한을 지킨다고 보장하지 않습니다. 문서화된 `DBMS_SESSION.SLEEP` 원시 점검은 sleep이 끝날 때만 `ORA-01013`으로 reject될 수 있습니다. 어댑터는 결과가 확정될 때까지 물리 리스를 붙잡고 있습니다. 문서화된 break 기능이 없으면 활성 취소는 I/O 전에 `BRAID_CANCEL_UNSUPPORTED`로 실패합니다.
 - 대상 조합은 Node 22.18.0/Linux x64의 Oracle Free 23.9 Thin입니다. 현재 인증 상태와 정확한 게이트는 [런타임·드라이버 지원](/SQLBraid/reference/support/)에 있습니다.
 
-드라이버가 안전한 Oracle 타입을 추론할 수 없다면 `null`에 힌트를 명시하세요. 타입 없는 null을 몰래 `VARCHAR2`로 바꾸지 마세요.
+드라이버가 `null`에 대해 안전한 Oracle 타입을 추론할 수 없는 경우에는 파라미터 힌트를 명시하세요. SQLBraid는 타입 힌트가 없는 `null`을 임의로 `VARCHAR2`로 변환하지 않습니다.
 
-기본 정책은 정밀도를 지키기 위해 정확한 `NUMBER` 계열을 문자열로 가져옵니다. Oracle `FLOAT`와 ANSI 숫자 별칭도 포함됩니다. Oracle `NUMBER(p,0)`도 이 정확한 소수 계열에 속합니다. 지원 분류 체계는 네이티브 정확한 정수 전송을 위한 별도 범주를 만들지 않습니다.
+기본 정책은 정밀도를 보존하기 위해 `NUMBER` 계열(`FLOAT`, ANSI 숫자 별칭, `NUMBER(p,0)` 포함)을 모두 문자열로 조회합니다.
 
-`NUMBER`에 소수 문자열을 입력하는 경로는 인증된 정확한 바인딩 경로가 아닙니다.
+`NUMBER` 컬럼에 소수 문자열을 바로 바인딩하는 경로는 정확한 무손실 입력으로 보장되지 않습니다.
 
 - 타입이 지정된 `number`와 `bigint` 입력은 JavaScript 표현의 한계를 따릅니다.
 - 힌트 없는 문자열은 `NLS_NUMERIC_CHARACTERS`에 따라 달라질 수 있습니다.
 
-세션이나 프로필이 증명하지 않는 한, 이 기능은 미지원으로 두세요. 필요하면 일반 문자 바인딩과 통제된 명시적 SQL 변환을 쓰세요.
+세션 설정이 명확히 통제되지 않은 환경에서는 일반 문자 바인딩으로 값을 전달하고, SQL 안에서 포맷 마스크와 NLS 옵션을 지정한 명시적 변환(예: `TO_NUMBER`)을 사용하세요.
 
 Thin 어댑터는 정밀도·스케일 속성과 IN 길이 제약을 거부합니다. VARCHAR2와 NVARCHAR2의 OUT·INOUT 길이는 드라이버의 `maxSize`를 정합니다. 다른 길이 속성은 거부합니다. 데이터베이스 제약은 SQL이나 스키마에 두세요.
 
@@ -101,8 +101,6 @@ Thin 어댑터는 정밀도·스케일 속성과 IN 길이 제약을 거부합�
 - 루틴의 LOB 출력은 `getData()`로 읽고 리스 반환 전에 해제합니다. 읽기 실패 후 아직 처리하지 않은 나머지 LOB도 마찬가지입니다.
 - 날짜·시간 값은 guarded 편의 프로필인 `Date`를 씁니다. 원본 시간대 이름이나 밀리초 미만 정밀도는 유지하지 않습니다. 무손실 텍스트 경로가 필요하면 SQL에 `TO_CHAR`나 포맷 식을 쓰세요.
 - 네이티브 JSON은 파싱된 편의 값입니다. 직렬화된 텍스트가 필요하면 검증된 fetch 핸들러나 `JSON_SERIALIZE(... RETURNING CLOB)`를 쓰세요.
-
-CLOB·BLOB의 OUT·IN OUT 바인딩, 메모리 읽기, 정리는 `oracle.routine.inout` 지원 픽스처가 실제 Oracle Free에서 검증합니다.
 
 `sql.out`/`sql.inOut`과 여러 결과 집합에 대한 전체 규칙은 [루틴 호출](/SQLBraid/concepts/routines/)을 보세요.
 
@@ -123,7 +121,7 @@ CLOB·BLOB의 OUT·IN OUT 바인딩, 메모리 읽기, 정리는 `oracle.routine
 - OUT 순번은 SQL의 바인딩 순서를 따릅니다. 사이에 있는 IN 값이 순번을 바꾸지 않습니다.
 - REF CURSOR 출력은 순서가 있는, 메모리로 읽은 `resultSets`가 됩니다. 암시적 결과는 추가 집합입니다.
 - 네이티브 `RETURNING ... INTO`는 `sql.out()`과 메모리로 읽는 행 API를 씁니다.
-- 매니페스트가 증명하는 곳에서는 `executeMany()`가 지원되는 네이티브 벌크 방식입니다.
+- `db.bulk()`는 드라이버의 `executeMany()`(`native-bulk`)를 사용합니다.
 - `rowsAffected`는 안전한 범위를 검사한 작업 개수입니다. `RETURNING INTO` 값도 같은 정확한 문자열 규칙을 따릅니다.
 - 일반 IN 값이 `undefined`이면 리스를 획득하기 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다.
-- 네이티브 Oracle SQL은 바뀌지 않고 그대로 전달됩니다. SQLBraid는 Oracle 문법을 제공하지 않고, 프로시저 메타데이터를 추론하지도 않습니다.
+- 작성한 Oracle SQL은 재작성 없이 서버로 그대로 전달되며, SQLBraid가 Oracle 문법 전체를 자체 파싱하거나 프로시저 메타데이터를 추론하지는 않습니다.

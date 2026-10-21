@@ -99,22 +99,16 @@ I/O.
   Its current certification status and its exact gate are in
   [runtime and driver support](/SQLBraid/reference/support/).
 
-If the driver cannot infer a safe Oracle type, use an explicit hint for `null`. Do not silently turn an untyped null into `VARCHAR2`.
+If the driver cannot infer a safe Oracle type for `null`, pass an explicit parameter hint. SQLBraid does not implicitly coerce an untyped `null` into `VARCHAR2`.
 
-The default policy fetches the exact `NUMBER` family as strings, to keep the
-precision. This includes Oracle `FLOAT` and the ANSI numeric aliases. Oracle
-`NUMBER(p,0)` stays part of that exact-decimal family. The support taxonomy does
-not invent a separate category for native exact-integer transport.
+The default policy fetches the exact `NUMBER` family as strings to preserve precision. This includes Oracle `FLOAT` and the ANSI numeric aliases, as well as `NUMBER(p,0)`.
 
 `NUMBER` decimal-string input is not a certified exact bind path:
 
-- Typed `number` and `bigint` inputs are limited by their JavaScript
-  representation.
+- Typed `number` and `bigint` inputs are limited by their JavaScript representation.
 - Strings without a hint can depend on `NLS_NUMERIC_CHARACTERS`.
 
-Keep this capability unsupported, unless the session or profile proves it. When
-necessary, use an ordinary character bind and an explicit, controlled SQL
-conversion.
+Unless your session settings are explicitly controlled and verified, bind exact decimal values as character strings and use an explicit SQL conversion (such as `TO_NUMBER` with a format mask and NLS settings).
 
 The Thin adapter rejects precision and scale facets and IN length constraints.
 VARCHAR2 and NVARCHAR2 OUT and INOUT lengths select the `maxSize` of the driver.
@@ -131,9 +125,6 @@ schema.
   path, write `TO_CHAR` or format expressions in your SQL.
 - Native JSON is a parsed convenience value. When you need serialized text, use
   a tested fetch handler or `JSON_SERIALIZE(... RETURNING CLOB)`.
-
-The `oracle.routine.inout` support fixture checks CLOB and BLOB OUT and IN OUT
-binds, materialization and cleanup on a real Oracle Free database.
 
 For the complete `sql.out`/`sql.inOut` and heterogeneous result-set rules, read
 [routine calls](/SQLBraid/concepts/routines/).
@@ -158,11 +149,9 @@ The first-party profile is node-oracledb Thin mode.
 - REF CURSOR outputs become ordered materialized `resultSets`. Implicit results
   are additional sets.
 - Native `RETURNING ... INTO` uses `sql.out()` and the materialized row APIs.
-- `executeMany()` is the supported native bulk strategy where the manifest
-  proves it.
+- `db.bulk()` uses `executeMany()` (`native-bulk`).
 - `rowsAffected` is an operational count with safe-range validation.
   `RETURNING INTO` values follow the same exact string rules.
 - Ordinary `undefined` IN values fail before acquisition with
   `BRAID_BIND_VALUE_UNSUPPORTED`. `null` is SQL `NULL`.
-- Native Oracle SQL passes through without change. SQLBraid does not give an
-  Oracle grammar and does not infer procedure metadata.
+- Native Oracle SQL passes through to the server without rewriting; SQLBraid does not parse the full Oracle grammar or infer procedure metadata.

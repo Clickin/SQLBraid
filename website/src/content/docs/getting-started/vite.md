@@ -92,18 +92,18 @@ The plugin has these behaviors:
 - It supports `.ts`, `.tsx`, `.js`, `.jsx`, `.mts` and `.cts`.
 - It skips declarations, `node_modules`, generated files and common build output.
 - It reports malformed guarded SQL as Vite diagnostics, with the original filename, line and column.
-- It returns non-identity source maps for transformed queries. Thus, the Vite transforms that follow can compose them.
+- It emits accurate source maps for transformed queries so downstream Vite plugins can compose them.
 
 TSX/JSX, TypeScript syntax, decorators, module format, React and TanStack transforms stay the responsibility of Vite, Oxc and Rolldown. This plugin does not transpile them.
 
 ## Runtime is separate
 
-Vite transforms the source of the browser and the application. Database execution still needs a supported server runtime and adapter.
+Vite transforms browser and server source files at build time, while database execution runs on a supported server runtime and adapter.
 
-For a TanStack Start finance consumer, keep the Vite 8 build and the Node 24 application runtime as separate concerns:
+In full-stack frameworks such as TanStack Start, keep the Vite build and the Node server runtime separate:
 
-- The plugin must keep the source map.
-- The server route must create the SQLBraid database with the correct Node adapter, for example `node:sqlite`.
-- Do not import a database driver that is only for Node into a browser bundle.
+- The Vite plugin transforms guarded SQL templates and preserves source maps during the build.
+- Server routes create the SQLBraid database with a Node adapter (for example `node:sqlite` or `pg`).
+- Never import a Node-only database driver into a browser bundle.
 
 For direct compiler integrations, `@sqlbraid/vite` re-exports `transformSource(source, filename, options?)`. Use it only when a different bundler owns the TypeScript transform around it. Read [dynamic templates](/SQLBraid/concepts/dynamic-braid/), [SQL tags](/SQLBraid/concepts/sql-tags/) and [the Vite package README](https://github.com/Clickin/SQLBraid/tree/main/packages/vite).

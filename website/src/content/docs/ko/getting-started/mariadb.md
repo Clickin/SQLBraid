@@ -59,10 +59,10 @@ try {
 
 작업을 마쳤다면 `docker rm -f braid-mariadb`로 서버를 멈추세요.
 
-방언은 `mysql`이 아니라 `mariadb`입니다. MariaDB 전용 문법은 SQL에 직접 씁니다. 현재 기능 검증 픽스처는 문서에 나온 `INSERT ... RETURNING`, `DELETE ... RETURNING`, `REPLACE ... RETURNING`, 시퀀스, CTE, JSON 함수를 다룹니다.
+방언은 `mysql`이 아니라 `mariadb`입니다. `INSERT ... RETURNING`, `DELETE ... RETURNING`, `REPLACE ... RETURNING`, 시퀀스, CTE, JSON 함수 등 MariaDB 전용 문법을 SQL에 직접 작성할 수 있습니다.
 
-- `UPDATE ... RETURNING`은 지원한다고 주장하지 않습니다.
-- `INSERT ... ON DUPLICATE KEY UPDATE ... RETURNING` 형태는 해당 서버의 근거가 있어야 지원 목록에 오릅니다.
+- MariaDB는 `UPDATE ... RETURNING`을 지원하지 않습니다.
+- `INSERT ... ON DUPLICATE KEY UPDATE ... RETURNING` 구문은 지원 기능 목록에 포함되지 않습니다.
 
 어댑터는 Connector/Node.js의 값 전용 실행, 네이티브 행 스트리밍, 그리고 `db.bulk()`를 위한 `connection.batch()` 호출 한 번(`native-bulk`)을 씁니다. 루트 벌크는 트랜잭션이 아니며, 자동 분할에 대한 공통 보장도 없습니다. 콜백 단위의 원자성이 필요하면 `db.tx()`를 쓰세요.
 
@@ -89,15 +89,15 @@ Connector/Node.js는 실제 적용된 옵션을 노출하지 않습니다. 설�
 
 - 어댑터는 값 전용 실행, 네이티브 `queryStream()`, 그리고 같은 형태의 벌크를 위한 `connection.batch()` 호출 한 번을 씁니다.
 - `queryStream()`은 텍스트 프로토콜로 값을 보냅니다. 그래서 `db.stream()`은 `null`, 문자열, 유한한 숫자, boolean, bigint, 유효한 `Date`, 바이너리 데이터만 받습니다. 배열, 객체, 유한하지 않은 숫자는 connector에 넘기기 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 거부합니다. JSON 값은 `JSON.stringify()`로 인코딩하세요.
-- 네이티브 `RETURNING`은 해당 서버 형태에 근거가 있을 때만 메모리로 읽는 행 선언으로 씁니다. `INSERT`, `DELETE`, `REPLACE`는 각각 별도의 기능입니다. `UPDATE`는 지원한다고 주장하지 않습니다.
-- SQL은 바뀌지 않고 그대로 전달됩니다. MariaDB 문법을 지원한다는 뜻은 아닙니다.
+- 네이티브 `RETURNING`(`INSERT ... RETURNING`, `DELETE ... RETURNING`, `REPLACE ... RETURNING`)은 메모리로 읽는 행 API(`sql.rows`)로 실행합니다.
+- 작성한 SQL은 재작성 없이 서버로 그대로 전달되며, SQLBraid가 MariaDB 문법 전체를 자체 파싱하거나 검증하지는 않습니다.
 - `db.call()`은 준비된 문장 `CALL`이 출력하는 서로 다른 결과 집합을 메모리로 읽습니다. OUT, INOUT, 커서 설명은 지원하지 않습니다.
 - `db.prepare()`는 쿼리에 연결한 Standard Schema 매핑을 유지합니다.
 - 선택 사항인 `/inspector` 하위 경로는 오프라인 `generateModels()`를 위해 identity, 생성 열·쓰기 플래그, 숫자 정밀도와 스케일을 기록합니다. 루틴 시그니처는 불완전한 긍정적 근거로 남습니다.
 
 `mariadb-lossless-text` 설명 객체는 `bigIntAsNumber: false`, `decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`, `dateStrings: true`, `timezone: "Z"`를 유지합니다.
 
-- 정확한 정수·소수 문자열은 execute, 준비된 쿼리, 검증된 벌크 방식에서 값을 정확하게 왕복시키는 바인딩 경로입니다.
+- 정확한 정수·소수 문자열은 execute, 준비된 쿼리, 벌크 실행에서 값을 정확하게 왕복시키는 바인딩 경로입니다.
 - `affectedRows`는 안전한 범위인지 검사한 작업 개수입니다.
 - 일반 IN 값이 `undefined`이면 리스를 획득하기 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다.
-- Connector 3.5.4의 공개 타입 정의에는 `jsonStrings` 옵션이 없습니다. 그래서 텍스트를 받으려면 `autoJsonMap: false`를 쓰세요. 이것을 mysql2 프로필이라고 설명하지 마세요.
+- `mysql2`(`jsonStrings: true`)와 달리, MariaDB Connector/Node.js 3.5.4에서는 JSON 결과를 원문 텍스트로 받기 위해 `autoJsonMap: false` 옵션을 사용합니다.

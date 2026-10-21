@@ -130,4 +130,4 @@ const query = sql.rows<UserRow>`
 
 참인 첫 번째 `when`만 렌더링됩니다. SQLBraid는 분기 안의 데이터베이스별 SQL을 파싱하거나 의미를 검증하지 않습니다.
 
-`sql.list([])`는 `BRAID_EMPTY_LIST`로 실패합니다. 빈 목록 처리는 `if`, `choose`, 명시적인 조기 반환 같은 분기를 직접 작성하세요. SQLBraid는 빈 목록을 `IN (NULL)`로 바꾸지 않으며, 다른 처리 방식을 지어내지도 않습니다.
+`sql.list([])`는 `BRAID_EMPTY_LIST`로 실패합니다. 빈 목록 처리는 `if`, `choose`, 명시적인 조기 반환 같은 분기를 직접 작성하세요. SQLBraid는 빈 목록을 `IN (NULL)`로 바꾸거나 임의의 대체 조건을 만들어 내지 않습니다.

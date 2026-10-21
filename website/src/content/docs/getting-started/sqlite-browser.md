@@ -141,8 +141,7 @@ See the [runtime and driver support matrix](/SQLBraid/reference/support/) for th
 
 ## Browser and Worker representation profiles
 
-SQLite stays the dialect. But WASM and D1 are different drivers. They must not
-share an evidence label.
+SQLite is the shared dialect, while WASM and D1 are separate drivers with their own capability profiles.
 
 | Driver                | Driver raw / SQLBraid canonical boundary                   | Stream/bulk/transaction                                                   |
 | --------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------- |

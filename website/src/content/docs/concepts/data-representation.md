@@ -222,29 +222,17 @@ type. It is not one broad "Date" switch:
 - Native `time` and `timetz` stay text.
 - `interval` stays open on purpose.
 
-To test fidelity, use fixtures with a fractional part that is not zero, such as
-`2026-09-14 12:34:56.123456`. PostgreSQL `pg`, MySQL `dateStrings`, MariaDB
-`dateStrings` and explicit text conversions in user SQL are separate profiles.
-SQLite temporal values stay conventions of the application and the storage. For
-Oracle and SQL Server, when native `Date` loses precision, offset or session-zone
-semantics, use tested text formatting or an explicit `TO_CHAR`/`CONVERT`
-expression.
+PostgreSQL `pg`, MySQL `dateStrings`, MariaDB `dateStrings`, and explicit text conversions in user SQL preserve sub-millisecond fractional digits (such as `2026-09-14 12:34:56.123456`). SQLite temporal values follow the conventions of your application and storage format. For Oracle and SQL Server, when native `Date` loses sub-millisecond precision, offset, or session-zone semantics, use an explicit `TO_CHAR`/`CONVERT` text expression in SQL.
 
 ## Binds, `null` and `undefined`
 
-Exact input fidelity is a different capability from exact output. When a
-profile claims it, bind decimal text or an exact integer string through the
-documented path. Then do a round trip through the database. Do not first pass a
-precise value through a JavaScript `number`. SQLBraid does not rewrite a cast for
-you:
+Exact input fidelity is a separate capability from exact output. When a profile supports it, bind decimal text or an exact integer string directly rather than converting the value through a JavaScript `number` first. SQLBraid does not rewrite casts into your SQL:
 
 ```sql
 CAST(@nvarchar_parameter AS decimal(38, 18))
 ```
 
-This is a SQL Server workaround in your SQL. It is not a universal input codec.
-Oracle string-to-number binds can depend on NLS settings. Use an explicit
-controlled conversion, or classify the path as unsupported.
+This is an explicit SQL Server conversion in your query, not a built-in input codec. Because Oracle string-to-number binds can depend on session NLS settings, Oracle decimal-string input is not certified as a general exact bind path; use an explicit SQL conversion with controlled NLS settings when needed.
 
 `null` means SQL `NULL`. Ordinary `undefined` is a programming or configuration
 error (`BRAID_BIND_VALUE_UNSUPPORTED`). It is rejected before connection
@@ -253,8 +241,7 @@ semantics of OUT placeholders stay specific to the driver.
 
 ## Containers are a separate evidence boundary
 
-Scalar fidelity does not recursively certify a container. These values each
-need their own transport and codegen evidence:
+Scalar fidelity does not automatically extend to container types. These values have separate transport and codegen behavior:
 
 - PostgreSQL arrays, domains, ranges, multiranges and composites;
 - Oracle objects and collections;
@@ -262,21 +249,14 @@ need their own transport and codegen evidence:
 - vectors;
 - parsed JSON roots.
 
-Until that evidence exists, classify the value as `unknown`, `unclassified` or
-`unsupported`. Do not inherit a scalar mapping. PostgreSQL lossless array output
-can stay raw text. Native array parsing does not promise recursively exact
-nested values. The status "supported container" means that the tested container
-path works. It does not mean that each nested member is recursively guaranteed.
+Unless a container type has dedicated transport and codegen support, SQLBraid maps it to `unknown` (or marks it `unclassified` / `unsupported`) rather than inheriting its element scalar mapping. PostgreSQL lossless array output can stay raw text, and native array parsing does not guarantee recursively exact nested values.
 
 ## Profiles, codegen and transparency
 
 Custom `pg` parsers, mysql2 `typeCast`, MariaDB JSON and temporal options, Oracle
-fetch handlers and equivalent overrides are separate profiles. They make the
-default evidence invalid until they are tested and selected in both the runtime
-and codegen.
+fetch handlers and equivalent overrides are separate profiles. Changing those driver options changes the runtime representation away from the default profile.
 
-- Codegen must use the selected profile descriptor and its TypePolicy. A
-  "matching" mapping that you build manually is not evidence.
+- Codegen should use the `TypePolicy` from the matching profile descriptor (`typePolicyForProfile(...)`) so generated types match runtime values.
 - `db.environment()` returns a cached observation of the scope. After you change
   session settings, use `db.environment({ refresh: true })`.
 - A pooled probe samples one lease. Its observed guarantees stay guarded. They
@@ -294,7 +274,4 @@ SQL. A support capability names the statement that actually executed:
 
 Similar outcomes do not mean that the syntax is interchangeable.
 
-For the evidence of each revision, read the driver setup pages and the
-[runtime and driver support matrix](/SQLBraid/reference/support/). Unknown
-evidence stays unknown. A type assertion or a matrix cell that looks green never
-promotes it to `lossless`.
+For the tested capabilities of each driver and runtime, see the driver setup pages and the [runtime and driver support matrix](/SQLBraid/reference/support/).

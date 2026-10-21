@@ -39,7 +39,7 @@ const maybeUser = await db.maybeOne(sql.rows<UserRow>`SELECT id, name FROM users
 const users = await db.all(sql.rows<UserRow>`SELECT id, name FROM users`);
 ```
 
-`one`은 정확히 한 행을 요구합니다. `maybeOne`은 0행이나 1행을 허용합니다. 행이 둘 이상이거나 `one`에서 0행이면 SQLBraid는 행 개수 오류를 던집니다. 몰래 한 행을 골라 주지 않습니다.
+`one`은 정확히 한 행을 요구합니다. `maybeOne`은 0행이나 1행을 허용합니다. 행이 둘 이상이거나 `one`에서 0행이면 SQLBraid는 임의로 한 행을 고르지 않고 행 개수 오류를 던집니다.
 
 ## 결과 종류 검사는 실행 후에 일어납니다
 

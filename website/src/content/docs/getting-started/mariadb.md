@@ -60,14 +60,10 @@ try {
 
 When you finish, stop the server with `docker rm -f braid-mariadb`.
 
-The dialect is `mariadb`, not `mysql`. You write MariaDB-specific syntax in your
-SQL. The current capability fixtures cover the documented
-`INSERT ... RETURNING`, `DELETE ... RETURNING`, `REPLACE ... RETURNING`,
-sequences, CTEs and JSON functions.
+The dialect is `mariadb`, not `mysql`. You write MariaDB-specific syntax directly in your SQL, including `INSERT ... RETURNING`, `DELETE ... RETURNING`, `REPLACE ... RETURNING`, sequences, CTEs, and JSON functions.
 
-- `UPDATE ... RETURNING` is not claimed.
-- An `INSERT ... ON DUPLICATE KEY UPDATE ... RETURNING` form needs matching
-  server evidence before it is listed as supported.
+- MariaDB does not support `UPDATE ... RETURNING`.
+- `INSERT ... ON DUPLICATE KEY UPDATE ... RETURNING` is not listed as a supported capability.
 
 The adapter uses value-only execution of Connector/Node.js, native row
 streaming, and one `connection.batch()` call for `db.bulk()` (`native-bulk`).
@@ -108,10 +104,8 @@ stay guarded declarations. They are not observations.
   values and binary data. It rejects arrays, objects and non-finite numbers
   with `BRAID_BIND_VALUE_UNSUPPORTED` before the connector gets them. Encode
   JSON values with `JSON.stringify()`.
-- Native `RETURNING` is a materialized row declaration only where the exact
-  server form has evidence. `INSERT`, `DELETE` and `REPLACE` are separate
-  capabilities. `UPDATE` is not claimed.
-- SQL passes through without change. This is not MariaDB grammar support.
+- Native `RETURNING` (`INSERT ... RETURNING`, `DELETE ... RETURNING`, and `REPLACE ... RETURNING`) is executed through the materialized row APIs (`sql.rows`).
+- SQL passes through to the server without rewriting; SQLBraid does not parse or validate the full MariaDB grammar itself.
 - `db.call()` materializes heterogeneous emitted sets from prepared `CALL`. OUT,
   INOUT and cursor descriptors stay unsupported.
 - `db.prepare()` keeps the query-bound Standard Schema mapping.
@@ -124,10 +118,8 @@ The `mariadb-lossless-text` descriptor keeps `bigIntAsNumber: false`,
 `dateStrings: true` and `timezone: "Z"`.
 
 - Exact integer and decimal strings are the bind path for round-trip fidelity
-  through execute, prepared and the proven bulk strategy.
+  through execute, prepared and bulk execution.
 - `affectedRows` is an operational count with safe-range validation.
 - Ordinary `undefined` IN values fail before acquisition with
   `BRAID_BIND_VALUE_UNSUPPORTED`. `null` is SQL `NULL`.
-- The public typings of Connector 3.5.4 do not expose a `jsonStrings` option.
-  Thus, use `autoJsonMap: false` for text. Do not describe it as a mysql2
-  profile.
+- Unlike `mysql2` (`jsonStrings: true`), MariaDB Connector/Node.js 3.5.4 uses `autoJsonMap: false` to keep JSON results as raw text.

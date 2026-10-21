@@ -36,4 +36,4 @@ const generated = generateModels(metadata, {
 - 이름 규칙은 릴레이션 모델 이름과 row, insert, update 접미사를 지원합니다.
 - 타입 재정의는 입력과 출력에 대해 따로 결정됩니다. 우선순위는 열 재정의, 데이터베이스 타입 재정의, TypePolicy 순입니다.
 
-잘못되었거나 서로 겹치는 명시적 이름은 오류 진단을 냅니다. codegen은 요청한 이름을 몰래 바꾸지 않습니다. 정규화한 정책 항목이 서로 충돌하면 `CODEGEN_AMBIGUOUS_TYPE_MAPPING`이 나고, 해당 타입은 `unknown`으로 남습니다. 재정의는 생성되는 TypeScript에만 영향을 줍니다. 드라이버가 반환하는 값을 변환하지 않습니다.
+잘못되었거나 서로 겹치는 명시적 이름은 오류 진단을 냅니다. codegen은 요청한 이름을 임의로 바꾸지 않습니다. 정규화한 정책 항목이 서로 충돌하면 `CODEGEN_AMBIGUOUS_TYPE_MAPPING`이 나고, 해당 타입은 `unknown`으로 남습니다. 재정의는 생성되는 TypeScript에만 영향을 줍니다. 드라이버가 반환하는 값을 변환하지 않습니다.

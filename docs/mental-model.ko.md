@@ -40,7 +40,7 @@ flowchart TB
   CORE -. TypePolicy .-> CODEGEN
 ```
 
-`sqlbraid` 패키지는 주로 다른 패키지를 다시 내보내는 대표 파사드입니다. 구현 코드를 읽을 때는 위의 네 실행 계층부터 보세요.
+`sqlbraid` 패키지는 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`과 `sqlbraid/compiled`를 다시 내보내는 데이터베이스 중립 런타임 파사드입니다. 구현 코드를 읽을 때는 위의 네 실행 계층부터 보세요.
 
 ## 2. 가장 중요한 규칙: SQL 구조와 값은 끝까지 따로 다룹니다
 
@@ -217,7 +217,7 @@ lease.release()
 - `activeSession`: 지금 유효한 세션 핸들을 식별
 - `poisoned`: 물리 리소스를 다시 쓸 수 없게 만든 실패를 보관
 
-비동기 컨텍스트와 이 표시들이 함께 작업이 몰래 다른 커넥션으로 넘어가는 것을 막습니다.
+비동기 컨텍스트와 이 표시들이 함께 작업이 암묵적으로 다른 커넥션으로 넘어가는 것을 막습니다.
 
 ## 9. `session()`: 트랜잭션 없이 커넥션을 고정합니다
 
@@ -253,7 +253,7 @@ RELEASE SAVEPOINT
 
 콜백이 실패하면 SQLBraid는 세이브포인트까지 롤백합니다. 리소스가 정상이면 이어서 세이브포인트를 해제합니다.
 
-중첩된 `tx(options, callback)`은 거부됩니다. 격리 수준과 접근 모드는 바깥쪽 물리 트랜잭션에 속합니다. 이미 진행 중인 트랜잭션 안에서 이를 바꾸는 동작을 SQLBraid가 지어내지 않습니다.
+중첩된 `tx(options, callback)`은 거부됩니다. 격리 수준과 접근 모드는 바깥쪽 물리 트랜잭션에 속하므로, 이미 진행 중인 트랜잭션 안에서 이를 바꾸는 동작을 임의로 에뮬레이션하지 않습니다.
 
 중첩 세이브포인트가 활성 상태일 때는 가장 안쪽 콜백 핸들을 쓰세요. 바깥쪽이나 루트 핸들을 쓰면 범위를 벗어나는 것이므로 거부됩니다.
 
@@ -332,7 +332,7 @@ Standard Schema는 애플리케이션 매핑 경계에서 일합니다.
 1. `StatementBindingAdapter`를 구현합니다.
 2. `QueryExecutor`와, 필요하면 풀·프로바이더 리스를 구현합니다.
 3. 네이티브 결과를 SQLBraid의 행, 명령, 루틴 타입으로 정규화합니다.
-4. 실행 환경, 기능, 값 표현에 대한 근거를 정직하게 보고합니다.
+4. 실행 환경, 기능, 값 표현에 대한 지원 정보를 정확하게 보고합니다.
 
 `PgClientLike` 같은 `*Like` 인터페이스는 네이티브 드라이버 API 중 SQLBraid가 실제로 쓰는 부분만 작게 정의한 것입니다. 드라이버를 대신하는 새 추상화가 아닙니다.
 
@@ -361,7 +361,7 @@ SQLBraid는 처음 발생한 실패를 보존합니다. 그러면서도 자신�
 
 `ExecutionObserver`는 관찰하거나 실패시키는 일만 할 수 있습니다. 수명 주기 이벤트를 살펴보고 예외를 던질 수는 있지만, SQL, 바인딩, 결과, 라우팅, 재시도, 트랜잭션 대상을 바꿀 수는 없습니다.
 
-기능(capability)은 어댑터나 리소스가 실제로 할 수 있는 일을 나타냅니다. 물리적으로 없는 동작을 SQLBraid가 몰래 흉내 내지 않습니다. 예를 들어 진짜 스트리밍 프로토콜이 없는 어댑터는 `db.stream()`을 거부합니다. 결과 전체를 버퍼에 담은 뒤 스트리밍한 것처럼 보이게 하지 않습니다.
+기능(capability)은 어댑터나 리소스가 실제로 할 수 있는 일을 나타냅니다. 물리적으로 없는 동작을 SQLBraid가 임의로 흉내 내지 않습니다. 예를 들어 진짜 스트리밍 프로토콜이 없는 어댑터는 `db.stream()`을 거부합니다. 결과 전체를 버퍼에 담은 뒤 스트리밍한 것처럼 보이게 하지 않습니다.
 
 선택 사항인 OpenTelemetry 패키지도 런타임을 고치지 않고 이 옵저버 API로 연결됩니다.
 
@@ -381,7 +381,7 @@ SQLBraid는 처음 발생한 실패를 보존합니다. 그러면서도 자신�
 
 저장소를 알파벳 순서로 읽지 마세요. 다음 순서를 권합니다.
 
-1. README의 "Key Concepts"와 "Runtime API" 절
+1. README의 "동작 방식", "반환 타입 선언과 스키마 검증", "주요 실행 기능" 절
 2. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`)
 3. `packages/template/src/`: `tag.ts` (`createSqlTag()`) → `render.ts` (`renderTemplateIr()` / `renderNodes()`)
 4. `packages/runtime/src/index.ts`: `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepareObserved` → `prepare`. 이어서 `operations/materialized.ts`: `runPrepared` → `leaseForUse` (`operations/lease.ts`) → `physical` → `finalizePhysical` → `processRows`
@@ -402,7 +402,7 @@ SQLBraid는 처음 발생한 실패를 보존합니다. 그러면서도 자신�
 - 프로바이더와 리스의 바인딩 정체성은 같습니다.
 - 풀에서 메모리로 모두 읽는 결과는 애플리케이션 매핑 전에 리스를 반환합니다.
 - 스트림은 네이티브 반복자 정리가 끝날 때까지 리소스를 유지합니다.
-- 세션은 트랜잭션을 몰래 시작하지 않고 리소스만 고정합니다.
+- 세션은 트랜잭션을 암묵적으로 시작하지 않고 리소스만 고정합니다.
 - 중첩 트랜잭션은 같은 물리 리소스의 세이브포인트입니다.
 - 루트나 바깥쪽 범위로 벗어나는 작업은 다른 경로로 돌리지 않고 거부합니다.
 - 정리는 소유한 리소스를 모두 시도하고, 처음 실패를 보존합니다.

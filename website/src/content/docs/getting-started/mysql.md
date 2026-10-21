@@ -166,7 +166,5 @@ tested again.
 - Streaming uses prepared `Execute.stream()`.
 - `db.call()` materializes routine result sets. Prepared OUT and INOUT are
   unsupported.
-- Bulk is a prepared or native driver operation only when the capability and
-  manifest of the selected adapter prove it.
-- Generic MySQL DML has no portable `RETURNING` clause. Thus, SQLBraid does not
-  synthesize returned rows.
+- Bulk uses `prepared-loop` execution on `mysql2`.
+- Generic MySQL DML has no portable `RETURNING` clause, so SQLBraid does not emulate or synthesize returned rows.

@@ -98,7 +98,7 @@ Tedious 바인딩 어댑터는 논리 문장을 타입이 지정된 요청으로
 
 - 검증 대상 환경은 Node 22.18.0(Linux x64)의 Tedious 20.0.0과 SQL Server 2022 CU18 Developer입니다. 기능별 지원 여부는 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)에서 확인하세요.
 - 힌트가 없는 일반 값은 어댑터의 Tedious 추론을 씁니다. `null`, 직접 만든 객체, 정밀도와 스케일, 길이, SQL Server 전용 타입에는 힌트를 명시하세요.
-- 어댑터는 여러 레코드 집합을 그대로 유지합니다. 지어낸 단일 행 결과로 펼치지 않습니다.
+- 어댑터는 여러 레코드 집합을 그대로 유지하며, 임의의 단일 행 결과로 합치지 않습니다.
 - `CURSOR VARYING OUTPUT`은 애플리케이션 커서 채널이 아니므로 `BRAID_CALL_CURSOR_UNSUPPORTED`로 거부합니다. 로컬 커서를 읽고 `SELECT` 행을 출력하는 배치는 그 행을 일반 결과 집합으로 반환합니다.
 
 Tedious는 `decimal`/`numeric`, `money`, `smallmoney`를 JavaScript `number`로 노출합니다. 그래서 SQLBraid는 `BRAID_RESULT_EXACTNESS`로 실패합니다. 손실이 있는 정확한 값을 문자열로 바꾸지 않습니다. Tedious의 `BIGINT` 텍스트는 정규화된 정확한 문자열로 바꿉니다.

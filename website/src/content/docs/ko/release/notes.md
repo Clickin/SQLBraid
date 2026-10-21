@@ -9,8 +9,7 @@ description: SQLBraid 2.0.0 릴리스, 드라이버 직접 import, 기능 경계
 
 ## 2.0.0 릴리스
 
-`2.0.0`이 되는 것은 `sqlbraid`뿐입니다. 다른 자체 패키지는 각자의 버전 계열을 유지합니다.
-패키지마다 따로 태그하고 따로 릴리스합니다. `sqlbraid`는 `v2.0.0`, 나머지는 `<package>-v<version>`입니다.
+`2.0.0` 버전이 적용되는 패키지는 `sqlbraid`뿐이며, 다른 `@sqlbraid/*` 공식 패키지는 각자의 버전 계열을 유지합니다. 패키지마다 개별적으로 태그(`sqlbraid`는 `v2.0.0`, 나머지는 `<package>-v<version>`)하고 릴리스합니다.
 
 `@sqlbraid/postgres` 1.2.0은 postgres.js와 PGlite 어댑터에 파라미터 타입 힌트를 추가합니다.
 `sql.bind(value, postgresParameter.int8())`처럼 파라미터 하나의 타입을 정하세요.
@@ -37,7 +36,7 @@ description: SQLBraid 2.0.0 릴리스, 드라이버 직접 import, 기능 경계
 - 마지막 인자로 넘기는 실행·행·스트림 옵션, 그리고 기능 지원 여부에 따른 `AbortSignal` 취소
 - 입력이 있는 준비된 쿼리 팩토리와 입력이 없는 팩토리. 한 번만 렌더링하며 논리적 형태를 고정합니다
 - 리스 반환 전에 정리하는 네이티브 드라이버 스트림, 또는 명시적인 `BRAID_STREAM_UNSUPPORTED`
-- 메모리로 읽는 루틴 `output`, 순서가 있는 서로 다른 `resultSets`, 선택 사항인 `returnValue`, OUT·INOUT·커서에 대한 명시적 경계
+- 메모리로 모두 읽는 루틴 `output`, 순서가 있는 서로 다른 `resultSets`, 선택 사항인 `returnValue`, OUT·INOUT·커서에 대한 명시적 경계
 - 명령 전용의 같은 형태 벌크. I/O 전에 검증하고 실제 실행 방식을 보고합니다
 - 관찰하거나 실패시키기만 하는 실행 옵저버, 필요할 때만 만드는 진단용 리터럴 SQL
 - `@sqlbraid/opentelemetry`의 선택 사항 DB 클라이언트 span과 안정적인 실행 시간 지표. SDK와 익스포터는 애플리케이션이 맡습니다
@@ -78,6 +77,6 @@ SQLBraid는 다음과 같은 것이 아닙니다.
 - 감사 저장소
 - 범용 네이티브 준비된 문장 캐시
 
-임의의 SELECT·JOIN 문에서 결과 모델을 추론하지 않고, 객체 그래프를 채우지 않습니다. 선택한 어댑터의 정확한 근거가 달리 말하지 않는 한, DML `RETURNING`/`OUTPUT`은 메모리로 읽습니다. 메타데이터는 열린 세계의 긍정적 근거입니다.
+임의의 SELECT·JOIN 문에서 결과 모델을 추론하지 않고, 객체 그래프를 채우지 않습니다. 선택한 어댑터의 정확한 근거가 달리 말하지 않는 한, DML `RETURNING`/`OUTPUT`은 메모리로 모두 읽습니다. 메타데이터는 확인된 객체만 알려 주는 열린 세계(open-world) 근거입니다.
 
 지원 정보와 릴리스 결과물은 배포 전에 검증합니다.

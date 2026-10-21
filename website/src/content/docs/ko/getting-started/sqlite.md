@@ -17,7 +17,7 @@ description: Node 내장 SQLite 드라이버로 첫 SQLBraid 쿼리를 실행합
 | `@sqlbraid/sqlite/wasm`           | SQLite WASM OO1                       | OO1 문장 소유, 스트림은 async generator로 감쌈                                  |
 | `@sqlbraid/sqlite/d1`             | Cloudflare D1                         | 준비된 문장 바인딩, 스트리밍·콜백 트랜잭션 없음                                 |
 
-Deno 2.9.3에서는 `node:sqlite` 이터레이터가 SQLite step 오류를 정상 EOF로 바꿉니다. 그래서 SQLBraid는 Deno에서 스트리밍을 `BRAID_STREAM_UNSUPPORTED`로 거부합니다. 몰래 잘린 행을 반환하지 않습니다. 메모리로 읽는 쿼리와 트랜잭션은 계속 쓸 수 있습니다. Node의 네이티브 이터레이터는 영향을 받지 않습니다.
+Deno 2.9.3에서는 `node:sqlite` 이터레이터가 SQLite step 오류를 정상 EOF로 처리하는 문제가 있습니다. 따라서 SQLBraid는 Deno에서 불완전하게 잘린 행이 반환되는 것을 막기 위해 스트리밍을 `BRAID_STREAM_UNSUPPORTED`로 거부합니다. 메모리로 읽는 일반 쿼리와 트랜잭션은 그대로 사용할 수 있으며, Node의 네이티브 이터레이터는 영향을 받지 않습니다.
 
 공개 `Database` API는 모든 어댑터에서 비동기입니다. `Awaitable<T>`는 물리 `QueryExecutor` SPI의 타입일 뿐입니다. 동기 어댑터가 Promise로 감싸지 않고 결과를 그대로 반환할 수 있게 해 줍니다. better-sqlite3를 논블로킹으로 만들지는 않습니다.
 
@@ -73,7 +73,7 @@ node src/index.ts
 
 출력은 `[{ id: "1", name: "Ada" }]` 같은 행 배열입니다. 요청한 ID는 드라이버가 바인딩하는 값이며, SQL 텍스트에 끼워 넣지 않습니다.
 
-node:sqlite 어댑터는 논리 문장을 `?` 플레이스홀더가 있는 텍스트로 렌더링한 뒤, 문서화된 `DatabaseSync.prepare(text)`와 `StatementSync` API를 씁니다. 변환과 힌트 검증은 문장 실행 전에 일어납니다. 어댑터는 호출할 때마다 문장을 다시 prepare하고 재사용 전략을 `simple`로 보고합니다. SQLBraid는 문서화되지 않은 호출 경로로 `SQLTagStore`를 부르지 않습니다.
+`node:sqlite` 어댑터는 논리 문장을 `?` 플레이스홀더가 있는 텍스트로 렌더링한 뒤, 공식 `DatabaseSync.prepare(text)`와 `StatementSync` API로 실행합니다. 변환과 힌트 검증은 문장 실행 전에 일어납니다. 어댑터는 호출할 때마다 문장을 prepare하고 재사용 전략을 `simple`로 보고합니다.
 
 ## 3. 동적 @braid를 추가하고 변환하기
 
@@ -143,10 +143,10 @@ node build/index.js
 
 - 네이티브 바인딩은 `?` 플레이스홀더와 `StatementSync`를 씁니다. 스트림 기능은 `iterate()`이고, 벌크 방식은 `prepared-loop`입니다.
 - SQLite에는 저장 프로시저 전송 방식이 없습니다. 그래서 등록한 함수와 테이블 값 확장은 일반 SQL 행 쿼리로 남습니다.
-- 네이티브 SQLite SQL은 문법 재작성 없이 그대로 전달됩니다. SQL을 그대로 전달한다고 해서 문법을 지원한다는 뜻은 아닙니다.
+- 작성한 SQLite SQL은 재작성 없이 그대로 전달되며, SQLBraid가 SQLite 문법 전체를 자체 파싱하거나 검증하지는 않습니다.
 - 정확한 정수 문자열과 검증된 bigint 전송은 바인딩 세부 사항입니다.
 - 일반 IN 값이 `undefined`이면 리스를 획득하기 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다.
-- 배열 같은 중첩·컨테이너 값은 저장 클래스에 대한 테스트가 증명하기 전까지 분류되지 않은 상태로 남습니다.
+- 배열 같은 중첩·컨테이너 값은 지원되는 SQLite 저장 타입으로 분류되지 않습니다.
 
 ### better-sqlite3
 

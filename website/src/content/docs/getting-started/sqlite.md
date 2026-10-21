@@ -79,12 +79,11 @@ node src/index.ts
 
 The output is a row array, such as `[{ id: "1", name: "Ada" }]`. The requested ID is a value that the driver binds. It is not interpolated SQL text.
 
-The node:sqlite adapter renders the logical statement to text with `?`
-placeholders. Then it uses the documented `DatabaseSync.prepare(text)` and
+The `node:sqlite` adapter renders the logical statement to text with `?`
+placeholders and executes it through the documented `DatabaseSync.prepare(text)` and
 `StatementSync` APIs. Materialization and hint validation occur before the
-statement executes. The adapter prepares the statement again for each call and
-reports the reuse strategy `simple`. SQLBraid does not call `SQLTagStore`
-through an undocumented callable path.
+statement executes. The adapter prepares the statement for each call and
+reports the reuse strategy `simple`.
 
 ## 3. Add dynamic @braid and lower it
 
@@ -162,13 +161,11 @@ Node and the SQLite library that Node bundles.
   the stream primitive. The bulk strategy is a prepared loop.
 - SQLite has no stored-procedure transport. Thus, registered functions and
   table-valued extensions stay ordinary SQL row queries.
-- Native SQLite SQL passes through without grammar rewriting. Transparency is
-  not grammar support.
+- Native SQLite SQL passes through to SQLite without rewriting; SQLBraid does not parse or validate the full SQLite grammar itself.
 - Exact integer strings and proven bigint transport are bind details.
 - Ordinary `undefined` IN values fail before acquisition with
   `BRAID_BIND_VALUE_UNSUPPORTED`. `null` is SQL `NULL`.
-- Arrays and other nested or container values stay unclassified, unless a test
-  for the storage class proves them.
+- Arrays and other nested or container values are not classified as supported SQLite storage types.
 
 ### better-sqlite3
 

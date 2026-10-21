@@ -28,12 +28,7 @@ description: 각 역할을 맡는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/cli`             | 선택 사항인 코드 생성, 검사, 진단, 변경 비교, `migrate` 명령                                         |
 | `@sqlbraid/language-server` | 표준 stdio LSP 연동                                                                                  |
 
-`sqlbraid`는 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`만 의존성으로 설치합니다.
-선택적 피어를 포함하여 방언이나 어댑터 의존성은 없습니다.
-애플리케이션이 쓰는 방언·어댑터 패키지와 외부 드라이버를 설치하세요.
-`sql`과 방언 힌트는 패키지 루트에서, 생성 함수는 어댑터 하위 경로에서 import하세요.
-드라이버·방언 파사드 하위 경로는 2.0.0에서 제거됩니다.
-`2.0.0`을 쓰는 것은 `sqlbraid`뿐이고, 다른 자체 패키지는 각자의 버전 계열을 유지합니다. 패키지마다 따로 태그하고 따로 릴리스합니다.
+`sqlbraid` 패키지는 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`만 의존성으로 설치하며, 선택적 피어를 포함해 방언이나 어댑터 의존성은 포함하지 않습니다. 애플리케이션에서 사용하는 방언·어댑터 패키지와 외부 드라이버를 직접 설치하세요. `sql` 태그와 파라미터 힌트는 방언 패키지 루트에서, 데이터베이스 생성 함수는 어댑터 하위 경로에서 import합니다. `sqlbraid` 2.0.0에서는 기존의 드라이버·방언 파사드 하위 경로(`sqlbraid/postgres` 등)가 제거되었습니다. `2.0.0` 버전을 사용하는 패키지는 `sqlbraid`뿐이며, 다른 `@sqlbraid/*` 공식 패키지는 각자의 버전 계열을 유지하고 개별적으로 태그·릴리스됩니다.
 
 Bun.SQL에는 `@sqlbraid/bun-sql`을 쓰세요. 선택한 방언 루트에서 `sql`을 import하고 방언을 명시적으로 넘기세요.
 

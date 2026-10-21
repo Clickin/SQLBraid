@@ -159,7 +159,7 @@ enum, 복합 타입, 사용자 정의 타입, `citext` 같은 확장 타입에 �
 준비된 쿼리의 형태는 결과 종류, 정규화된 논리 세그먼트, 순서가 있는 힌트 시그니처로 정해집니다.
 
 - 값만 바뀌는 것은 허용됩니다.
-- 힌트, 길이, 정밀도, 스케일이 바뀌면 형태가 바뀐 것이므로 실패합니다. SQLBraid는 호환되지 않는 준비된 문장을 몰래 재사용하지 않습니다.
+- 힌트, 길이, 정밀도, 스케일이 바뀌면 형태가 바뀐 것이므로 실패합니다. SQLBraid는 호환되지 않는 준비된 문장을 임의로 재사용하지 않습니다.
 - 물리적인 표기 `$1`, `?`, `:1`, `@p1`은 형태에 포함되지 않습니다.
 
 ## 어댑터 지원
@@ -173,9 +173,9 @@ enum, 복합 타입, 사용자 정의 타입, `citext` 같은 확장 타입에 �
 | SQLite 어댑터                              | `BRAID_BIND_HINT_UNSUPPORTED`로 거부합니다.                                           |
 | Bun.SQL(모든 방언)                         | `BRAID_BIND_HINT_UNSUPPORTED`로 거부합니다.                                           |
 
-힌트를 몰래 무시하는 어댑터는 없습니다. PostgreSQL의 `postgresParameter.refcursor()`는 별개입니다. 루틴 전용이며 OUT·INOUT 포털을 구분하는 데만 씁니다.
+힌트를 암묵적으로 무시하는 어댑터는 없습니다. PostgreSQL의 `postgresParameter.refcursor()`는 별개입니다. 루틴 전용이며 OUT·INOUT 포털을 구분하는 데만 씁니다.
 
-Oracle과 SQL Server의 방언 루트는 힌트 설명 객체를 제공합니다. 각 Node 어댑터는 자체적으로 기능을 검사합니다. 검증된 드라이버 기능은 [런타임·드라이버 지원](/SQLBraid/reference/support/)을 보세요. Oracle은 node-oracledb가 적용할 수 없는 IN 길이, 정밀도, 스케일 속성을 거부합니다. 두 어댑터 모두 지원하지 않는 속성을 몰래 무시하지 않습니다.
+Oracle과 SQL Server의 방언 루트는 힌트 설명 객체를 제공합니다. 각 Node 어댑터는 자체적으로 기능을 검사합니다. 검증된 드라이버 기능은 [런타임·드라이버 지원](/SQLBraid/reference/support/)을 보세요. Oracle은 node-oracledb가 적용할 수 없는 IN 길이, 정밀도, 스케일 속성을 거부합니다. 두 어댑터 모두 지원하지 않는 속성을 암묵적으로 무시하지 않습니다.
 
 ## 루틴 파라미터의 방향
 

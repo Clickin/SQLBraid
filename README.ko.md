@@ -20,7 +20,7 @@ const users = await db.all(sql.rows<User>`
 // SQL 렌더링 결과: name = null, teamId = 7  ->  (pg) SELECT id, name FROM users WHERE team_id = $1   [7]
 ```
 
-[문서](https://clickin.github.io/SQLBraid/latest/) · [5분 시작하기](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [인터랙티브 미리보기](https://clickin.github.io/SQLBraid/latest/interactive-preview/) · [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)
+[문서](https://clickin.github.io/SQLBraid/latest/ko/) · [5분 시작하기](https://clickin.github.io/SQLBraid/latest/ko/getting-started/sqlite/) · [인터랙티브 미리보기](https://clickin.github.io/SQLBraid/latest/ko/interactive-preview/) · [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/ko/reference/support/)
 
 ## 제작 동기
 
@@ -75,11 +75,11 @@ try {
 }
 ```
 
-> **왜 `id`가 문자열로 반환되나요?** JavaScript의 `number` 타입이 큰 정수(64비트 `BIGINT`)나 정밀한 소수(`DECIMAL`)에서 정밀도를 잃는 문제를 막기 위해, SQLBraid는 데이터베이스의 정확한 숫자 타입을 기본적으로 문자열로 반환합니다. 애플리케이션 코드에서 변환하거나 Standard Schema를 연결해 원하는 타입으로 자동 변환할 수 있습니다([데이터 표현](https://clickin.github.io/SQLBraid/latest/concepts/data-representation/) 참고).
+> **왜 `id`가 문자열로 반환되나요?** JavaScript의 `number` 타입이 큰 정수(64비트 `BIGINT`)나 정밀한 소수(`DECIMAL`)에서 정밀도를 잃는 문제를 막기 위해, SQLBraid는 데이터베이스의 정확한 숫자 타입을 기본적으로 문자열로 반환합니다. 애플리케이션 코드에서 변환하거나 Standard Schema를 연결해 원하는 타입으로 자동 변환할 수 있습니다([데이터 표현](https://clickin.github.io/SQLBraid/latest/ko/concepts/data-representation/) 참고).
 
 ## 빠른 시작: PostgreSQL 커넥션 풀
 
-커넥션 풀은 사용하는 드라이버(`pg` 등)로 직접 생성하여 주입합니다. SQLBraid는 개별 작업마다 연결 하나를 대여하고, 트랜잭션 동안에는 동일한 연결을 고정합니다.
+커넥션 풀은 사용하는 드라이버(`pg` 등)로 직접 생성하여 주입합니다. SQLBraid는 개별 작업마다 커넥션 하나를 대여해 사용하고, 트랜잭션 동안에는 동일한 커넥션을 고정합니다.
 
 ```sh
 pnpm add sqlbraid @sqlbraid/postgres pg
@@ -102,7 +102,7 @@ await db.tx(async (tx) => {
 });
 ```
 
-다른 데이터베이스의 설정 방법은 각 시작 가이드를 참고하세요: [MySQL](https://clickin.github.io/SQLBraid/latest/getting-started/mysql/) · [MariaDB](https://clickin.github.io/SQLBraid/latest/getting-started/mariadb/) · [Oracle](https://clickin.github.io/SQLBraid/latest/getting-started/oracle/) · [SQL Server](https://clickin.github.io/SQLBraid/latest/getting-started/mssql/) · [브라우저 SQLite 및 Cloudflare D1](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite-browser/).
+다른 데이터베이스의 설정 방법은 각 시작 가이드를 참고하세요: [MySQL](https://clickin.github.io/SQLBraid/latest/ko/getting-started/mysql/) · [MariaDB](https://clickin.github.io/SQLBraid/latest/ko/getting-started/mariadb/) · [Oracle](https://clickin.github.io/SQLBraid/latest/ko/getting-started/oracle/) · [SQL Server](https://clickin.github.io/SQLBraid/latest/ko/getting-started/mssql/) · [브라우저 SQLite 및 Cloudflare D1](https://clickin.github.io/SQLBraid/latest/ko/getting-started/sqlite-browser/).
 
 ## 동작 방식
 
@@ -110,7 +110,7 @@ SQLBraid는 템플릿을 읽어 세 단계를 거쳐 실행할 SQL 문장을 구
 
 1. **지시어 평가 (`/*@braid ... */`):** 지시어는 표준 SQL 주석 문법을 따르므로 에디터와 SQL 포매터에서 일반 SQL로 정상 인식됩니다. `if`, `choose` / `when` / `otherwise`, `where`, `set`, `trim` 블록을 순서대로 평가해 거짓인 분기를 제거하며, 여러 줄 블록과 중첩 구조를 모두 지원합니다. `where`와 `set` 블록은 남은 조건문 앞의 불필요한 `AND`/`OR`나 끝의 쉼표(`,`)를 자동으로 정리합니다.
 2. **파라미터 바인딩 분리 (`${value}`):** 활성화된 SQL 분기에서 사용된 값은 SQL 문자열에 직접 이어 붙이지 않고 바인딩 파라미터로 전달됩니다. 단, 선택적 컴파일러를 사용하지 않으면 JavaScript 태그드 템플릿의 동작 방식에 따라 SQLBraid가 지시어를 처리하기 전에 모든 템플릿 표현식이 먼저 평가됩니다.
-3. **드라이버별 플레이스홀더 변환:** 쿼리에서는 항상 동일한 `${value}` 문법을 작성하면, 대상 드라이버 어댑터가 각 DB 규격(`$1`, `?`, `:1`, `@p1`)에 맞춰 플레이스홀더를 작성합니다.
+3. **드라이버별 플레이스홀더 변환:** 쿼리에는 항상 동일한 `${value}` 문법만 작성하면 되며, 대상 드라이버 어댑터가 각 DB 규격(`$1`, `?`, `:1`, `@p1`)에 맞는 플레이스홀더로 변환합니다.
 
 ```ts
 sql.rows<User>`
@@ -138,17 +138,17 @@ sql.rows<User>`
 ```
 
 - **무빌드 런타임 실행과 선택적 컴파일러:** 모든 지시어는 별도의 빌드 과정 없이 런타임에 바로 동작합니다. 비활성화된 `/*@braid if ...*/` 분기 내부의 `${...}` 표현식 평가 자체를 건너뛰고(지연 평가) 싶다면 선택적으로 컴파일러 플러그인(`@sqlbraid/vite`, `@sqlbraid/webpack`, `@sqlbraid/cli`)을 적용할 수 있습니다. 컴파일러는 표현식의 평가 시점만 지연 함수(thunk)로 감싸며, 최종 SQL 조립은 여전히 런타임에 수행합니다([동적 `@braid` 지시어](https://clickin.github.io/SQLBraid/latest/ko/concepts/dynamic-braid/#컴파일러가-하는-일) 참고).
-- **동적 식별자 및 쿼리 조각:** 테이블명, 컬럼 목록, 하위 쿼리 조각처럼 SQL 구조 자체를 동적으로 조합해야 할 때는 명시적 헬퍼(`sql.ident`, `sql.list`, `sql.join`, `sql.fragment`)를 사용합니다([구조적 SQL 조각](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/) 참고).
+- **동적 식별자 및 쿼리 조각:** 테이블명, 컬럼 목록, 하위 쿼리 조각처럼 SQL 구조 자체를 동적으로 조합해야 할 때는 명시적 헬퍼(`sql.ident`, `sql.list`, `sql.join`, `sql.fragment`)를 사용합니다([구조적 SQL 조각](https://clickin.github.io/SQLBraid/latest/ko/concepts/structural-fragments/) 참고).
 
-컴파일러를 쓴다면 `@sqlbraid/template`을 직접 런타임 의존성으로 설치하세요. 생성된 코드가 이 패키지의 헬퍼를 import합니다.
+컴파일러를 사용할 때는 생성된 코드가 `@sqlbraid/template`의 헬퍼를 직접 import하므로, `@sqlbraid/template`을 런타임 의존성으로 함께 설치하세요.
 
 ## 반환 타입 선언과 스키마 검증
 
-쿼리의 성격에 따라 결과 종류를 명시적으로 선언합니다. 행 집합을 조회할 때는 `sql.rows<T>`, `INSERT`/`UPDATE`/`DELETE` 명령에는 `sql.command`, 저장 프로시저 호출에는 `sql.call`을 사용합니다. 데이터베이스가 선언한 것과 다른 결과 종류를 반환하면 예외를 발생시킵니다([SQL 태그와 결과 종류](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/) 참고). `sql.rows<T>`의 `T`는 TypeScript 타입 선언이며, 실제 행의 필드와 값을 런타임에 검증하려면 Standard Schema를 전달합니다.
+쿼리의 성격에 따라 결과 종류를 명시적으로 선언합니다. 행 집합을 조회할 때는 `sql.rows<T>`, `INSERT`/`UPDATE`/`DELETE` 명령에는 `sql.command`, 저장 프로시저 호출에는 `sql.call`을 사용합니다. 데이터베이스가 선언한 것과 다른 결과 종류를 반환하면 예외를 발생시킵니다([SQL 태그와 결과 종류](https://clickin.github.io/SQLBraid/latest/ko/concepts/sql-tags/) 참고). `sql.rows<T>`의 `T`는 TypeScript 타입 선언이며, 실제 행의 필드와 값을 런타임에 검증하려면 Standard Schema를 전달합니다.
 
 **Standard Schema 연동 (Zod, Valibot, ArkType 등):**
 
-타입 인자 대신 Standard Schema 규격을 지원하는 스키마 객체를 전달하면 런타임 행 검증과 타입 변환(예: 문자열로 반환된 숫자를 `number`나 `bigint`로 변환)을 동시에 처리할 수 있습니다([Standard Schema 결과 매핑](https://clickin.github.io/SQLBraid/latest/concepts/result-mapping/) 참고).
+타입 인자 대신 Standard Schema 규격을 지원하는 스키마 객체를 전달하면 런타임 행 검증과 타입 변환(예: 문자열로 반환된 숫자를 `number`나 `bigint`로 변환)을 동시에 처리할 수 있습니다([Standard Schema 결과 매핑](https://clickin.github.io/SQLBraid/latest/ko/concepts/result-mapping/) 참고).
 
 ```ts
 const user = await db.one(sql.rows(UserSchema)`SELECT id, name FROM users WHERE id = ${id}`);
@@ -205,7 +205,7 @@ const result = await db.tx(async (tx) =>
 );
 ```
 
-드라이버별 상세 지원 범위는 [루틴 호출](https://clickin.github.io/SQLBraid/latest/concepts/routines/)과 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)를 참고하세요.
+드라이버별 상세 지원 범위는 [루틴 호출](https://clickin.github.io/SQLBraid/latest/ko/concepts/routines/)과 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/ko/reference/support/)를 참고하세요.
 
 ## 다른 라이브러리와의 비교
 
@@ -230,18 +230,18 @@ const result = await db.tx(async (tx) =>
 
 ## 주요 실행 기능
 
-- **트랜잭션 ([`db.tx`](https://clickin.github.io/SQLBraid/latest/runtime/transactions/)):** 세이브포인트(savepoint), 격리 수준(isolation level), 읽기 전용 모드 지원
-- **세션 고정 ([`db.session`](https://clickin.github.io/SQLBraid/latest/runtime/direct-pools/)):** 여러 쿼리에 걸쳐 단일 커넥션 유지
-- **스트리밍 ([`db.stream`](https://clickin.github.io/SQLBraid/latest/runtime/streaming/)):** 대용량 결과 집합의 점진적 소비
-- **준비된 쿼리 및 대량 작업:** [`db.prepare(...)`](https://clickin.github.io/SQLBraid/latest/runtime/prepared/) 및 [`db.bulk(...)`](https://clickin.github.io/SQLBraid/latest/concepts/bulk/)
-- **저장 프로시저 ([`db.call`](https://clickin.github.io/SQLBraid/latest/concepts/routines/)):** `OUT` 파라미터 및 다중 결과 집합 처리
-- **제어 및 관측성:** `AbortSignal` 기반 쿼리 취소, [실행 옵저버](https://clickin.github.io/SQLBraid/latest/runtime/observers/), 선택적 [OpenTelemetry 스팬 및 메트릭 연동](https://clickin.github.io/SQLBraid/latest/runtime/opentelemetry/)
+- **트랜잭션 ([`db.tx`](https://clickin.github.io/SQLBraid/latest/ko/runtime/transactions/)):** 세이브포인트(savepoint), 격리 수준(isolation level), 읽기 전용 모드 지원
+- **세션 고정 ([`db.session`](https://clickin.github.io/SQLBraid/latest/ko/runtime/direct-pools/)):** 여러 쿼리에 걸쳐 단일 커넥션 유지
+- **스트리밍 ([`db.stream`](https://clickin.github.io/SQLBraid/latest/ko/runtime/streaming/)):** 대용량 결과 집합의 점진적 소비
+- **준비된 쿼리 및 대량 작업:** [`db.prepare(...)`](https://clickin.github.io/SQLBraid/latest/ko/runtime/prepared/) 및 [`db.bulk(...)`](https://clickin.github.io/SQLBraid/latest/ko/concepts/bulk/)
+- **저장 프로시저 ([`db.call`](https://clickin.github.io/SQLBraid/latest/ko/concepts/routines/)):** `OUT` 파라미터 및 다중 결과 집합 처리
+- **제어 및 관측성:** `AbortSignal` 기반 쿼리 취소, [실행 옵저버](https://clickin.github.io/SQLBraid/latest/ko/runtime/observers/), 선택적 [OpenTelemetry 스팬 및 메트릭 연동](https://clickin.github.io/SQLBraid/latest/ko/runtime/opentelemetry/)
 
-데이터베이스, 드라이버, 런타임별 세부 지원 여부는 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/reference/support/)에서 확인할 수 있습니다.
+데이터베이스, 드라이버, 런타임별 세부 지원 여부는 [지원 매트릭스](https://clickin.github.io/SQLBraid/latest/ko/reference/support/)에서 확인할 수 있습니다.
 
 ## 지원 드라이버
 
-`sqlbraid`, 아래의 해당 방언 또는 어댑터 패키지, 대상 드라이버 패키지를 함께 설치하세요. 내장 드라이버와 Cloudflare D1 바인딩은 별도 드라이버 패키지가 필요하지 않습니다.
+`sqlbraid`와 함께 아래 표에서 사용할 데이터베이스의 방언(또는 어댑터) 패키지 및 대상 드라이버 패키지를 설치합니다. 런타임 내장 드라이버(`node:sqlite`, `Bun.SQL`)와 Cloudflare D1 바인딩은 별도의 드라이버 패키지를 설치할 필요가 없습니다.
 
 | 데이터베이스 또는 어댑터 | 필요한 패키지        |
 | ------------------------ | -------------------- |
@@ -253,9 +253,9 @@ const result = await db.tx(async (tx) =>
 | SQL Server               | `@sqlbraid/mssql`    |
 | Bun.SQL                  | `@sqlbraid/bun-sql`  |
 
-`sqlbraid`는 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`만 의존하며 방언·어댑터 피어 의존성은 없습니다. 사용하는 패키지를 명시적으로 설치하세요. `sql`과 방언 힌트는 패키지 루트에서, 생성 함수는 아래 어댑터 경로에서 import하세요.
+`sqlbraid` 패키지는 `@sqlbraid/core`, `@sqlbraid/runtime`, `@sqlbraid/template`에만 의존하며, 방언이나 어댑터 패키지를 피어 의존성으로 포함하지 않습니다. 사용하는 방언 패키지를 직접 설치한 뒤, `sql` 태그와 파라미터 힌트는 방언 패키지 루트(예: `@sqlbraid/postgres`)에서, 데이터베이스 생성 함수는 아래 표의 어댑터 하위 경로(예: `@sqlbraid/postgres/pg`)에서 import하세요.
 
-2.0.0에서는 드라이버·방언 파사드 하위 경로를 제거합니다. 자체 패키지는 각자의 버전 계열을 유지합니다.
+`sqlbraid` 2.0.0부터는 1.x의 드라이버·방언 재내보내기(facade) 하위 경로(`sqlbraid/postgres` 등)가 제거되었으며, 각 `@sqlbraid/*` 공식 패키지는 독립적인 버전 계열을 유지합니다.
 
 **Official**은 CI에서 지정된 드라이버 버전과 런타임을 직접 검증함을 의미하며, **Compatible**은 동일 API 규격으로 동작하지만 특정 버전이 고정 인증되지는 않았음을 뜻합니다.
 
@@ -279,11 +279,11 @@ const result = await db.tx(async (tx) =>
 
 ## 선택적 개발 도구
 
-아래 도구들은 모두 기본 런타임의 의존성이 아닌 선택적 패키지이며, 외부 런타임 의존성을 추가하지 않습니다. 전체 목록은 [패키지 구성](https://clickin.github.io/SQLBraid/latest/reference/packages/)을 참고하세요.
+아래 도구들은 모두 기본 런타임의 의존성이 아닌 선택적 패키지이며, 외부 런타임 의존성을 추가하지 않습니다. 전체 목록은 [패키지 구성](https://clickin.github.io/SQLBraid/latest/ko/reference/packages/)을 참고하세요.
 
-- **코드 생성 (`@sqlbraid/codegen`, `@sqlbraid/cli`):** 데이터베이스 스키마를 읽어 `Row`, `Insert`, `Update` 타입을 생성하며, CI 파이프라인에서 `codegen --check`로 스키마 일치 여부를 검증할 수 있습니다([코드 생성 설정](https://clickin.github.io/SQLBraid/latest/metadata/config/) 참고).
+- **코드 생성 (`@sqlbraid/codegen`, `@sqlbraid/cli`):** 데이터베이스 스키마를 읽어 `Row`, `Insert`, `Update` 타입을 생성하며, CI 파이프라인에서 `codegen --check`로 스키마 일치 여부를 검증할 수 있습니다([코드 생성 설정](https://clickin.github.io/SQLBraid/latest/ko/metadata/config/) 참고).
 - **에디터 지원 (`@sqlbraid/language-server`, [VS Code 확장](https://marketplace.visualstudio.com/items?itemName=sqlbraid.sqlbraid-vscode)):** 태그드 템플릿 내부의 SQL 구문 진단, 자동 완성, 호버 정보를 제공합니다.
-- **Vite 플러그인 (`@sqlbraid/vite`):** 빌드 시점에 지시어 표현식 컴파일러를 실행합니다([Vite 연동](https://clickin.github.io/SQLBraid/latest/getting-started/vite/) 참고).
+- **Vite 플러그인 (`@sqlbraid/vite`):** 빌드 시점에 지시어 표현식 컴파일러를 실행합니다([Vite 연동](https://clickin.github.io/SQLBraid/latest/ko/getting-started/vite/) 참고).
 - **Webpack, Rspack, Next.js (`@sqlbraid/webpack`):** Next.js 16의 Webpack 및 Turbopack 환경을 모두 지원하는 지시어 컴파일러 로더입니다([Next.js 예제](https://github.com/Clickin/SQLBraid/tree/main/examples/nextjs-webpack) 참고).
 - **마이그레이션 (`@sqlbraid/migrate`, `@sqlbraid/cli`):** 버전 관리되는 순수 SQL 마이그레이션 파일 실행과 애플리케이션 시작 시점의 명시적 스키마 드리프트 검사를 제공합니다.
 - **에이전트 스킬 ([`skills/sqlbraid`](https://github.com/Clickin/SQLBraid/tree/main/skills/sqlbraid)):** AI 코딩 에이전트가 SQLBraid 문법에 맞는 쿼리를 작성하도록 안내하는 규칙 파일입니다.
@@ -305,7 +305,7 @@ const result = await db.tx(async (tx) =>
 ## 요구 사항 및 상태
 
 - **런타임 요구 사항:** 런타임 패키지(`sqlbraid` 및 드라이버 어댑터)는 Node.js 16.20.2 이상을 지원합니다(각 DB 드라이버의 최소 요구 버전 적용, `node:sqlite` 및 CLI/빌드 도구는 Node.js 22.18 이상 필요). 활성 LTS 버전 사용을 권장합니다.
-- **현재 상태:** `sqlbraid` 및 `@sqlbraid/*` 2.x. 공개 API는 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
+- **현재 상태:** `sqlbraid` 2.x (각 `@sqlbraid/*` 패키지는 고유한 SemVer 계열을 유지합니다). 공개 API는 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/ko/release/notes/), [1.x에서 업그레이드](https://clickin.github.io/SQLBraid/latest/ko/release/upgrade-from-1x/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/ko/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/ko/release/roadmap/)을 참고하세요.
 
 ## 개발 방식 및 AI 활용
 

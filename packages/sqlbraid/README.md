@@ -251,9 +251,9 @@ Install `sqlbraid`, the matching dialect or adapter package below, and your driv
 | SQL Server          | `@sqlbraid/mssql`    |
 | Bun.SQL             | `@sqlbraid/bun-sql`  |
 
-`sqlbraid` depends only on `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template`, with no dialect or adapter peers. Install each package you use explicitly. Import `sql` and dialect hints from package roots, and factories from the adapter paths below.
+`sqlbraid` depends only on `@sqlbraid/core`, `@sqlbraid/runtime`, and `@sqlbraid/template`, with no dialect or adapter peer dependencies. Install the dialect package you use explicitly: import `sql` and parameter hints from the dialect package root (for example `@sqlbraid/postgres`), and database factories from the adapter subpaths below (for example `@sqlbraid/postgres/pg`).
 
-Version 2.0.0 of `sqlbraid` removes driver and dialect facade subpaths. Each first-party package keeps its own version line.
+`sqlbraid` 2.0.0 removes the 1.x driver and dialect facade subpaths (such as `sqlbraid/postgres`), and each `@sqlbraid/*` package maintains its own independent version line.
 
 **Official** means CI tests that exact driver version and runtime against a real database; **Compatible** means the adapter follows the same API requirements without a pinned certified target.
 
@@ -313,7 +313,7 @@ Every example project is integration-tested in CI against the packed release tar
 ## Requirements & Status
 
 - **Runtime requirements:** Runtime packages (`sqlbraid` and driver adapters) support Node.js 16.20.2 or newer (subject to each driver's own minimum Node version; `node:sqlite` and CLI/build tools require Node.js 22.18+). Active LTS releases are recommended.
-- **Current status:** `sqlbraid` and `@sqlbraid/*` 2.x. The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
+- **Current status:** `sqlbraid` 2.x (`@sqlbraid/*` packages keep their own SemVer lines). The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Upgrade from 1.x](https://clickin.github.io/SQLBraid/latest/release/upgrade-from-1x/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
 
 ## Development and AI Usage
 

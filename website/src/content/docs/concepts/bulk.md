@@ -51,7 +51,7 @@ unless the documentation of the selected adapter describes them.
 
 ## Driver modes
 
-| Adapter                     | Mode            | Structural evidence target                                                      |
+| Adapter                     | Mode            | Execution mechanism                                                             |
 | --------------------------- | --------------- | ------------------------------------------------------------------------------- |
 | PostgreSQL / `pg`           | `prepared-loop` | sequential named execution; bounded per-client statement reuse                  |
 | MySQL / `mysql2`            | `prepared-loop` | one prepare, N execute calls, `unprepare()` closes and evicts the cached handle |

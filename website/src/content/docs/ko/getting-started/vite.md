@@ -92,18 +92,18 @@ sqlbraid({
 - `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`를 지원합니다.
 - 선언 파일, `node_modules`, 생성된 파일, 일반적인 빌드 출력은 건너뜁니다.
 - 잘못된 조건부 SQL은 원래 파일 이름, 줄, 열과 함께 Vite 진단으로 보고합니다.
-- 변환한 쿼리에는 항등이 아닌 소스 맵을 반환합니다. 그래서 뒤따르는 Vite 변환이 소스 맵을 이어 붙일 수 있습니다.
+- 변환된 쿼리의 위치 변화를 반영한 소스 맵을 생성하므로, 뒤따르는 Vite 변환 단계와 소스 맵을 자연스럽게 연결할 수 있습니다.
 
 TSX/JSX, TypeScript 문법, 데코레이터, 모듈 형식, React·TanStack 변환은 계속 Vite, Oxc, Rolldown이 맡습니다. 이 플러그인은 이것들을 트랜스파일하지 않습니다.
 
 ## 런타임은 별개입니다
 
-Vite는 브라우저와 애플리케이션의 소스를 변환합니다. 데이터베이스 실행에는 여전히 지원되는 서버 런타임과 어댑터가 필요합니다.
+Vite는 빌드 시점에 브라우저와 서버 소스를 변환하며, 실제 데이터베이스 쿼리 실행은 지원되는 서버 런타임과 어댑터에서 이루어집니다.
 
-TanStack Start 금융 예제에서는 Vite 8 빌드와 Node 24 애플리케이션 런타임을 별개로 다루세요.
+TanStack Start 같은 풀스택 프레임워크에서는 Vite 빌드와 Node 서버 런타임을 구분해 구성하세요.
 
-- 플러그인은 소스 맵을 유지해야 합니다.
-- 서버 라우트는 `node:sqlite` 같은 올바른 Node 어댑터로 SQLBraid 데이터베이스를 만들어야 합니다.
+- Vite 플러그인은 빌드 과정에서 조건부 SQL 템플릿을 변환하고 소스 맵을 유지합니다.
+- 서버 라우트에서는 `node:sqlite`나 `pg` 같은 Node 어댑터로 SQLBraid 데이터베이스를 생성합니다.
 - Node 전용 데이터베이스 드라이버를 브라우저 번들에 import하지 마세요.
 
 컴파일러를 직접 연동한다면 `@sqlbraid/vite`가 재export하는 `transformSource(source, filename, options?)`를 쓸 수 있습니다. 주변의 TypeScript 변환을 다른 번들러가 맡을 때만 쓰세요. [동적 템플릿](/SQLBraid/concepts/dynamic-braid/), [SQL 태그](/SQLBraid/concepts/sql-tags/), [Vite 패키지 README](https://github.com/Clickin/SQLBraid/tree/main/packages/vite)를 보세요.

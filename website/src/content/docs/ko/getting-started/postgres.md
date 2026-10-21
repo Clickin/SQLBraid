@@ -114,7 +114,7 @@ pnpm add pg-cursor
 
 ## pg 표현 방식 프로필
 
-기본 `pg` 프로필은 `pg-lossless-text`입니다. 드라이버가 텍스트를 줄 수 있으면 JSON과 날짜·시간 값을 텍스트로 유지합니다. `@sqlbraid/postgres`는 `typePolicyForProfile({ json, temporal })`과 변경할 수 없는 `representationProfiles` 설명 객체를 export합니다. 그래서 런타임과 코드 생성이 정확히 같은 정책을 쓸 수 있습니다.
+기본 `pg` 프로필은 `pg-lossless-text`입니다. 드라이버가 텍스트를 줄 수 있으면 JSON과 날짜·시간 값을 텍스트로 유지합니다. `@sqlbraid/postgres`는 `typePolicyForProfile({ json, temporal })`과 변경할 수 없는 `representationProfiles` 디스크립터를 export합니다. 그래서 런타임과 코드 생성이 정확히 같은 정책을 쓸 수 있습니다.
 
 ```ts
 import { typePolicyForProfile } from "@sqlbraid/postgres/pg";
@@ -146,4 +146,4 @@ const generated = generateModels(snapshot, { typePolicy });
 - `pg-cursor`가 네이티브 풀(pull) 스트림을 제공합니다. 피어 의존성이 없으면 `BRAID_STREAM_UNSUPPORTED`가 납니다.
 - 루틴 refcursor는 기존 트랜잭션이 필요하며, 메모리로 읽은 결과 집합이 됩니다.
 - 벌크는 어댑터가 증명한 네이티브 또는 준비된 문장 방식을 씁니다. SQL을 고쳐 쓰지 않습니다.
-- `RETURNING`을 포함한 네이티브 PostgreSQL SQL은 바뀌지 않고 그대로 전달됩니다. SQLBraid가 PostgreSQL 문법을 지원한다는 뜻은 아닙니다.
+- `RETURNING`을 포함해 작성한 PostgreSQL SQL은 재작성 없이 서버로 그대로 전달되며, SQLBraid가 PostgreSQL 문법 전체를 자체 파싱하거나 검증하지는 않습니다.

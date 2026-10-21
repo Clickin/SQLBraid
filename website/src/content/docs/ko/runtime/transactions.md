@@ -78,7 +78,7 @@ interface TransactionOptions {
 런타임은 이 리터럴을 어댑터가 맡는 트랜잭션 제어로 매핑합니다.
 
 - 임의의 JavaScript 텍스트를 `BEGIN`이나 `SET TRANSACTION`에 끼워 넣지 않습니다.
-- 생략한 옵션을 몰래 바꾸지 않습니다. 생략하면 커넥션이나 세션의 실제 기본값이 유지됩니다.
+- 생략한 옵션을 임의로 바꾸지 않습니다. 생략하면 커넥션이나 세션의 실제 기본값이 유지됩니다.
 - 형식이 잘못된 JavaScript 값은 리스 획득 전에 `TypeError` / `BRAID_TX_OPTIONS_INVALID`로 거부됩니다.
 - 올바르지만 지원하지 않는 격리 수준이나 접근 모드는 `UnsupportedFeatureError` / `BRAID_TX_OPTION_UNSUPPORTED`로 거부됩니다. feature는 `transaction.isolation.<level>`이나 `transaction.read-only`입니다.
 
