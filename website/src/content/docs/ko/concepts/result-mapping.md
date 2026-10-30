@@ -59,11 +59,13 @@ const Account = v.object({
 driver row -> dialect TypePolicy normalization -> plain row -> query schema -> execution schema -> application model
 ```
 
-`DatabaseResultValidationError`(코드 `BRAID_RESULT_VALIDATION`)는 실패한 단계(`query` 또는 `execution`)와 행 인덱스를 알려 줍니다. 오류 메시지 자체에는 원본 행 데이터나 바인딩 값이 포함되지 않으며, `issues` 속성에는 스키마 라이브러리가 반환한 오류 목록이 그대로 담깁니다. 일부 검증 라이브러리는 각 issue 객체에 원본 입력 값을 포함하므로, 민감한 데이터가 있는 경우 로그에 남기기 전에 `issues`를 마스킹하세요. 결과 매핑은 항상 행 하나를 값 하나로 변환하며, 연관 관계 자동 로딩이나 아이덴티티 맵, 객체 그래프 조립은 수행하지 않습니다.
+`DatabaseResultValidationError`(코드 `BRAID_RESULT_VALIDATION`)는 실패한 단계(`query` 또는 `execution`)와 행 인덱스를 알려 줍니다. 오류 메시지 자체에는 원본 행 데이터나 바인딩 값이 포함되지 않으며, `issues` 속성에는 스키마 라이브러리가 반환한 오류 목록이 그대로 담깁니다. 일부 검증 라이브러리는 각 issue 객체에 원본 입력 값을 포함합니다. 민감한 데이터가 있으면 로그에 남기기 전에 `issues`를 마스킹하세요.
+
+결과 매핑은 항상 행 하나를 값 하나로 변환하며, 연관 관계 자동 로딩이나 아이덴티티 맵, 객체 그래프 조립은 수행하지 않습니다.
 
 입력 파라미터 처리는 단순하고 명확한 규칙을 따릅니다.
 
 - 일반 `${value}` 보간은 별도의 입력 코덱 계층을 거치지 않고 드라이버 바인딩 파라미터로 그대로 전달됩니다.
 - 정밀 숫자의 바인딩 정확도는 사용하는 드라이버의 지원 여부에 따릅니다.
-- 일반 IN 파라미터에 `undefined`를 전달하면 커넥션 획득 전에 즉시 실패(`BRAID_BIND_VALUE_UNSUPPORTED`)하며, `null`은 SQL `NULL`로 바인딩됩니다.
+- 일반 IN 파라미터에 `undefined`를 전달하면 커넥션 획득 전에 즉시 실패(`BRAID_BIND_VALUE_UNSUPPORTED`)합니다. `null`은 SQL `NULL`로 바인딩됩니다.
 - JSON, 날짜·시간, 바이너리 입력 값은 대상 드라이버의 기본 바인딩 규칙을 따릅니다.

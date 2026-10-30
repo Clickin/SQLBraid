@@ -60,7 +60,7 @@ const db = createBunSqlDatabase(client, { dialect: "postgres" });
 애플리케이션이 쿼리를 작성하는 API가 아니며 컴파일러를 import하지 않습니다.
 이제 컴파일러는 `@sqlbraid/template`에서 헬퍼를 import합니다.
 컴파일된 쿼리를 쓴다면 이 패키지를 직접 런타임 의존성으로 설치하세요.
-컴파일러와 런타임 패키지는 같은 버전을 쓰세요.
+컴파일러, `@sqlbraid/template`, 런타임 패키지는 함께 올리세요. 각 릴리스의 버전은 [릴리스 노트](/SQLBraid/release/notes/#패키지-버전)에 있습니다.
 
 `capture`에 주는 문자열 배열은 `sql.raw()`와 같이 SQL 텍스트입니다. 입력으로 이 배열을 만들지 마세요. `capture`는 컴파일러가 만드는 템플릿 노드 종류만 받습니다. 다른 노드는 `BRAID_STRUCTURE`로 실패합니다.
 

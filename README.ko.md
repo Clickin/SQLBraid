@@ -110,7 +110,7 @@ SQLBraid는 템플릿을 읽어 세 단계를 거쳐 실행할 SQL 문장을 구
 
 1. **지시어 평가 (`/*@braid ... */`):** 지시어는 표준 SQL 주석 문법을 따르므로 에디터와 SQL 포매터에서 일반 SQL로 정상 인식됩니다. `if`, `choose` / `when` / `otherwise`, `where`, `set`, `trim` 블록을 순서대로 평가해 거짓인 분기를 제거하며, 여러 줄 블록과 중첩 구조를 모두 지원합니다. `where`와 `set` 블록은 남은 조건문 앞의 불필요한 `AND`/`OR`나 끝의 쉼표(`,`)를 자동으로 정리합니다.
 2. **파라미터 바인딩 분리 (`${value}`):** 활성화된 SQL 분기에서 사용된 값은 SQL 문자열에 직접 이어 붙이지 않고 바인딩 파라미터로 전달됩니다. 단, 선택적 컴파일러를 사용하지 않으면 JavaScript 태그드 템플릿의 동작 방식에 따라 SQLBraid가 지시어를 처리하기 전에 모든 템플릿 표현식이 먼저 평가됩니다.
-3. **드라이버별 플레이스홀더 변환:** 쿼리에서는 항상 동일한 `${value}` 문법을 작성하면, 대상 드라이버 어댑터가 각 DB 규격(`$1`, `?`, `:1`, `@p1`)에 맞춰 플레이스홀더를 작성합니다.
+3. **드라이버별 플레이스홀더 변환:** 쿼리에는 항상 같은 `${value}` 문법을 씁니다. 대상 드라이버 어댑터가 각 DB 형식(`$1`, `?`, `:1`, `@p1`)에 맞는 플레이스홀더를 만듭니다.
 
 ```ts
 sql.rows<User>`
@@ -305,7 +305,7 @@ const result = await db.tx(async (tx) =>
 ## 요구 사항 및 상태
 
 - **런타임 요구 사항:** 런타임 패키지(`sqlbraid` 및 드라이버 어댑터)는 Node.js 16.20.2 이상을 지원합니다(각 DB 드라이버의 최소 요구 버전 적용, `node:sqlite` 및 CLI/빌드 도구는 Node.js 22.18 이상 필요). 활성 LTS 버전 사용을 권장합니다.
-- **현재 상태:** `sqlbraid` 및 `@sqlbraid/*` 2.x. 공개 API는 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
+- **현재 상태:** `sqlbraid` 2.x. 각 `@sqlbraid/*` 패키지는 자체 버전 계열을 유지합니다. 공개 API는 시맨틱 버저닝(SemVer)을 따릅니다. [릴리스 노트](https://clickin.github.io/SQLBraid/latest/release/notes/), [현재 제한 사항](https://clickin.github.io/SQLBraid/latest/release/limitations/), [로드맵](https://clickin.github.io/SQLBraid/latest/release/roadmap/)을 참고하세요.
 
 ## 개발 방식 및 AI 활용
 

@@ -66,7 +66,7 @@ try {
 
 어댑터는 Connector/Node.js의 값 전용 실행, 네이티브 행 스트리밍, 그리고 `db.bulk()`를 위한 `connection.batch()` 호출 한 번(`native-bulk`)을 씁니다. 루트 벌크는 트랜잭션이 아니며, 자동 분할에 대한 공통 보장도 없습니다. 콜백 단위의 원자성이 필요하면 `db.tx()`를 쓰세요.
 
-`mysql2` 드라이버로도 MariaDB에 연결할 수 있지만, 공식 MariaDB 지원은 `mariadb`(Connector/Node.js, MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0 기준 검증) 어댑터를 사용합니다. 세부 지원 범위는 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)를 참고하세요.
+`mysql2` 드라이버로도 MariaDB에 연결할 수 있습니다. 공식 MariaDB 지원 대상은 `mariadb` 어댑터입니다(Connector/Node.js, MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0 기준 검증). 세부 지원 범위는 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)를 참고하세요.
 
 ## Connector/Node.js 표현 방식 프로필
 
@@ -97,7 +97,7 @@ Connector/Node.js는 실제 적용된 옵션을 노출하지 않습니다. 설�
 
 `mariadb-lossless-text` 설명 객체는 `bigIntAsNumber: false`, `decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`, `dateStrings: true`, `timezone: "Z"`를 유지합니다.
 
-- 정확한 정수·소수 문자열은 execute, 준비된 쿼리, 검증된 벌크 방식에서 값을 정확하게 왕복시키는 바인딩 경로입니다.
+- execute, 준비된 쿼리, 검증된 벌크 방식에서 값을 정확하게 왕복시키는 바인딩 경로는 정확한 정수·소수 문자열입니다.
 - `affectedRows`는 안전한 범위인지 검사한 작업 개수입니다.
 - 일반 IN 값이 `undefined`이면 리스를 획득하기 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다.
 - Connector 3.5.4의 공개 타입 정의에는 `jsonStrings` 옵션이 없습니다. 그래서 텍스트를 받으려면 `autoJsonMap: false`를 쓰세요. 이것을 mysql2 프로필이라고 설명하지 마세요.

@@ -67,7 +67,7 @@
       "source": "website/src/content/docs/concepts/result-mapping.md",
       "translation": "website/src/content/docs/ko/concepts/result-mapping.md",
       "translationOf": "website/src/content/docs/concepts/result-mapping.md",
-      "sourceDigest": "f0dd7e0d7d553b45d1ec04fb36263d5316315b655d5f22941d8dbb4e0d44b9d1"
+      "sourceDigest": "7eeeb1a2c8c8837a2ffbc7c5956e0e1a5216c1a2689426fe4f8caf1955543aeb"
     },
     {
       "source": "website/src/content/docs/concepts/routines.md",
@@ -163,7 +163,7 @@
       "source": "website/src/content/docs/metadata/config.md",
       "translation": "website/src/content/docs/ko/metadata/config.md",
       "translationOf": "website/src/content/docs/metadata/config.md",
-      "sourceDigest": "9f0b6055a78477b73ea0c92ec8dd6e9860341927339c00a13227a4967ae72277"
+      "sourceDigest": "2eabde7fb3fdee1be6e7d4815147fe810a6229f8ab0c3f149a410c49dd556317"
     },
     {
       "source": "website/src/content/docs/metadata/inspectors.md",
@@ -199,7 +199,7 @@
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "113895d7a3908059c107c44c9d49455b23bae4bcc732aa62d7f37ce5a11b2028"
+      "sourceDigest": "1894870052ccc2e2cb71a2167188e91073f990f579ce79c82f942cfd0bf3c86b"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
