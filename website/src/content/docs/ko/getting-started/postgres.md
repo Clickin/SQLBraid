@@ -62,7 +62,7 @@ try {
 
 ## 풀 기반 데이터베이스
 
-애플리케이션이 `pg.Pool`을 가지고 있다면 풀 팩토리를 쓰세요. 이 코드를 `src/pool.ts`로 저장하고 `node src/pool.ts`로 실행하세요.
+애플리케이션이 `pg.Pool`을 쓴다면 풀 팩토리를 쓰세요. 이 코드를 `src/pool.ts`로 저장하고 `node src/pool.ts`로 실행하세요.
 
 ```ts
 import { Pool } from "pg";
@@ -87,7 +87,7 @@ try {
 
 풀을 쓰는 루트 작업은 커넥션 리스 하나를 획득하고, 물리 I/O를 실행하고, 리스를 반환한 다음, 메모리로 읽은 결과를 매핑합니다. 커넥션을 고정하는 명시적인 경계는 트랜잭션입니다. 트랜잭션 안에서는 모든 작업에 콜백 핸들을 쓰세요. 풀 종료는 애플리케이션이 맡습니다.
 
-pg 바인딩 어댑터는 논리적인 `RenderedStatement`를 받아 텍스트·위치 기반 `$1`, `$2`, … 플레이스홀더와 순서가 있는 값 배열로 바꿉니다. 이 단계는 드라이버가 맡으며, 순수한 바인딩 설명 이후, 리스 획득 이전에 일어납니다. 플레이스홀더 표기는 PostgreSQL 방언이 정하지 않습니다. 어댑터는 드라이버가 맡는 단순 재사용 방식을 보고하고, `pg`에는 파라미터별 타입 옵션이 없으므로 모든 파라미터 힌트를 I/O 전에 거부합니다. postgres.js와 PGlite 어댑터는 힌트를 적용합니다. [파라미터 타입 힌트](/SQLBraid/concepts/parameter-hints/)를 보세요.
+pg 바인딩 어댑터는 논리적인 `RenderedStatement`를 받아 텍스트·위치 기반 `$1`, `$2`, … 플레이스홀더와 순서가 있는 값 배열로 바꿉니다. 이 단계는 드라이버가 맡으며, 순수한 바인딩 설명 이후, 리스 획득 이전에 일어납니다. 플레이스홀더 표기는 PostgreSQL 방언이 정하지 않습니다. 어댑터는 드라이버가 맡는 단순 재사용 방식을 보고합니다. `pg`에는 파라미터별 타입 옵션이 없으므로, 어댑터는 모든 파라미터 힌트를 I/O 전에 거부합니다. postgres.js와 PGlite 어댑터는 힌트를 적용합니다. [파라미터 타입 힌트](/SQLBraid/concepts/parameter-hints/)를 보세요.
 
 :::caution `createPgDatabase`에 풀을 넘기지 마세요
 SQLBraid는 모양만 보고 풀을 판별하지 않습니다. 직접 연결 팩토리에 `pg.Pool`을 넘기면 소유권 모델이 틀어집니다. `createPgPoolDatabase(pool)`을 쓰세요.
@@ -141,7 +141,7 @@ const generated = generateModels(snapshot, { typePolicy });
 - 일반 `undefined` 바인딩은 획득 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다.
 - 배열, 도메인, 범위, 다중 범위, 복합 타입은 분류되지 않은 컨테이너입니다. 원소 타입이 정확한 스칼라여도 마찬가지입니다.
 
-`db.environment()`는 선택한 프로필(예: `pg-lossless-text`)과 `TypePolicy`의 `id`·`hash`를 반환합니다. 서버의 `extra_float_digits` 설정을 확인하되 설정값 자체는 노출하지 않으며, 값이 0보다 크면 `numeric.approximate-float`를 `guaranteed`로, 그렇지 않으면 `pg.extra-float-digits` 조건이 붙은 `guarded`로 보고합니다. 테스트된 데이터베이스·드라이버·프로필·런타임 조합은 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)에서 확인하세요.
+`db.environment()`는 선택한 프로필(예: `pg-lossless-text`)과 `TypePolicy`의 `id`·`hash`를 반환합니다. 서버의 `extra_float_digits` 설정을 확인하지만 설정값 자체는 노출하지 않습니다. 값이 0보다 크면 `numeric.approximate-float`를 `guaranteed`로 보고합니다. 그렇지 않으면 `pg.extra-float-digits` 조건이 붙은 `guarded`로 보고합니다. 테스트된 데이터베이스·드라이버·프로필·런타임 조합은 [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)에서 확인하세요.
 
 - `pg-cursor`가 네이티브 풀(pull) 스트림을 제공합니다. 피어 의존성이 없으면 `BRAID_STREAM_UNSUPPORTED`가 납니다.
 - 루틴 refcursor는 기존 트랜잭션이 필요하며, 메모리로 읽은 결과 집합이 됩니다.

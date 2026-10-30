@@ -44,4 +44,4 @@ pnpm exec sqlbraid codegen --json
 
 설정 파일은 CLI가 실행하는 신뢰된 Node 코드입니다. 샌드박스가 아닙니다. 스키마 변경을 사람이 검토해야 한다면 메타데이터와 생성된 출력을 버전 관리에 넣으세요.
 
-`TypePolicy`는 데이터베이스 컬럼 타입이 TypeScript 타입으로 매핑되는 규칙을 정의합니다. 런타임 데이터베이스 생성 시 사용한 PostgreSQL, mysql2, MariaDB 프로필 설명 객체를 코드 생성 설정에도 동일하게 전달하세요. 네이티브 JSON 컬럼은 별도로 타입을 지정하지 않으면 안전을 위해 `unknown`으로 생성되며, 타입 재정의(override)는 생성되는 TypeScript 선언만 바꿀 뿐 런타임 디코딩 동작은 바꾸지 않습니다.
+`TypePolicy`는 데이터베이스 컬럼 타입이 TypeScript 타입으로 매핑되는 규칙을 정의합니다. 런타임 데이터베이스 생성 시 사용한 PostgreSQL, mysql2, MariaDB 프로필 설명 객체를 코드 생성 설정에도 동일하게 전달하세요. 네이티브 JSON 컬럼은 타입 재정의(override)로 좁히지 않으면 `unknown`으로 생성됩니다. 타입 재정의는 생성되는 TypeScript 선언만 바꿉니다. 런타임 디코딩은 바꾸지 않습니다.

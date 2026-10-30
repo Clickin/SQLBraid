@@ -35,8 +35,10 @@ grep -rEn "from \"sqlbraid/(pg|postgres|mysql2|mysql|mariadb|node-sqlite|better-
 애플리케이션이 쓰는 데이터베이스마다 방언 패키지를 설치하세요. 공용 타입과 런타임 생성 함수 때문에 `sqlbraid`도 유지합니다.
 
 ```bash
-pnpm add sqlbraid@2 @sqlbraid/sqlite
+pnpm add sqlbraid@2 @sqlbraid/sqlite@latest
 ```
+
+이미 쓰는 `@sqlbraid/*` 패키지도 같은 명령에서 함께 올리세요. 그래야 모든 패키지가 `@sqlbraid/core` 사본 하나를 공유합니다. 패키지별 최소 버전은 [릴리스 노트](/SQLBraid/release/notes/#패키지-버전)에 있습니다.
 
 데이터베이스에 맞는 패키지를 표에서 고르세요.
 

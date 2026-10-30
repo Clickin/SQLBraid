@@ -43,7 +43,7 @@ A description must not contain dots. The loader rejects any other text after the
 The loader follows symbolic links to files and directories. It rejects a directory that it reaches two times.
 
 A dialect-specific file takes precedence over the generic file for the same version.
-A missing variant without a generic file fails; it is not skipped.
+A missing variant without a generic file fails. The runner does not skip it.
 Use an empty dialect-specific file for an intentional no-op.
 
 Checksums use SHA-256 of UTF-8 source text. The loader removes a leading BOM and changes CRLF to LF.
@@ -102,7 +102,7 @@ The runner always rejects an out-of-order version. Give it a version after the n
 Use `apply` in one deployment step when possible. Use `verify` in production application instances.
 For Workers, keep the migrator and database handle at module scope and call `migrator.once(db, options)` before handling requests.
 It shares a promise for that database and check policy. A rejected check can retry after `retryIntervalMs` (default: 1000).
-Choose either SQLBraid or Wrangler to own D1 migration history; this package does not import Wrangler history.
+Choose either SQLBraid or Wrangler to own D1 migration history. This package does not import Wrangler history.
 
 ## CLI configuration
 
@@ -173,7 +173,7 @@ Restore a backup or write a forward migration to reverse a schema change.
 SQL Server batches run as plain Tedious batches on one connection, as `sqlcmd` runs them.
 Thus, `SET` options, `#temp` tables and `USE` stay in effect for later batches of the same migration.
 
-D1 and SQLite WASM use the SQLite dialect. The runner checks the adapter's transaction capability; it does not simulate transactions or sessions.
+D1 and SQLite WASM use the SQLite dialect. The runner checks the adapter's transaction capability. It does not simulate transactions or sessions.
 DDL that cannot run in a transaction needs a leading directive:
 
 ```sql
@@ -283,7 +283,7 @@ With a drift adapter, `baseline` also inspects the schema and stores the hash on
 With `mode: "apply"`, the runner does this comparison before it applies migrations. If the schema has drift, it applies nothing.
 When a committed snapshot is supplied, differences include metadata paths.
 These paths compare the inspected schema with the committed snapshot, not with the schema that produced the stored hash.
-Catalog inspection occurs after releasing the migration session; it is not an atomic snapshot against external DDL.
+Catalog inspection occurs after the runner releases the migration session. It is not an atomic snapshot against external DDL.
 If history has no stored schema hash, the check has no previous schema evidence to compare.
 
 A stored hash can become stale. For example, an inspection can fail after an apply, or an apply can run without a drift adapter.

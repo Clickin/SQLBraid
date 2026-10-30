@@ -381,7 +381,7 @@ Missing metadata stays unresolved evidence. It does not prove that user SQL is i
 
 Do not read the repository in alphabetical order. Use this sequence:
 
-1. the README sections "Key Concepts" and "Runtime API";
+1. the README sections "How It Works" and "Core Execution Features";
 2. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`);
 3. `packages/template/src/`: `tag.ts` (`createSqlTag()`) → `render.ts` (`renderTemplateIr()` / `renderNodes()`);
 4. `packages/runtime/src/index.ts`: `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepareObserved` → `prepare`. Then `operations/materialized.ts`: `runPrepared` → `leaseForUse` (in `operations/lease.ts`) → `physical` → `finalizePhysical` → `processRows`;
@@ -425,7 +425,7 @@ Before you change the architecture, make sure that the change keeps these rules:
 - hover/completion/workspace/LSP evidence → tooling/language-server
 - tracing/metrics → observer extension such as `@sqlbraid/opentelemetry`
 
-If a change seems to cross several of these boundaries, first find out if a smaller explicit rule can express the requirement. SQLBraid prefers explicit boundaries to hidden semantic machinery. This is a deliberate choice.
+If a change seems to cross several of these boundaries, first check if a smaller explicit rule can express the requirement. SQLBraid prefers explicit boundaries to hidden semantic machinery. This is a deliberate choice.
 
 ## Related architecture references
 

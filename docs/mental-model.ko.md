@@ -70,7 +70,7 @@ SQL 구조는 명시적으로 만들어야 합니다. `sql.ident`, `sql.fragment
 
 ## 3. `@sqlbraid/core`: 인터페이스 계층
 
-core 패키지는 작성, 런타임, 어댑터가 함께 쓰는 약속의 모음입니다. 일반적인 구현 모듈이 아닙니다. [`packages/core/src/index.ts`](../packages/core/src/index.ts)는 다시 내보내기만 합니다. 타입은 묶음별로 파일이 나뉘어 있습니다.
+core 패키지는 작성, 런타임, 어댑터가 함께 쓰는 인터페이스 모음입니다. 일반적인 구현 모듈이 아닙니다. [`packages/core/src/index.ts`](../packages/core/src/index.ts)는 다시 내보내기만 합니다. 타입은 묶음별로 파일이 나뉘어 있습니다.
 
 | 파일                                                                                                                                                                                                           | 내용                                                                                       |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -271,7 +271,7 @@ flowchart LR
 
 조기 `break`, 예외, 취소, 매핑 실패는 모두 정리 단계로 이어집니다. 드라이버 반복자 정리는 리스 반환보다 먼저 일어납니다.
 
-고정된 스트림이 살아 있는 동안에는 같은 리소스에 대한 충돌하는 재진입을 막습니다. 트랜잭션과 세이브포인트 전환도 막습니다. 드라이버가 정의하지 않은 동작에 기대지 않고 SQLBraid가 거부합니다.
+살아 있는 고정 스트림은 충돌하는 재진입을 막습니다. 같은 리소스의 트랜잭션과 세이브포인트 전환도 막습니다. 드라이버가 정의하지 않은 동작에 기대지 않고 SQLBraid가 거부합니다.
 
 ## 12. 준비된 쿼리, 배치, 벌크
 
@@ -381,7 +381,7 @@ SQLBraid는 처음 발생한 실패를 보존합니다. 그러면서도 자신�
 
 저장소를 알파벳 순서로 읽지 마세요. 다음 순서를 권합니다.
 
-1. README의 "Key Concepts"와 "Runtime API" 절
+1. README의 "동작 방식"과 "주요 실행 기능" 절
 2. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`)
 3. `packages/template/src/`: `tag.ts` (`createSqlTag()`) → `render.ts` (`renderTemplateIr()` / `renderNodes()`)
 4. `packages/runtime/src/index.ts`: `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepareObserved` → `prepare`. 이어서 `operations/materialized.ts`: `runPrepared` → `leaseForUse` (`operations/lease.ts`) → `physical` → `finalizePhysical` → `processRows`
