@@ -35,7 +35,7 @@ Driver and dialect facade subpaths are removed in 2.0.0.
 Only `sqlbraid` uses the version `2.0.0`. Each other first-party package keeps its own version line. Each package is tagged and released on its own.
 
 For Bun.SQL, use `@sqlbraid/bun-sql`. Import `sql` from the selected dialect
-root and give that dialect explicitly:
+root and give that dialect explicitly.
 
 For the Bun.SQL PostgreSQL example, install both the adapter and the dialect:
 
@@ -60,7 +60,7 @@ Dialect roots such as `@sqlbraid/postgres` also expose the interfaces for custom
 `assertDirectiveCondition`. It is not an API for applications to write queries
 and does not import the compiler. The compiler now imports helpers from
 `@sqlbraid/template`. Install it as a direct runtime dependency for compiled queries.
-Use the same version for the compiler and runtime packages.
+Upgrade the compiler, `@sqlbraid/template` and the runtime packages together. The [release notes](/SQLBraid/latest/release/notes.md#package-versions) list the versions of each release.
 
 The string array that you give to `capture` is SQL text, as with `sql.raw()`.
 Never build it from input. `capture` accepts only the template node kinds that

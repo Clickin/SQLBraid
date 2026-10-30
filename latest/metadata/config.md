@@ -43,4 +43,4 @@ The metadata and output paths are relative to the config file.
 
 The config is trusted Node code that the CLI executes. It is not a sandbox. If the project needs schema changes that people can review, keep the metadata and the generated output under version control.
 
-`TypePolicy` defines how database column types map to TypeScript types. Pass the same PostgreSQL, mysql2, or MariaDB profile descriptor in your codegen config that you pass to the database factory at runtime. Native JSON columns default to `unknown` unless narrowed by a type override, and type overrides affect only the emitted TypeScript declarations—not runtime decoding.
+`TypePolicy` defines how database column types map to TypeScript types. Pass the same PostgreSQL, mysql2, or MariaDB profile descriptor in your codegen config that you pass to the database factory at runtime. Native JSON columns stay `unknown` unless a type override narrows them. Type overrides change only the emitted TypeScript declarations. They do not change runtime decoding.

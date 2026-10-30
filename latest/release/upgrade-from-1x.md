@@ -34,8 +34,10 @@ Keep imports from `sqlbraid` and `sqlbraid/compiled`. Replace all other matches.
 Install the dialect package for each database that your application uses. Keep `sqlbraid` for the shared types and the runtime factories.
 
 ```bash
-pnpm add sqlbraid@2 @sqlbraid/sqlite
+pnpm add sqlbraid@2 @sqlbraid/sqlite@latest
 ```
+
+Upgrade each `@sqlbraid/*` package that you already use in the same command. Then all packages share one copy of `@sqlbraid/core`. The [release notes](/SQLBraid/latest/release/notes.md#package-versions) list the minimum version of each package.
 
 Use the package from the table for your database:
 

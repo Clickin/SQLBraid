@@ -112,7 +112,7 @@ location of a failed routine mapping.</p>
 <p><code dir="auto">DatabaseResultValidationError</code> (code <code dir="auto">BRAID_RESULT_VALIDATION</code>) reports the validation stage (<code dir="auto">query</code> or <code dir="auto">execution</code>) and the failing row index. Its message never includes raw row values or bind parameters, while its <code dir="auto">issues</code> property preserves the validator’s issue list verbatim. Because some validation libraries attach the raw input value to each issue, redact <code dir="auto">issues</code> before logging if rows contain sensitive data. Result mapping always transforms one row into one value—SQLBraid does not hydrate relations, maintain identity maps, or assemble object graphs.</p>
 <p>Input parameter handling is intentionally minimal:</p>
 <ul>
-<li>Ordinary <code dir="auto">${value}</code> interpolations are passed directly to the driver as bound parameters; SQLBraid does not include a custom input-codec layer.</li>
+<li>Ordinary <code dir="auto">${value}</code> interpolations go directly to the driver as bound parameters. SQLBraid does not include a custom input-codec layer.</li>
 <li>Exact numeric bind fidelity depends on the target driver’s capabilities.</li>
 <li><code dir="auto">undefined</code> IN parameters fail before connection acquisition (<code dir="auto">BRAID_BIND_VALUE_UNSUPPORTED</code>), while <code dir="auto">null</code> binds as SQL <code dir="auto">NULL</code>.</li>
 <li>JSON, date/time, and binary input values follow the target driver’s native binding conventions.</li>

@@ -78,7 +78,7 @@ driver row -> dialect TypePolicy normalization -> plain row -> query schema -> e
 
 Input parameter handling is intentionally minimal:
 
-- Ordinary `${value}` interpolations are passed directly to the driver as bound parameters; SQLBraid does not include a custom input-codec layer.
+- Ordinary `${value}` interpolations go directly to the driver as bound parameters. SQLBraid does not include a custom input-codec layer.
 - Exact numeric bind fidelity depends on the target driver's capabilities.
 - `undefined` IN parameters fail before connection acquisition (`BRAID_BIND_VALUE_UNSUPPORTED`), while `null` binds as SQL `NULL`.
 - JSON, date/time, and binary input values follow the target driver's native binding conventions.

@@ -37,7 +37,9 @@ wasmDatabase.close();
 
 출력은 `[{ id: '1', email: 'ada@example.com' }]`입니다.
 
-INTEGER 저장 값은 정규 십진 문자열로 노출됩니다. WASM 어댑터는 숫자 값으로 추측하지 않고, 네이티브 열 타입과 `sqlite3_column_int64`를 씁니다. 정수 값을 가진 REAL은 `number`로 남습니다. 네이티브 bigint는 내부 전송 세부 사항이며, 공개 정수 모드가 아닙니다. D1은 별도의 guarded 프로필입니다. 안전한 범위의 정수 JavaScript Number는 문자열이 되고, 범위를 벗어난 값은 반올림하지 않고 미지원으로 처리합니다.
+INTEGER 저장 값은 정규 십진 문자열로 노출됩니다. WASM 어댑터는 숫자 값으로 추측하지 않고, 네이티브 열 타입과 `sqlite3_column_int64`를 씁니다. 정수 값을 가진 REAL은 `number`로 남습니다. 네이티브 bigint는 내부 전송 세부 사항이며, 공개 정수 모드가 아닙니다.
+
+D1은 별도의 guarded 프로필입니다. 안전한 범위의 정수 JavaScript Number는 문자열이 되고, 범위를 벗어난 값은 반올림하지 않고 미지원으로 처리합니다.
 
 어댑터는 다음 작업을 지원합니다.
 
@@ -112,7 +114,7 @@ D1은 타입 정보가 없는 JavaScript 숫자를 노출합니다. guarded 프�
 - D1의 Worker Binding API에는 점진적 행 커서가 없습니다. `db.stream()`은 `BRAID_STREAM_UNSUPPORTED`입니다. SQLBraid는 스트리밍을 흉내 내려고 페이지 단위로 나눠 읽지 않습니다.
 - 앞으로 D1에 SQLBraid의 콜백 트랜잭션 규칙에 맞는 기능이 생기기 전까지 콜백 `db.tx()`는 지원하지 않습니다.
 
-네이티브 D1 배치는 루트 벌크보다 강한 트랜잭션 동작을 가질 수 있습니다. 하지만 SQLBraid의 공통 규칙은 아닙니다. 루트 벌크는 트랜잭션이 아니며, 자동 분할에 대한 공통 보장도 없습니다.
+네이티브 D1 배치의 트랜잭션 동작은 루트 벌크보다 강할 수 있습니다. 하지만 SQLBraid의 공통 규칙은 아닙니다. 루트 벌크는 트랜잭션이 아니며, 자동 분할에 대한 공통 보장도 없습니다.
 
 SQLite WASM과 Cloudflare D1의 세부 기능 지원 여부는 [런타임·드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)에서 확인할 수 있습니다. Cloudflare D1은 Worker 바인딩이 내부 SQLite 버전을 노출하지 않으므로 Compatible 등급으로 분류됩니다.
 

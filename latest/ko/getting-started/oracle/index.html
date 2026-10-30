@@ -93,7 +93,7 @@
 <li><code dir="auto">sql.call</code>은 스칼라 OUT·IN OUT 설명과, <code dir="auto">oracleParameter.refCursor()</code>를 쓴 <code dir="auto">SYS_REFCURSOR</code> OUT 값을 지원합니다. 커서 출력은 메모리로 읽은 <code dir="auto">resultSets</code>가 되고, 스칼라 <code dir="auto">output</code>에서 빠집니다. 암시적 결과도 포함됩니다. 모든 <code dir="auto">ResultSet</code>은 리스 반환 전에 닫힙니다.</li>
 <li>이 어댑터는 네이티브 <code dir="auto">procedure</code> 메타데이터를 지원하지 않습니다. Oracle PL/SQL이나 SQL 호출 텍스트를 직접 쓰세요.</li>
 <li>스트리밍은 드라이버의 ResultSet 프로토콜을 씁니다. 완료, 중단, 반복 조기 종료 시 ResultSet을 닫습니다.</li>
-<li>취소는 guarded 상태의 <code dir="auto">connection.break()</code> 경로를 씁니다. 협력적인 방식이라 즉시 멈추거나 시간 제한을 지킨다고 보장하지 않습니다. 문서화된 <code dir="auto">DBMS_SESSION.SLEEP</code> 원시 점검은 sleep이 끝날 때만 <code dir="auto">ORA-01013</code>으로 reject될 수 있습니다. 어댑터는 결과가 확정될 때까지 물리 리스를 붙잡고 있습니다. 문서화된 break 기능이 없으면 활성 취소는 I/O 전에 <code dir="auto">BRAID_CANCEL_UNSUPPORTED</code>로 실패합니다.</li>
+<li>취소는 guarded 상태의 <code dir="auto">connection.break()</code> 경로를 씁니다. 이 취소는 협력적인 방식입니다. 즉시 멈추거나 시간 제한을 지킨다고 보장하지 않습니다. 문서화된 <code dir="auto">DBMS_SESSION.SLEEP</code> 원시 점검은 sleep이 끝날 때만 <code dir="auto">ORA-01013</code>으로 reject될 수 있습니다. 어댑터는 결과가 확정될 때까지 물리 리스를 붙잡고 있습니다. 문서화된 break 기능이 없으면 활성 취소는 I/O 전에 <code dir="auto">BRAID_CANCEL_UNSUPPORTED</code>로 실패합니다.</li>
 <li>대상 조합은 Node 22.18.0/Linux x64의 Oracle Free 23.9 Thin입니다. 현재 인증 상태와 정확한 게이트는 <a href="/SQLBraid/latest/ko/reference/support/">런타임·드라이버 지원</a>에 있습니다.</li>
 </ul>
 <p>드라이버가 안전한 Oracle 타입을 추론할 수 없다면 <code dir="auto">null</code>에 힌트를 명시하세요. 타입 없는 null을 몰래 <code dir="auto">VARCHAR2</code>로 바꾸지 마세요.</p>

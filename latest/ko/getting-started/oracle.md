@@ -79,7 +79,7 @@ Thin 바인딩 어댑터는 논리 문장을 텍스트·위치 기반 `:1`, `:2`
 - `sql.call`은 스칼라 OUT·IN OUT 설명과, `oracleParameter.refCursor()`를 쓴 `SYS_REFCURSOR` OUT 값을 지원합니다. 커서 출력은 메모리로 읽은 `resultSets`가 되고, 스칼라 `output`에서 빠집니다. 암시적 결과도 포함됩니다. 모든 `ResultSet`은 리스 반환 전에 닫힙니다.
 - 이 어댑터는 네이티브 `procedure` 메타데이터를 지원하지 않습니다. Oracle PL/SQL이나 SQL 호출 텍스트를 직접 쓰세요.
 - 스트리밍은 드라이버의 ResultSet 프로토콜을 씁니다. 완료, 중단, 반복 조기 종료 시 ResultSet을 닫습니다.
-- 취소는 guarded 상태의 `connection.break()` 경로를 씁니다. 협력적인 방식이라 즉시 멈추거나 시간 제한을 지킨다고 보장하지 않습니다. 문서화된 `DBMS_SESSION.SLEEP` 원시 점검은 sleep이 끝날 때만 `ORA-01013`으로 reject될 수 있습니다. 어댑터는 결과가 확정될 때까지 물리 리스를 붙잡고 있습니다. 문서화된 break 기능이 없으면 활성 취소는 I/O 전에 `BRAID_CANCEL_UNSUPPORTED`로 실패합니다.
+- 취소는 guarded 상태의 `connection.break()` 경로를 씁니다. 이 취소는 협력적인 방식입니다. 즉시 멈추거나 시간 제한을 지킨다고 보장하지 않습니다. 문서화된 `DBMS_SESSION.SLEEP` 원시 점검은 sleep이 끝날 때만 `ORA-01013`으로 reject될 수 있습니다. 어댑터는 결과가 확정될 때까지 물리 리스를 붙잡고 있습니다. 문서화된 break 기능이 없으면 활성 취소는 I/O 전에 `BRAID_CANCEL_UNSUPPORTED`로 실패합니다.
 - 대상 조합은 Node 22.18.0/Linux x64의 Oracle Free 23.9 Thin입니다. 현재 인증 상태와 정확한 게이트는 [런타임·드라이버 지원](/SQLBraid/latest/reference/support.md)에 있습니다.
 
 드라이버가 안전한 Oracle 타입을 추론할 수 없다면 `null`에 힌트를 명시하세요. 타입 없는 null을 몰래 `VARCHAR2`로 바꾸지 마세요.

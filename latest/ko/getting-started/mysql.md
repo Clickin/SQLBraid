@@ -109,9 +109,9 @@ const result = await db.call(
 
 ## mysql2 표현 방식 프로필
 
-런타임과 `@sqlbraid/codegen`이 동일한 타입 규칙을 사용하도록 명시적 표현 방식 프로필을 지정합니다.
+런타임과 `@sqlbraid/codegen`이 같은 타입 규칙을 쓰도록 명시적인 표현 방식 프로필을 지정하세요.
 
-- `@sqlbraid/mysql`은 `typePolicyForProfile({ json, temporal })`과 불변 `representationProfiles` 설명 객체를 export합니다.
+- `@sqlbraid/mysql`은 `typePolicyForProfile({ json, temporal })`과 변경할 수 없는 `representationProfiles` 설명 객체를 export합니다.
 - 기본 `mysql2-lossless-text` 프로필은 아래 표의 정밀도 우선 옵션을 사용합니다.
 - `mysql2-native`는 네이티브 JSON 및 `Date` 결과를 그대로 반환하는 별도 편의 프로필입니다.
 
@@ -135,10 +135,10 @@ const result = await db.call(
 - `affectedRows`는 안전한 범위를 검사한 작업 개수입니다.
 - 네이티브 MySQL SQL은 바뀌지 않고 그대로 전달됩니다. SQLBraid가 MySQL 문법을 모두 파싱한다는 뜻은 아닙니다.
 
-정확한 정수·소수 문자열은 준비된 쿼리와 벌크 실행에서 값을 정확하게 왕복시키는, 문서화된 바인딩 경로입니다. 일반 `undefined` 바인딩은 획득 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다. `decimalNumbers`, `jsonStrings`, `dateStrings`, `typeCast`를 바꾸면 다른 프로필을 고른 것입니다. 그러면 위의 근거는 다시 테스트하기 전까지 유효하지 않습니다.
+준비된 쿼리와 벌크 실행에서 값을 정확하게 왕복시키는 문서화된 바인딩 경로는 정확한 정수·소수 문자열입니다. 일반 `undefined` 바인딩은 획득 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다. `decimalNumbers`, `jsonStrings`, `dateStrings`, `typeCast`를 바꾸면 다른 프로필을 고른 것입니다. 그러면 위의 근거는 다시 테스트하기 전까지 유효하지 않습니다.
 
 - 바인딩 전송 방식은 순서가 있는 값을 쓰는 mysql2 텍스트·위치 기반 `?`입니다.
 - 스트리밍은 준비된 문장 `Execute.stream()`을 씁니다.
 - `db.call()`은 루틴 결과 집합을 메모리로 읽습니다. 준비된 문장의 OUT·INOUT은 지원하지 않습니다.
-- 벌크는 선택한 어댑터의 기능과 매니페스트가 증명할 때만 준비된 문장 또는 네이티브 드라이버 작업입니다.
+- 벌크는 선택한 어댑터의 기능과 매니페스트가 증명할 때만 준비된 문장이나 네이티브 드라이버 작업으로 실행됩니다.
 - 일반 MySQL DML에는 공통 `RETURNING` 절이 없습니다. 그래서 SQLBraid는 반환 행을 지어내지 않습니다.

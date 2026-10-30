@@ -13,6 +13,35 @@ the supported combinations of database, driver, profile, runtime and capability.
 Only `sqlbraid` moves to `2.0.0`. Each other first-party package keeps its own version line.
 Each package is tagged and released on its own: `v2.0.0` for `sqlbraid` and `<package>-v<version>` for the others.
 
+### Package versions
+
+Install these versions, or later versions, together with `sqlbraid` 2.0.0:
+
+| Package                     | Version |
+| --------------------------- | ------- |
+| `sqlbraid`                  | 2.0.0   |
+| `@sqlbraid/core`            | 1.1.0   |
+| `@sqlbraid/runtime`         | 1.0.4   |
+| `@sqlbraid/template`        | 1.0.4   |
+| `@sqlbraid/compiler`        | 1.1.0   |
+| `@sqlbraid/cli`             | 1.1.0   |
+| `@sqlbraid/language-server` | 1.0.4   |
+| `@sqlbraid/migrate`         | 0.2.0   |
+| `@sqlbraid/webpack`         | 1.0.3   |
+| `@sqlbraid/postgres`        | 1.2.0   |
+| `@sqlbraid/mysql`           | 1.0.4   |
+| `@sqlbraid/mariadb`         | 1.0.3   |
+| `@sqlbraid/sqlite`          | 1.0.3   |
+| `@sqlbraid/oracle`          | 1.0.3   |
+| `@sqlbraid/mssql`           | 1.0.4   |
+| `@sqlbraid/bun-sql`         | 1.0.3   |
+
+The VS Code extension version is 0.2.0.
+`@sqlbraid/codegen`, `@sqlbraid/metadata`, `@sqlbraid/opentelemetry`, `@sqlbraid/operations`, `@sqlbraid/tooling` and `@sqlbraid/vite` keep their current versions.
+
+Upgrade each installed `@sqlbraid/*` dialect or adapter package in the same install as `sqlbraid`.
+Then each package uses the same copy of `@sqlbraid/core`.
+
 `@sqlbraid/postgres` 1.2.0 adds parameter type hints for the postgres.js and PGlite adapters.
 Use `sql.bind(value, postgresParameter.int8())` to set the type of one parameter.
 The `pg` and Neon adapters still reject every hint. See [parameter type hints](/SQLBraid/latest/concepts/parameter-hints.md).
