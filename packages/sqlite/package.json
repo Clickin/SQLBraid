@@ -57,9 +57,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:^1.1.0-rc.1",
-    "@sqlbraid/runtime": "workspace:^1.0.4-rc.1",
-    "@sqlbraid/template": "workspace:^1.0.4-rc.1"
+    "@sqlbraid/core": "workspace:^1.1.0",
+    "@sqlbraid/runtime": "workspace:^1.0.4",
+    "@sqlbraid/template": "workspace:^1.0.4"
   },
   "devDependencies": {
     "@sqlbraid/metadata": "workspace:^1.0.3"

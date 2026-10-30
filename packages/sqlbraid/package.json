@@ -1,6 +1,6 @@
 {
   "name": "sqlbraid",
-  "version": "2.0.0-rc.1",
+  "version": "2.0.0",
   "description": "SQLBraid's canonical SQL-first runtime package",
   "keywords": [
     "database",
@@ -36,9 +36,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:^1.1.0-rc.1",
-    "@sqlbraid/runtime": "workspace:^1.0.4-rc.1",
-    "@sqlbraid/template": "workspace:^1.0.4-rc.1"
+    "@sqlbraid/core": "workspace:^1.1.0",
+    "@sqlbraid/runtime": "workspace:^1.0.4",
+    "@sqlbraid/template": "workspace:^1.0.4"
   },
   "engines": {
     "node": ">=16.20.2"

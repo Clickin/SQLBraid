@@ -8,16 +8,6 @@ and [versioned support records](support/targets/).
 
 ## Unreleased
 
-### Release candidate
-
-- Prepare `sqlbraid` 2.0.0-rc.1 for the npm `next` tag.
-- Prepare its dependencies on `next`: `@sqlbraid/core` 1.1.0-rc.1,
-  `@sqlbraid/runtime` 1.0.4-rc.1 and `@sqlbraid/template` 1.0.4-rc.1.
-  Workspace references include these prerelease versions.
-- Approve core first, then runtime and template, then sqlbraid.
-  The staging gate requires each dependency to be public before it stages a dependent package.
-  These candidates do not change `latest`.
-
 ### Breaking changes
 
 - `sqlbraid`: remove hard dependencies on all seven dialect and adapter packages.

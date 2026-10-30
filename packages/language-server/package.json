@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@sqlbraid/compiler": "workspace:^1.1.0",
-    "@sqlbraid/core": "workspace:^1.1.0-rc.1",
+    "@sqlbraid/core": "workspace:^1.1.0",
     "@sqlbraid/metadata": "workspace:^1.0.3",
     "@sqlbraid/tooling": "workspace:^1.0.3",
     "vscode-languageserver": "9.0.1",
