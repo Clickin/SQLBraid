@@ -10,16 +10,16 @@
     "start": "next start"
   },
   "dependencies": {
-    "@sqlbraid/sqlite": "1.0.2",
+    "@sqlbraid/sqlite": "1.0.3",
     "@sqlbraid/template": "1.0.3",
-    "next": "16.4.0",
+    "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "0.0.1",
     "sqlbraid": "2.0.0"
   },
   "devDependencies": {
-    "@sqlbraid/webpack": "1.0.2",
+    "@sqlbraid/webpack": "1.0.3",
     "@types/node": "22.20.1",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

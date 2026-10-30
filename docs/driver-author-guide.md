@@ -96,6 +96,11 @@ dialect, placeholders or value encoding. A provider is a source of leases. It is
 not a physical executor. Keep opaque driver requests private to the adapter, for
 example in a `WeakMap<StatementBindingDescription, OpaqueRequest>`.
 
+Keep binding identity tied to the input statement, not to a copy made during validation.
+Applications can load more than one copy of `@sqlbraid/core`.
+Retain the validated snapshot for materialization, so later changes to an input cannot replace its bound values.
+Reject a description made for another input statement or adapter.
+
 The identity of a prepared shape is logical. It contains the result kind,
 canonical segments, dialect, ordered hints, directions, output names and the
 related procedure metadata. `$1`, `?`, `:1` and `@p1` are transport details. A

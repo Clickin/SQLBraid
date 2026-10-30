@@ -201,11 +201,13 @@ function validateTransactionOptions(options?: TransactionOptions): void {
 }
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedInputs = new WeakMap<StatementBindingDescription, RenderedStatement>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 
 export const nodeSqliteStatementBinding: StatementBindingAdapter = Object.freeze({
   id: "node-sqlite",
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+    const input = statement;
     statement = createRenderedStatement(statement);
     assertRoutineUnsupported(statement);
     assertRoutineParametersUnsupported(statement);
@@ -217,6 +219,7 @@ export const nodeSqliteStatementBinding: StatementBindingAdapter = Object.freeze
       reuse: { effective: "simple", owner: "driver" },
     });
     describedStatements.set(description, statement);
+    describedInputs.set(description, input);
     return description;
   },
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
@@ -255,16 +258,15 @@ function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
 ): { readonly text: string; readonly values: readonly unknown[] } {
-  statement = createRenderedStatement(statement);
   const description = binding ?? nodeSqliteStatementBinding.describe(statement, bindingContext(statement));
-  if (describedStatements.get(description) !== statement)
+  if (describedInputs.get(description) !== statement)
     throw new TypeError("BRAID_BINDING_IDENTITY: SQLite description belongs to another statement or adapter.");
   if (description.parameterizedSql === undefined) {
     throw new Error("BRAID_BIND_TRANSPORT: SQLite binding description did not provide parameterized SQL.");
   }
   return {
     text: description.parameterizedSql,
-    values: statement.parameters.map((parameter) => parameter.value),
+    values: describedStatements.get(description)!.parameters.map((parameter) => parameter.value),
   };
 }
 
@@ -404,6 +406,7 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
       const native = database.prepare(prepared);
       if (resultColumns(native).length > 0)
         throw new Error("BRAID_BULK_SHAPE: node:sqlite bulk requires a non-row statement.");
+      native.setReadBigInts?.(true);
       let affectedRows: number | undefined = 0;
       for (let index = 0; index < bulk.parameterSets.length; index += 1) {
         const result = native.run(...binding.valuesAt(index));

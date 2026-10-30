@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { builtinModules } from "node:module";
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
@@ -146,7 +146,12 @@ function packageName(specifier) {
 async function sourceFiles(directory) {
   const entries = await readdir(directory, { recursive: true, withFileTypes: true });
   return entries
-    .filter((entry) => entry.isFile() && /\.(?:[cm]?js|ts|mts|cts)$/u.test(entry.name))
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        /\.(?:[cm]?js|ts|mts|cts)$/u.test(entry.name) &&
+        !entry.parentPath.split(sep).includes("node_modules"),
+    )
     .map((entry) => join(entry.parentPath, entry.name));
 }
 

@@ -10,7 +10,7 @@ import { generateModels } from "@sqlbraid/codegen";
 import { hashSnapshot } from "@sqlbraid/metadata";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { UnsupportedFeatureError } from "@sqlbraid/core";
-import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { createNodeSqliteDatabase, createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";
 import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";
 import { sql, typePolicy as sqliteTypePolicy } from "@sqlbraid/sqlite";
 import { runW01 } from "../w01.js";
@@ -77,6 +77,30 @@ test("SQLite binding diagnostics preserve literal marker text through real execu
       marker: "$1 ? :1 @p1",
     });
     probe.verify("SELECT ? AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */");
+  } finally {
+    native.close();
+  }
+});
+
+test("SQLite executes foreign immutable statements without weakening binding identity", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    const executor = createNodeSqliteExecutor(native);
+    // This statement is not registered in this adapter's copy of core.
+    const statement = Object.freeze({
+      dialectId: "sqlite",
+      resultKind: "rows" as const,
+      segments: Object.freeze(["SELECT ", " AS value"]),
+      parameters: Object.freeze([Object.freeze({ value: "O'Reilly" })]),
+    });
+    const binding = executor.statementBinding.describe(statement, {
+      dialectId: "sqlite",
+      requestedReuse: "auto",
+    });
+    assert.deepEqual((await executor.query(statement, binding)).rows, [{ value: "O'Reilly" }]);
+    assert.deepEqual((await executor.query(statement)).rows, [{ value: "O'Reilly" }]);
+    await assert.rejects(async () => executor.query({ ...statement }, binding), /BRAID_BINDING_IDENTITY/);
+    await assert.rejects(async () => executor.query(statement, { ...binding }), /BRAID_BINDING_IDENTITY/);
   } finally {
     native.close();
   }

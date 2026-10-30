@@ -58,7 +58,10 @@ function assertPgRoutineCallContext(rendered: RenderedStatement): void {
   }
 }
 
-const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedStatements = new WeakMap<
+  StatementBindingDescription,
+  { readonly input: RenderedStatement; readonly statement: RenderedStatement; readonly hints: "reject" | "oid-types" }
+>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 const bindingContexts = new WeakMap<StatementBindingDescription, StatementBindingContext>();
 
@@ -78,6 +81,7 @@ function createPgStatementBinding(hints: "reject" | "oid-types"): StatementBindi
   return Object.freeze({
     id: "pg",
     describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+      const input = statement;
       statement = createRenderedStatement(statement);
       if (hasRefcursor(statement) && context.transactionScoped !== true) {
         throw unsupported(
@@ -95,7 +99,7 @@ function createPgStatementBinding(hints: "reject" | "oid-types"): StatementBindi
         placeholder: (index) => `$${index}`,
         reuse: { effective: "simple", owner: "driver" },
       });
-      describedStatements.set(description, statement);
+      describedStatements.set(description, { input, statement, hints });
       bindingContexts.set(description, context);
       return description;
     },
@@ -148,22 +152,25 @@ export function resolvePgBinding(
   binding: StatementBindingDescription | undefined,
   adapter: StatementBindingAdapter = pgStatementBinding,
 ): { readonly text: string; readonly values: readonly unknown[]; readonly paramTypes: readonly number[] | undefined } {
-  statement = createRenderedStatement(statement);
   const description =
     binding ??
     adapter.describe(statement, {
       dialectId: statement.dialectId,
       requestedReuse: defaultBindingContext.requestedReuse,
     });
-  if (describedStatements.get(description) !== statement)
+  const described = describedStatements.get(description);
+  if (
+    described?.input !== statement ||
+    described.hints !== (adapter === pgTypedStatementBinding ? "oid-types" : "reject")
+  )
     throw new TypeError("BRAID_BINDING_IDENTITY: PostgreSQL description belongs to another statement or adapter.");
   if (description.parameterizedSql === undefined) {
     throw new Error("BRAID_BIND_TRANSPORT: PostgreSQL binding description did not provide parameterized SQL.");
   }
   return {
     text: description.parameterizedSql,
-    values: statement.parameters.map((parameter) => parameter.value),
-    paramTypes: adapter === pgTypedStatementBinding ? postgresParameterTypeOids(statement) : undefined,
+    values: described.statement.parameters.map((parameter) => parameter.value),
+    paramTypes: adapter === pgTypedStatementBinding ? postgresParameterTypeOids(described.statement) : undefined,
   };
 }
 

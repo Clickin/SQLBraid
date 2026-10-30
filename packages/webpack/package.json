@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/webpack",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Webpack loader for SQLBraid guarded-template lowering",
   "keywords": [
     "compiler",

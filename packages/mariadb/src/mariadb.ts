@@ -434,13 +434,17 @@ function affectedRows(value: unknown): number | undefined {
   return count === undefined ? undefined : safeDatabaseCount(count);
 }
 
-const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedStatements = new WeakMap<
+  StatementBindingDescription,
+  { readonly input: RenderedStatement; readonly statement: RenderedStatement }
+>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 const bulkMatrices = new WeakMap<BulkBindingDescription, readonly (readonly unknown[])[]>();
 
 export const mariaDbStatementBinding: StatementBindingAdapter = Object.freeze({
   id: "mariadb",
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+    const input = statement;
     statement = createRenderedStatement(statement);
     assertRoutineOutputsUnsupported(statement);
     assertParameterHintsUnsupported(statement);
@@ -450,7 +454,7 @@ export const mariaDbStatementBinding: StatementBindingAdapter = Object.freeze({
       placeholder: () => "?",
       reuse: { effective: "reuse", owner: "driver" },
     });
-    describedStatements.set(description, statement);
+    describedStatements.set(description, { input, statement });
     return description;
   },
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
@@ -511,14 +515,14 @@ function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
 ): { readonly text: string; readonly values: readonly unknown[] } {
-  statement = createRenderedStatement(statement);
   const description =
     binding ??
     mariaDbStatementBinding.describe(statement, {
       dialectId: statement.dialectId,
       requestedReuse: defaultBindingContext.requestedReuse,
     });
-  if (describedStatements.get(description) !== statement) {
+  const described = describedStatements.get(description);
+  if (described?.input !== statement) {
     throw new TypeError("BRAID_BINDING_IDENTITY: MariaDB description belongs to another statement or adapter.");
   }
   if (description.parameterizedSql === undefined) {
@@ -526,7 +530,7 @@ function materialize(
   }
   return {
     text: description.parameterizedSql,
-    values: statement.parameters.map((parameter) => parameter.value),
+    values: described.statement.parameters.map((parameter) => parameter.value),
   };
 }
 

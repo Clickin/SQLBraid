@@ -336,11 +336,13 @@ function statementInput(text: string, values: readonly LibsqlValue[]): LibsqlSta
 }
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedInputs = new WeakMap<StatementBindingDescription, RenderedStatement>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 
 export const libsqlStatementBinding: StatementBindingAdapter = Object.freeze({
   id: "libsql",
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+    const input = statement;
     statement = createRenderedStatement(statement);
     assertRoutineUnsupported(statement);
     assertRoutineParametersUnsupported(statement);
@@ -353,6 +355,7 @@ export const libsqlStatementBinding: StatementBindingAdapter = Object.freeze({
       reuse: { effective: "simple", owner: "driver" },
     });
     describedStatements.set(description, statement);
+    describedInputs.set(description, input);
     return description;
   },
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
@@ -385,13 +388,12 @@ function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
 ): { readonly text: string; readonly values: readonly LibsqlValue[] } {
-  statement = createRenderedStatement(statement);
   const description = binding ?? libsqlStatementBinding.describe(statement, bindingContext(statement));
-  if (describedStatements.get(description) !== statement)
+  if (describedInputs.get(description) !== statement)
     throw new TypeError("BRAID_BINDING_IDENTITY: libSQL description belongs to another statement or adapter.");
   if (description.parameterizedSql === undefined)
     throw new Error("BRAID_BIND_TRANSPORT: libSQL binding description did not provide parameterized SQL.");
-  const values = statement.parameters.map((parameter) => parameter.value);
+  const values = describedStatements.get(description)!.parameters.map((parameter) => parameter.value);
   assertLibsqlValues(values);
   return { text: description.parameterizedSql, values };
 }
