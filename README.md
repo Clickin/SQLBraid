@@ -255,7 +255,7 @@ Install `sqlbraid`, the matching dialect or adapter package below, and your driv
 
 `sqlbraid` depends only on `@sqlbraid/core`, `@sqlbraid/runtime` and `@sqlbraid/template`, with no dialect or adapter peers. Install each package you use explicitly. Import `sql` and dialect hints from package roots, and factories from the adapter paths below.
 
-Version 2.0.0 of `sqlbraid` removes driver and dialect facade subpaths. Each first-party package keeps its own version line.
+Version 2.0.0 of `sqlbraid` removes driver and dialect facade subpaths. Each first-party package keeps its own version line. To upgrade from 1.x, read the [upgrade guide](https://clickin.github.io/SQLBraid/latest/release/upgrade-from-1x/).
 
 **Official** means CI tests that exact driver version and runtime against a real database; **Compatible** means the adapter follows the same API requirements without a pinned certified target.
 

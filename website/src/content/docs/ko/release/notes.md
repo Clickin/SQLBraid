@@ -12,6 +12,35 @@ description: SQLBraid 2.0.0 릴리스, 드라이버 직접 import, 기능 경계
 `2.0.0`이 되는 것은 `sqlbraid`뿐입니다. 다른 자체 패키지는 각자의 버전 계열을 유지합니다.
 패키지마다 따로 태그하고 따로 릴리스합니다. `sqlbraid`는 `v2.0.0`, 나머지는 `<package>-v<version>`입니다.
 
+### 패키지 버전
+
+`sqlbraid` 2.0.0과 함께 아래 버전 이상을 설치하세요.
+
+| 패키지                      | 버전  |
+| --------------------------- | ----- |
+| `sqlbraid`                  | 2.0.0 |
+| `@sqlbraid/core`            | 1.1.0 |
+| `@sqlbraid/runtime`         | 1.0.4 |
+| `@sqlbraid/template`        | 1.0.4 |
+| `@sqlbraid/compiler`        | 1.1.0 |
+| `@sqlbraid/cli`             | 1.1.0 |
+| `@sqlbraid/language-server` | 1.0.4 |
+| `@sqlbraid/migrate`         | 0.2.0 |
+| `@sqlbraid/webpack`         | 1.0.3 |
+| `@sqlbraid/postgres`        | 1.2.0 |
+| `@sqlbraid/mysql`           | 1.0.4 |
+| `@sqlbraid/mariadb`         | 1.0.3 |
+| `@sqlbraid/sqlite`          | 1.0.3 |
+| `@sqlbraid/oracle`          | 1.0.3 |
+| `@sqlbraid/mssql`           | 1.0.4 |
+| `@sqlbraid/bun-sql`         | 1.0.3 |
+
+VS Code 확장 버전은 0.2.0입니다.
+`@sqlbraid/codegen`, `@sqlbraid/metadata`, `@sqlbraid/opentelemetry`, `@sqlbraid/operations`, `@sqlbraid/tooling`, `@sqlbraid/vite`는 현재 버전을 유지합니다.
+
+설치한 `@sqlbraid/*` 방언·어댑터 패키지는 `sqlbraid`와 같은 설치 명령에서 함께 올리세요.
+그래야 모든 패키지가 같은 `@sqlbraid/core` 사본을 씁니다.
+
 `@sqlbraid/postgres` 1.2.0은 postgres.js와 PGlite 어댑터에 파라미터 타입 힌트를 추가합니다.
 `sql.bind(value, postgresParameter.int8())`처럼 파라미터 하나의 타입을 정하세요.
 `pg`와 Neon 어댑터는 계속 모든 힌트를 거부합니다. [파라미터 타입 힌트](/SQLBraid/concepts/parameter-hints/)를 보세요.

@@ -42,8 +42,10 @@ and [versioned support records](support/targets/).
 
   Only `sqlbraid` moves to `2.0.0`. Each other package keeps its own version line and is tagged and released on its own
   (`v2.0.0` for `sqlbraid`, `<package>-v<version>` for the others). Packages with changes in this release:
-  `@sqlbraid/core` 1.1.0, `@sqlbraid/compiler` 1.1.0, `@sqlbraid/cli` 1.1.0, `@sqlbraid/migrate` 0.2.0,
-  `@sqlbraid/postgres` 1.2.0, `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/bun-sql` 1.0.3, `@sqlbraid/language-server` 1.0.4, `@sqlbraid/mssql` 1.0.4 and the VS Code extension 0.2.0.
+  `@sqlbraid/core` 1.1.0, `@sqlbraid/runtime` 1.0.4, `@sqlbraid/template` 1.0.4, `@sqlbraid/compiler` 1.1.0,
+  `@sqlbraid/cli` 1.1.0, `@sqlbraid/language-server` 1.0.4, `@sqlbraid/migrate` 0.2.0, `@sqlbraid/webpack` 1.0.3,
+  `@sqlbraid/postgres` 1.2.0, `@sqlbraid/mysql` 1.0.4, `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/sqlite` 1.0.3,
+  `@sqlbraid/oracle` 1.0.3, `@sqlbraid/mssql` 1.0.4, `@sqlbraid/bun-sql` 1.0.3 and the VS Code extension 0.2.0.
   Query APIs and runtime behavior remain unchanged.
 
 - Update installation instructions for explicit dialect and driver dependencies.
@@ -55,15 +57,9 @@ and [versioned support records](support/targets/).
   Previously, a statement from another copy could fail with `BRAID_BINDING_IDENTITY` before database execution.
   SQLite, PostgreSQL, MySQL, MariaDB and Bun.SQL retain the input identity and the validated binding snapshot.
   Bindings from another statement or adapter still fail.
-- Prepare `@sqlbraid/sqlite` 1.0.3 for this fix. The published 1.0.2 cannot be replaced.
-  Release the corrected adapters before treating the 2.0 consumer combinations as ready.
-  Packed-consumer validation now executes a statement from a separate core installation.
 - `@sqlbraid/sqlite` 1.0.3: `node:sqlite` bulk reads 64-bit run results as bigint, as single commands already do.
   Previously, on Node.js 26.13, a bulk insert of a row ID above `Number.MAX_SAFE_INTEGER` failed with `RangeError`.
-- Prepare `@sqlbraid/webpack` 1.0.3 so that npm shows the current Next.js 16.4.3 validation table.
-- Update the test-only Next.js dependency and the Next.js example to 16.4.3.
-  This removes the security advisory that stopped the consumer gate.
-  Browser checks select the fixture result by ID, not every `pre` element in the development page.
+- Update the Next.js example to 16.4.3.
 
 ### Changed
 
