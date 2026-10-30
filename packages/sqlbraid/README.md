@@ -135,14 +135,14 @@ sql.rows<User>`
 // teamName = null,   onlyActive = false ->  SELECT u.id, u.name FROM users u ORDER BY ...
 ```
 
-- **Zero-build runtime execution & optional compiler:** All directives work at runtime without a build step. If you want to skip evaluating `${...}` expressions inside inactive `/*@braid if ...*/` branches (lazy evaluation), add the optional compiler plugin (`@sqlbraid/vite`, `@sqlbraid/webpack`, or `@sqlbraid/cli`). The compiler only wraps expressions in thunks; final SQL assembly still happens at runtime (see [What the compiler does](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/#what-the-compiler-does)).
+- **Zero-build runtime execution & optional compiler:** All directives work at runtime without a build step. If you want to skip evaluating `${...}` expressions inside inactive `/*@braid if ...*/` branches (lazy evaluation), add the optional compiler plugin (`@sqlbraid/vite`, `@sqlbraid/webpack`, or `@sqlbraid/cli`). The compiler only wraps expressions in thunks. Final SQL assembly still happens at runtime (see [What the compiler does](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid/#what-the-compiler-does)).
 - **Dynamic identifiers & SQL fragments:** When you need to compose SQL structure dynamically—table names, column lists, or reusable sub-clauses—use the explicit helpers `sql.ident`, `sql.list`, `sql.join`, and `sql.fragment` (see [Structural SQL fragments](https://clickin.github.io/SQLBraid/latest/concepts/structural-fragments/)).
 
 When you use the compiler, install `@sqlbraid/template` as a direct runtime dependency. Generated code imports its helpers.
 
 ## Result Declarations & Schema Validation
 
-You declare the expected result kind for every query: `sql.rows<T>` for row sets, `sql.command` for `INSERT`/`UPDATE`/`DELETE`, and `sql.call` for stored procedures. SQLBraid throws if the database returns a different result kind than declared (see [SQL tags and result kinds](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/)). `sql.rows<T>` is a TypeScript type declaration; to validate row fields and values at runtime, pass a Standard Schema.
+You declare the expected result kind for every query: `sql.rows<T>` for row sets, `sql.command` for `INSERT`/`UPDATE`/`DELETE`, and `sql.call` for stored procedures. SQLBraid throws if the database returns a different result kind than declared (see [SQL tags and result kinds](https://clickin.github.io/SQLBraid/latest/concepts/sql-tags/)). `sql.rows<T>` is a TypeScript type declaration. To validate row fields and values at runtime, pass a Standard Schema.
 
 **Standard Schema integration (for example Zod, Valibot or ArkType):**
 
@@ -189,7 +189,7 @@ const result = await db.tx(async (tx) =>
 console.log(result.resultSets[0].rows); // UserRow[]: [{ id: "1", name: "Ada" }]
 ```
 
-`RoutineCallResult<Output, Sets, ReturnValue>` declares the scalar `OUT` object type, the tuple of row types for each result set, and the return value type. Just like `sql.rows`, you can pass Standard Schemas to validate and transform each channel:
+`RoutineCallResult<Output, Sets, ReturnValue>` declares the scalar `OUT` object type, the tuple of row types for each result set, and the return value type. Like `sql.rows`, you can pass Standard Schemas to validate and transform each channel:
 
 ```ts
 import { postgresParameter, sql } from "@sqlbraid/postgres";
@@ -313,7 +313,7 @@ Every example project is integration-tested in CI against the packed release tar
 ## Requirements & Status
 
 - **Runtime requirements:** Runtime packages (`sqlbraid` and driver adapters) support Node.js 16.20.2 or newer (subject to each driver's own minimum Node version; `node:sqlite` and CLI/build tools require Node.js 22.18+). Active LTS releases are recommended.
-- **Current status:** `sqlbraid` and `@sqlbraid/*` 2.x. The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
+- **Current status:** `sqlbraid` 2.x. Each `@sqlbraid/*` package keeps its own version line. The public API is stable and follows Semantic Versioning (SemVer). See the [Release notes](https://clickin.github.io/SQLBraid/latest/release/notes/), [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations/), and [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap/).
 
 ## Development and AI Usage
 
