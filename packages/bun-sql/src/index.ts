@@ -73,7 +73,14 @@ function literal(value: unknown, dialect: BunSqlDialect): string | undefined {
   return undefined;
 }
 
-const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedStatements = new WeakMap<
+  StatementBindingDescription,
+  {
+    readonly input: RenderedStatement;
+    readonly statement: RenderedStatement;
+    readonly describe: StatementBindingAdapter["describe"];
+  }
+>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 const synthesizedTemplates = new Map<string, TemplateStringsArray>();
 const MAX_SYNTHESIZED_TEMPLATES = 64;
@@ -191,7 +198,7 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
       reuse: { effective: effectiveReuse, owner: "driver" },
       formatLiteral: (parameter) => literal(parameter.value, dialect),
     });
-    describedStatements.set(description, logical);
+    describedStatements.set(description, { input: statement, statement: logical, describe });
     return description;
   };
   return Object.freeze({
@@ -288,14 +295,18 @@ function assertStatementBinding(
   rendered: RenderedStatement,
   binding: StatementBindingDescription,
   dialect: BunSqlDialect,
-): void {
+  adapter: StatementBindingAdapter,
+): RenderedStatement {
+  const described = describedStatements.get(binding);
   if (
     binding.adapterId !== `bun-sql:${dialect}` ||
     binding.dialectId !== dialect ||
-    describedStatements.get(binding) !== rendered
+    described?.input !== rendered ||
+    described.describe !== adapter.describe
   ) {
     throw new TypeError("BRAID_BINDING_IDENTITY: Bun.SQL statement binding belongs to another statement or adapter.");
   }
+  return described.statement;
 }
 
 function assertBulkBinding(bulk: RenderedBulk, binding: BulkBindingDescription, dialect: BunSqlDialect): void {
@@ -437,13 +448,6 @@ function createExecutor(
       throw error;
     }
   };
-  const run = async <T>(rendered: RenderedStatement, binding: StatementBindingDescription): Promise<T> => {
-    assertDialect(rendered, dialect);
-    assertStatementSupported(rendered, dialect);
-    assertStatementBinding(rendered, binding, dialect);
-    const values = statementValues(rendered);
-    return executeNative<T>(nativeTemplate(rendered), values);
-  };
   const executor: QueryExecutor = {
     ownershipKey: client as object,
     statementBinding,
@@ -456,8 +460,12 @@ function createExecutor(
       assertExecutionSignal(options);
       const effectiveBinding =
         binding ?? statementBinding.describe(rendered, { dialectId: dialect, requestedReuse: "auto" });
-      const raw = await run<unknown>(rendered, effectiveBinding);
-      if (returnsRows(raw, rendered.segments.join("?"), dialect)) {
+      const statement = assertStatementBinding(rendered, effectiveBinding, dialect, statementBinding);
+      assertDialect(statement, dialect);
+      assertStatementSupported(statement, dialect);
+      const values = statementValues(statement);
+      const raw = await executeNative<unknown>(nativeTemplate(statement), values);
+      if (returnsRows(raw, statement.segments.join("?"), dialect)) {
         const rows = Object.freeze(raw.map((row) => normalizeRow(row, dialect)) as readonly Row[]);
         return Object.freeze({ kind: "rows", rows, rowCount: rows.length });
       }
@@ -468,7 +476,7 @@ function createExecutor(
       assertDialect(rendered, dialect);
       assertExecutionSignal(options);
       assertStatementSupported(rendered, dialect);
-      if (binding !== undefined) assertStatementBinding(rendered, binding, dialect);
+      if (binding !== undefined) assertStatementBinding(rendered, binding, dialect, statementBinding);
       return (async function* (): AsyncGenerator<Row> {
         unsupported(
           "statement.stream",
@@ -481,7 +489,7 @@ function createExecutor(
       assertDialect(rendered, dialect);
       assertExecutionSignal(options);
       assertStatementSupported(rendered, dialect);
-      if (binding !== undefined) assertStatementBinding(rendered, binding, dialect);
+      if (binding !== undefined) assertStatementBinding(rendered, binding, dialect, statementBinding);
       unsupported(
         "routine.call",
         "BRAID_CALL_UNSUPPORTED",

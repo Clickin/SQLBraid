@@ -414,12 +414,16 @@ function normalizeCommandHeader(value: object): CommandResult {
   return header as CommandResult;
 }
 
-const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedStatements = new WeakMap<
+  StatementBindingDescription,
+  { readonly input: RenderedStatement; readonly statement: RenderedStatement }
+>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 
 export const mysql2StatementBinding: StatementBindingAdapter = Object.freeze({
   id: "mysql2",
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+    const input = statement;
     statement = createRenderedStatement(statement);
     assertParameterHintsUnsupported(statement);
     const description = createStatementBindingDescription(statement, context, {
@@ -431,7 +435,7 @@ export const mysql2StatementBinding: StatementBindingAdapter = Object.freeze({
         owner: "driver",
       },
     });
-    describedStatements.set(description, statement);
+    describedStatements.set(description, { input, statement });
     return description;
   },
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
@@ -466,21 +470,21 @@ function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
 ): { readonly text: string; readonly values: readonly unknown[]; readonly simple: boolean } {
-  statement = createRenderedStatement(statement);
   const description =
     binding ??
     mysql2StatementBinding.describe(statement, {
       dialectId: statement.dialectId,
       requestedReuse: defaultBindingContext.requestedReuse,
     });
-  if (describedStatements.get(description) !== statement)
+  const described = describedStatements.get(description);
+  if (described?.input !== statement)
     throw new TypeError("BRAID_BINDING_IDENTITY: MySQL description belongs to another statement or adapter.");
   if (description.parameterizedSql === undefined) {
     throw new Error("BRAID_BIND_TRANSPORT: MySQL binding description did not provide parameterized SQL.");
   }
   return {
     text: description.parameterizedSql,
-    values: statement.parameters.map((parameter) => parameter.value),
+    values: described.statement.parameters.map((parameter) => parameter.value),
     simple: description.reuse.effective === "simple",
   };
 }

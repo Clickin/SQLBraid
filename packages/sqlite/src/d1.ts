@@ -182,11 +182,13 @@ function namesFromRaw(raw: readonly (readonly unknown[])[]): readonly string[] |
 }
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedInputs = new WeakMap<StatementBindingDescription, RenderedStatement>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 
 export const d1StatementBinding: StatementBindingAdapter = Object.freeze({
   id: "cloudflare-d1",
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+    const input = statement;
     statement = createRenderedStatement(statement);
     assertRoutineUnsupported(statement);
     assertRoutineParametersUnsupported(statement);
@@ -199,6 +201,7 @@ export const d1StatementBinding: StatementBindingAdapter = Object.freeze({
       reuse: { effective: "simple", owner: "driver" },
     });
     describedStatements.set(description, statement);
+    describedInputs.set(description, input);
     return description;
   },
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
@@ -226,14 +229,16 @@ function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
 ): { readonly text: string; readonly values: readonly unknown[] } {
-  statement = createRenderedStatement(statement);
   const description =
     binding ?? d1StatementBinding.describe(statement, { dialectId: statement.dialectId, requestedReuse: "auto" });
-  if (describedStatements.get(description) !== statement)
+  if (describedInputs.get(description) !== statement)
     throw new TypeError("BRAID_BINDING_IDENTITY: D1 description belongs to another statement or adapter.");
   if (description.parameterizedSql === undefined)
     throw new Error("BRAID_BIND_TRANSPORT: D1 binding description did not provide parameterized SQL.");
-  return { text: description.parameterizedSql, values: statement.parameters.map((parameter) => parameter.value) };
+  return {
+    text: description.parameterizedSql,
+    values: describedStatements.get(description)!.parameters.map((parameter) => parameter.value),
+  };
 }
 
 const d1Environment = Object.freeze<DriverEnvironment>({

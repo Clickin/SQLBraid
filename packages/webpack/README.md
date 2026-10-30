@@ -138,11 +138,10 @@ Turbopack rules and CLI flags can differ in older Next.js versions.
 | ---------------------- | -------------- | --------------------------------------------------------------------------- |
 | Webpack                | 5.111.1        | Packed TS/TSX build, execution, maps, watch rebuild                         |
 | Rspack                 | 2.2.8          | Same packed loader, TS/TSX build, execution, maps, watch rebuild            |
-| Next.js with Webpack   | 16.4.0         | Development edits, hydration, server SQLite, production build and execution |
-| Next.js with Turbopack | 16.4.0         | Same checks, original TS/TSX extensions, no `as` override                   |
+| Next.js with Webpack   | 16.4.3         | Development edits, hydration, server SQLite, production build and execution |
+| Next.js with Turbopack | 16.4.3         | Same checks, original TS/TSX extensions, no `as` override                   |
 
-The fixtures use TypeScript 5.9.3, ts-loader 9.6.2, React 19.3.0 and Node.js 24.21.0.
-The packed Webpack and Rspack build checks also pass on Node.js 22.18.0.
+The fixtures use TypeScript 5.9.3, ts-loader 9.6.2, React 19.3.0 and Node.js 22.18.0.
 They assert inactive-branch laziness, ordered single evaluation, lexical `this`, mapper identity and output types.
 The existing compiler and Vite regression tests remain part of unit validation.
 These bundler checks do not promote any runtime/driver capability certification.

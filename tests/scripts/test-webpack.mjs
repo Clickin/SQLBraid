@@ -217,16 +217,20 @@ async function serve(args, marker, edit) {
     const errors = [];
     page.on("pageerror", (error) => errors.push(error));
     await page.goto(url);
-    check(JSON.parse(await page.locator("pre").innerText()), marker);
-    assert.match(await page.locator("pre").innerText(), /42/);
+    check(JSON.parse(await page.locator("#query-result").innerText()), marker);
+    assert.match(await page.locator("#query-result").innerText(), /42/);
     await page.getByRole("button", { name: /^client:0:/ }).click();
     await page.getByRole("button", { name: "client:1:SELECT 1", exact: true }).waitFor();
     if (edit) {
       writeFileSync(queryPath, original.replace("initial", "updated"));
-      await page.waitForFunction(() => document.querySelector("pre")?.textContent?.includes("updated"), undefined, {
-        timeout: 60000,
-      });
-      check(JSON.parse(await page.locator("pre").innerText()), "updated");
+      await page.waitForFunction(
+        () => document.querySelector("#query-result")?.textContent?.includes("updated"),
+        undefined,
+        {
+          timeout: 60000,
+        },
+      );
+      check(JSON.parse(await page.locator("#query-result").innerText()), "updated");
     }
     assert.deepEqual(errors, []);
     for (const script of await page.locator("script[src]").evaluateAll((nodes) => nodes.map((node) => node.src))) {

@@ -225,11 +225,13 @@ function validateTransactionOptions(options?: TransactionOptions): void {
 }
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedInputs = new WeakMap<StatementBindingDescription, RenderedStatement>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 
 export const betterSqlite3StatementBinding: StatementBindingAdapter = Object.freeze({
   id: "better-sqlite3",
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+    const input = statement;
     statement = createRenderedStatement(statement);
     assertRoutineUnsupported(statement);
     assertRoutineParametersUnsupported(statement);
@@ -242,6 +244,7 @@ export const betterSqlite3StatementBinding: StatementBindingAdapter = Object.fre
       reuse: { effective: "simple", owner: "driver" },
     });
     describedStatements.set(description, statement);
+    describedInputs.set(description, input);
     return description;
   },
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
@@ -277,15 +280,14 @@ function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
 ): { readonly text: string; readonly values: readonly unknown[] } {
-  statement = createRenderedStatement(statement);
   const description = binding ?? betterSqlite3StatementBinding.describe(statement, bindingContext(statement));
-  if (describedStatements.get(description) !== statement) {
+  if (describedInputs.get(description) !== statement) {
     throw new TypeError("BRAID_BINDING_IDENTITY: better-sqlite3 description belongs to another statement or adapter.");
   }
   if (description.parameterizedSql === undefined) {
     throw new Error("BRAID_BIND_TRANSPORT: better-sqlite3 binding description did not provide parameterized SQL.");
   }
-  const values = statement.parameters.map((parameter) => parameter.value);
+  const values = describedStatements.get(description)!.parameters.map((parameter) => parameter.value);
   assertBetterSqlite3Values(values);
   return { text: description.parameterizedSql, values: values.map(toBetterSqlite3Value) };
 }

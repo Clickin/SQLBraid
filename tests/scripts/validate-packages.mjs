@@ -704,6 +704,9 @@ try {
   delete runtimeConsumerManifest.overrides["@sqlbraid/sqlite"];
   await writeFile(join(runtimeConsumer, "package.json"), JSON.stringify(runtimeConsumerManifest));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], runtimeConsumer);
+  await cp(join(runtimeConsumer, "node_modules/@sqlbraid/core"), join(runtimeConsumer, "foreign-core"), {
+    recursive: true,
+  });
   await writeFile(
     join(runtimeConsumer, "index.mjs"),
     [
@@ -711,14 +714,20 @@ try {
       'import { createDatabase } from "sqlbraid";',
       'import { DatabaseSync } from "node:sqlite";',
       'import { sql } from "@sqlbraid/sqlite";',
-      'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
+      'import { createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";',
+      'import { createRenderedStatement } from "./foreign-core/dist/index.js";',
       'assert.equal(typeof createDatabase, "function");',
       'const native = new DatabaseSync(":memory:");',
       "try {",
       '  native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");',
       '  native.prepare("INSERT INTO users (name) VALUES (?)").run("Ada");',
-      "  const db = createNodeSqliteDatabase(native);",
+      "  const executor = createNodeSqliteExecutor(native);",
+      "  const db = createDatabase(executor);",
       '  assert.deepEqual(await db.all(sql.rows`SELECT id, name FROM users`), [{ id: "1", name: "Ada" }]);',
+      '  const statement = createRenderedStatement({ dialectId: "sqlite", resultKind: "rows", segments: ["SELECT ", " AS value"], parameters: [{ value: "foreign core" }] });',
+      '  const binding = executor.statementBinding.describe(statement, { dialectId: "sqlite", requestedReuse: "auto" });',
+      '  assert.deepEqual((await executor.query(statement, binding)).rows, [{ value: "foreign core" }]);',
+      "  await assert.rejects(async () => executor.query({ ...statement }, binding), /BRAID_BINDING_IDENTITY/);",
       "} finally { native.close(); }",
     ].join("\n"),
   );

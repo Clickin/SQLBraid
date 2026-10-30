@@ -52,6 +52,35 @@ test("positional executors reject stale and forged descriptions before physical 
   assert.equal(ioCalls, 0);
 });
 
+test("positional executors preserve foreign statement bindings through driver failures", async () => {
+  const driverError = new Error("driver failure after binding");
+  let ioCalls = 0;
+  const io = () => {
+    ioCalls += 1;
+    throw driverError;
+  };
+  const executors = [
+    createPgExecutor({ query: io, escapeIdentifier: io, escapeLiteral: io }),
+    createMysql2Executor({ execute: io, beginTransaction: io, commit: io, rollback: io }),
+    createNodeSqliteExecutor({ prepare: io }),
+  ];
+  for (const [index, dialectId] of ["postgres", "mysql", "sqlite"].entries()) {
+    const executor = executors[index]!;
+    const statement = Object.freeze({
+      dialectId,
+      resultKind: "rows" as const,
+      segments: Object.freeze(["SELECT ", ""]),
+      parameters: Object.freeze([Object.freeze({ value: 1 })]),
+    });
+    const binding = executor.statementBinding.describe(statement, { dialectId, requestedReuse: "auto" });
+    await assert.rejects(
+      async () => executor.query(statement, binding),
+      (error) => error === driverError,
+    );
+  }
+  assert.equal(ioCalls, executors.length);
+});
+
 const fixtures: Fixture[] = [
   {
     name: "pg unsupported hint",

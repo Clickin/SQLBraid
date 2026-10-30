@@ -11,7 +11,7 @@
     "start": "node .output/server/index.mjs"
   },
   "dependencies": {
-    "@sqlbraid/sqlite": "1.0.2",
+    "@sqlbraid/sqlite": "1.0.3",
     "@sqlbraid/template": "1.0.3",
     "@tanstack/react-router": "1.170.36",
     "@tanstack/react-start": "1.168.53",
