@@ -10,6 +10,7 @@ export const dialect: Dialect = {
     supportsNestedBlockComments: true,
     supportsDollarQuotes: true,
     backslashEscapes: false,
+    supportsEscapeStrings: true,
   },
 };
 

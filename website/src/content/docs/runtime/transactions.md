@@ -43,6 +43,12 @@ runtime does not reject it. With a pool of one connection or a direct executor,
 that work waits for the transaction and can deadlock. Give the callback handle to
 such work, or finish the work before the callback returns.
 
+On Cloudflare Workers, the runtime gets this async context from
+`node:async_hooks`. Enable the `nodejs_compat` compatibility flag. Without the
+flag, root work on a `db` handle fails with `BRAID_TX_SCOPE` while a transaction
+on that handle is open, even if the work comes from a different request. If you
+cannot enable the flag, create one `db` handle for each request.
+
 When the executor advertises `transaction.savepoint`, nested `tx` calls use
 savepoints:
 

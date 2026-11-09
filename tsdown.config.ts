@@ -68,6 +68,7 @@ export default defineConfig([
       "async-context": "src/async-context.ts",
       "async-context.node": "src/async-context.node.ts",
       "async-context.browser": "src/async-context.browser.ts",
+      "async-context.workerd": "src/async-context.workerd.ts",
     }),
     deps: { neverBundle: ["#async-context"] },
   },

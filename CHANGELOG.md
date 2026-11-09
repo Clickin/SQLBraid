@@ -43,6 +43,15 @@ and [versioned support records](support/targets/).
 
 ### Fixed
 
+- `@sqlbraid/runtime` 1.0.4: on Cloudflare Workers with `nodejs_compat`, an open transaction no longer blocks root work
+  from other requests on the same `db`. Previously, a bundler that sets both the `workerd` and `browser` conditions
+  selected the browser backend, and that work failed with `BRAID_TX_SCOPE`. Without the flag, the behavior does not change.
+- `@sqlbraid/template` 1.0.4: `/*@braid set*/`, `where` and `trim` read SQL text with the rules of the dialect.
+  Previously, a PostgreSQL string that ends in a backslash, a dollar-quoted string, a SQL Server bracket identifier or an
+  Oracle q-quote could keep a trailing comma and produce a syntax error.
+- `@sqlbraid/core` 1.1.0: `DialectLexicalProfile` adds `supportsEscapeStrings`. The PostgreSQL and Bun.SQL PostgreSQL
+  profiles set it, so the template parser, the compiler and `RETURNING` detection read `E'...'` backslash escapes.
+  Previously, a directive marker or an interpolation after `\'` in such a string was read as SQL code.
 - Keep adapter binding identity when an application loads more than one copy of `@sqlbraid/core`.
   Previously, a statement from another copy could fail with `BRAID_BINDING_IDENTITY` before database execution.
   SQLite, PostgreSQL, MySQL, MariaDB and Bun.SQL retain the input identity and the validated binding snapshot.

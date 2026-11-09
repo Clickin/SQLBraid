@@ -13,6 +13,8 @@ export interface DialectLexicalProfile {
   readonly supportsBracketIdentifiers?: boolean;
   readonly supportsOracleQQuotes?: boolean;
   readonly backslashEscapes?: boolean;
+  /** An E or e directly before a single quote starts a string with backslash escapes (PostgreSQL). */
+  readonly supportsEscapeStrings?: boolean;
 }
 
 /** SQL dialect boundary: identifier quoting plus lexical behavior used by template parsing and trimming. */
