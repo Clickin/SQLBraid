@@ -86,6 +86,11 @@ such a queue runs on a different connection, outside the transaction, and the
 runtime does not reject it. With a pool of one connection or a direct executor,
 that work waits for the transaction and can deadlock. Give the callback handle to
 such work, or finish the work before the callback returns.</p>
+<p>On Cloudflare Workers, the runtime gets this async context from
+<code dir="auto">node:async_hooks</code>. Enable the <code dir="auto">nodejs_compat</code> compatibility flag. Without the
+flag, root work on a <code dir="auto">db</code> handle fails with <code dir="auto">BRAID_TX_SCOPE</code> while a transaction
+on that handle is open, even if the work comes from a different request. If you
+cannot enable the flag, create one <code dir="auto">db</code> handle for each request.</p>
 <p>When the executor advertises <code dir="auto">transaction.savepoint</code>, nested <code dir="auto">tx</code> calls use
 savepoints:</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="ts"><code><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">await</span><span style="--0:#D6DEEB;--1:#403F53"> db</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">tx</span><span style="--0:#D6DEEB;--1:#403F53">(</span><span style="--0:#C792EA;--1:#8844AE">async</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#D9F5DD;--1:#111111">(</span><span style="--0:#D7DBE0;--1:#403F53">tx</span><span style="--0:#D9F5DD;--1:#111111">)</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#C792EA;--1:#8844AE">=&gt;</span><span style="--0:#D6DEEB;--1:#403F53"> {</span></div></div><div class="ec-line"><div class="code"><span class="indent">  </span><span style="--0:#C792EA;--1:#8844AE">await</span><span style="--0:#D6DEEB;--1:#403F53"> tx</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">execute</span><span style="--0:#D6DEEB;--1:#403F53">(first);</span></div></div><div class="ec-line"><div class="code"><span class="indent">  </span><span style="--0:#C792EA;--1:#8844AE">await</span><span style="--0:#D6DEEB;--1:#403F53"> tx</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">tx</span><span style="--0:#D6DEEB;--1:#403F53">(</span><span style="--0:#C792EA;--1:#8844AE">async</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#D9F5DD;--1:#111111">(</span><span style="--0:#D7DBE0;--1:#403F53">nested</span><span style="--0:#D9F5DD;--1:#111111">)</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#C792EA;--1:#8844AE">=&gt;</span><span style="--0:#D6DEEB;--1:#403F53"> {</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#C792EA;--1:#8844AE">await</span><span style="--0:#D6DEEB;--1:#403F53"> nested</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">execute</span><span style="--0:#D6DEEB;--1:#403F53">(second);</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#919F9F;--1:#5D6376">// Throwing here rolls back this savepoint.</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#D6DEEB;--1:#403F53">  </span></span><span style="--0:#D6DEEB;--1:#403F53">});</span></div></div><div class="ec-line"><div class="code"><span style="--0:#D6DEEB;--1:#403F53">});</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="await db.tx(async (tx) => {  await tx.execute(first);  await tx.tx(async (nested) => {    await nested.execute(second);    // Throwing here rolls back this savepoint.  });});"><div></div></button></div></figure></div>
@@ -106,12 +111,50 @@ pooled operations acquire, execute, release and then map materialized results.</
 <li>If the session primitive is unavailable, the call rejects with
 <code dir="auto">BRAID_SESSION_UNSUPPORTED</code>.</li>
 </ul>
-<p>SQLBraid does not reset the session state of a connection when it releases a
-pool lease. Session state includes a transaction that a <code dir="auto">BEGIN</code> outside <code dir="auto">db.tx</code>
-opened, <code dir="auto">SET ROLE</code>, <code dir="auto">SET search_path</code>, session variables and temporary tables.
-The next operation that gets the connection sees that state. Use <code dir="auto">db.tx</code> for
+<p>By default, SQLBraid does not reset the session state of a connection when it
+releases a pool lease. Session state includes a transaction that a <code dir="auto">BEGIN</code>
+outside <code dir="auto">db.tx</code> opened, <code dir="auto">SET ROLE</code>, <code dir="auto">SET search_path</code>, session variables and
+temporary tables. The next operation that gets the connection sees that state.
+The application owns the session state that it changes. Use <code dir="auto">db.tx</code> for
 transactions. Undo other session state before the session callback or the
 operation ends, so that it cannot reach a different request or tenant.</p>
+<p>To reset each connection when it returns to the pool, turn on one of these
+options:</p>
+<table>
+<thead>
+<tr>
+<th>Driver</th>
+<th>Option</th>
+<th>Where to set it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code dir="auto">pg</code></td>
+<td><code dir="auto">resetOnRelease: true</code></td>
+<td><code dir="auto">createPgPoolDatabase</code> or <code dir="auto">createPgPoolProvider</code> from <code dir="auto">@sqlbraid/postgres/pg</code></td>
+</tr>
+<tr>
+<td>mysql2</td>
+<td><code dir="auto">resetOnRelease: true</code></td>
+<td>The <code dir="auto">createPool</code> options of mysql2</td>
+</tr>
+<tr>
+<td>mariadb</td>
+<td><code dir="auto">resetAfterUse: true</code></td>
+<td>The <code dir="auto">createPool</code> options of mariadb</td>
+</tr>
+</tbody>
+</table>
+<p>The mysql2 and mariadb options belong to the driver. The mariadb reset needs a
+MariaDB server at 10.2.22 or later on the 10.2 line, or at 10.3.13 or later. On
+other servers, the driver only rolls back.</p>
+<p>The <code dir="auto">pg</code> option runs <code dir="auto">DISCARD ALL</code> before SQLBraid releases the lease. If the
+reset fails, SQLBraid discards the connection and the completed operation stays
+successful. For example, <code dir="auto">DISCARD ALL</code> fails while a <code dir="auto">BEGIN</code> outside <code dir="auto">db.tx</code> is
+still open.</p>
+<p>Each reset adds one round trip to each lease. <code dir="auto">DISCARD ALL</code> also drops the
+prepared statements of the session, so the next use prepares them again.</p>
 <p>Close the stream of a session before you call <code dir="auto">session.tx(...)</code>. An overlapping
 transaction rejects with <code dir="auto">BRAID_STREAM_SCOPE</code> before <code dir="auto">BEGIN</code>. It does not wait
 for the stream and does not acquire another lease. If you wrap a transaction in
