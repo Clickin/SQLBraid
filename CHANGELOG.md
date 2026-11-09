@@ -33,7 +33,7 @@ and [versioned support records](support/targets/).
   Only `sqlbraid` moves to `2.0.0`. Each other package keeps its own version line and is tagged and released on its own
   (`v2.0.0` for `sqlbraid`, `<package>-v<version>` for the others). Packages with changes in this release:
   `@sqlbraid/core` 1.1.0, `@sqlbraid/runtime` 1.0.4, `@sqlbraid/template` 1.0.4, `@sqlbraid/compiler` 1.1.0,
-  `@sqlbraid/cli` 1.1.0, `@sqlbraid/language-server` 1.0.4, `@sqlbraid/migrate` 0.2.0, `@sqlbraid/webpack` 1.0.3,
+  `@sqlbraid/cli` 1.1.0, `@sqlbraid/language-server` 1.0.4, `@sqlbraid/tooling` 1.0.4, `@sqlbraid/migrate` 0.2.0, `@sqlbraid/webpack` 1.0.3,
   `@sqlbraid/postgres` 1.2.0, `@sqlbraid/mysql` 1.0.4, `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/sqlite` 1.0.3,
   `@sqlbraid/oracle` 1.0.3, `@sqlbraid/mssql` 1.0.4, `@sqlbraid/bun-sql` 1.0.3 and the VS Code extension 0.2.0.
   Query APIs and runtime behavior remain unchanged.
@@ -50,7 +50,8 @@ and [versioned support records](support/targets/).
   Previously, a PostgreSQL string that ends in a backslash, a dollar-quoted string, a SQL Server bracket identifier or an
   Oracle q-quote could keep a trailing comma and produce a syntax error.
 - `@sqlbraid/core` 1.1.0: `DialectLexicalProfile` adds `supportsEscapeStrings`. The PostgreSQL and Bun.SQL PostgreSQL
-  profiles set it, so the template parser, the compiler and `RETURNING` detection read `E'...'` backslash escapes.
+  profiles set it, so the template parser, the compiler, `RETURNING` detection and `@sqlbraid/tooling` 1.0.4 read
+  `E'...'` backslash escapes.
   Previously, a directive marker or an interpolation after `\'` in such a string was read as SQL code.
 - Keep adapter binding identity when an application loads more than one copy of `@sqlbraid/core`.
   Previously, a statement from another copy could fail with `BRAID_BINDING_IDENTITY` before database execution.

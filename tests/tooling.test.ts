@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { discoverQueries } from "@sqlbraid/compiler";
 import { createLanguageService } from "@sqlbraid/tooling";
 import type { CodegenResult } from "@sqlbraid/codegen";
 import type { MetadataSnapshot } from "@sqlbraid/metadata";
+import { lexicalQuery } from "../packages/tooling/src/lexical.js";
 import { normalizeIdentifier } from "../packages/tooling/src/service.js";
 
 const users = {
@@ -380,4 +382,24 @@ test("query symbols and complete routine signature evidence stay bounded", () =>
   assert.equal(signature?.parameters.length, 1);
   assert.equal(signature?.activeParameter, 0);
   assert.equal(service.signatureHelp(source, "symbols.ts", source.indexOf(" FROM")), undefined);
+});
+
+test("dialect lexical tooling: a PostgreSQL escape string hides relations after an escaped quote", () => {
+  const source =
+    "import { sql } from '@sqlbraid/postgres'; const q = sql`SELECT E'it\\\\'s FROM secrets' AS v FROM users`;";
+  const query = discoverQueries(source, "escape.ts", { moduleSpecifier: "@sqlbraid/postgres" }).queries[0];
+  assert.ok(query !== undefined);
+  const relations = (options: Parameters<typeof lexicalQuery>[2]) =>
+    lexicalQuery(query, source, options).relationUses.map((use) => use.tokens.map((token) => token.text).join("."));
+  assert.deepEqual(relations({ metadata }), ["users"]);
+  assert.ok(
+    relations({
+      metadata,
+      dialect: {
+        id: "postgres",
+        quoteIdentifier: (identifier) => `"${identifier}"`,
+        lexicalProfile: { lineCommentPrefixes: ["--"], supportsDollarQuotes: true, backslashEscapes: false },
+      },
+    }).includes("secrets"),
+  );
 });
