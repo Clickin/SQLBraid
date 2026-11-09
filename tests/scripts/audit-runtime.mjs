@@ -82,7 +82,10 @@ export async function auditRuntime(
       }
       function visit(node) {
         if (ts.isIdentifier(node)) {
-          if (["__dirname", "__filename", "NodeJS", "process"].includes(node.text))
+          // Reviewed: the Workers backend reads globalThis.process?.getBuiltinModule so that it can load without nodejs_compat.
+          const reviewedProcess =
+            node.text === "process" && name === "runtime" && /^async-context\.workerd\.(?:ts|js)$/u.test(relativePath);
+          if (["__dirname", "__filename", "NodeJS", "process"].includes(node.text) && !reviewedProcess)
             fail(node, `Unreviewed Node assumption: ${node.text}`);
           if (node.text === "Buffer" && (!bufferImport || entry.name.endsWith(".d.ts")))
             fail(node, "Global/public Buffer is not portable");
