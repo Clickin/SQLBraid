@@ -25,6 +25,7 @@ description: SQLBraid 2.0.0 릴리스, 드라이버 직접 import, 기능 경계
 | `@sqlbraid/compiler`        | 1.1.0 |
 | `@sqlbraid/cli`             | 1.1.0 |
 | `@sqlbraid/language-server` | 1.0.4 |
+| `@sqlbraid/tooling`         | 1.0.4 |
 | `@sqlbraid/migrate`         | 0.2.0 |
 | `@sqlbraid/webpack`         | 1.0.3 |
 | `@sqlbraid/postgres`        | 1.2.0 |
@@ -36,7 +37,7 @@ description: SQLBraid 2.0.0 릴리스, 드라이버 직접 import, 기능 경계
 | `@sqlbraid/bun-sql`         | 1.0.3 |
 
 VS Code 확장 버전은 0.2.0입니다.
-`@sqlbraid/codegen`, `@sqlbraid/metadata`, `@sqlbraid/opentelemetry`, `@sqlbraid/operations`, `@sqlbraid/tooling`, `@sqlbraid/vite`는 현재 버전을 유지합니다.
+`@sqlbraid/codegen`, `@sqlbraid/metadata`, `@sqlbraid/opentelemetry`, `@sqlbraid/operations`, `@sqlbraid/vite`는 현재 버전을 유지합니다.
 
 설치한 `@sqlbraid/*` 방언·어댑터 패키지는 `sqlbraid`와 같은 설치 명령에서 함께 올리세요.
 그래야 모든 패키지가 같은 `@sqlbraid/core` 사본을 씁니다.

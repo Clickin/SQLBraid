@@ -6,7 +6,7 @@ command and the diff since the previous tag as the GitHub Release. Detailed beha
 the [public API audit](docs/public-api-audit.md), [current release notes](website/src/content/docs/release/notes.md),
 and [versioned support records](support/targets/).
 
-## Unreleased
+## 2.0.0
 
 ### Breaking changes
 
@@ -33,7 +33,7 @@ and [versioned support records](support/targets/).
   Only `sqlbraid` moves to `2.0.0`. Each other package keeps its own version line and is tagged and released on its own
   (`v2.0.0` for `sqlbraid`, `<package>-v<version>` for the others). Packages with changes in this release:
   `@sqlbraid/core` 1.1.0, `@sqlbraid/runtime` 1.0.4, `@sqlbraid/template` 1.0.4, `@sqlbraid/compiler` 1.1.0,
-  `@sqlbraid/cli` 1.1.0, `@sqlbraid/language-server` 1.0.4, `@sqlbraid/migrate` 0.2.0, `@sqlbraid/webpack` 1.0.3,
+  `@sqlbraid/cli` 1.1.0, `@sqlbraid/language-server` 1.0.4, `@sqlbraid/tooling` 1.0.4, `@sqlbraid/migrate` 0.2.0, `@sqlbraid/webpack` 1.0.3,
   `@sqlbraid/postgres` 1.2.0, `@sqlbraid/mysql` 1.0.4, `@sqlbraid/mariadb` 1.0.3, `@sqlbraid/sqlite` 1.0.3,
   `@sqlbraid/oracle` 1.0.3, `@sqlbraid/mssql` 1.0.4, `@sqlbraid/bun-sql` 1.0.3 and the VS Code extension 0.2.0.
   Query APIs and runtime behavior remain unchanged.
@@ -43,6 +43,16 @@ and [versioned support records](support/targets/).
 
 ### Fixed
 
+- `@sqlbraid/runtime` 1.0.4: on Cloudflare Workers with `nodejs_compat`, an open transaction no longer blocks root work
+  from other requests on the same `db`. Previously, a bundler that sets both the `workerd` and `browser` conditions
+  selected the browser backend, and that work failed with `BRAID_TX_SCOPE`. Without the flag, the behavior does not change.
+- `@sqlbraid/template` 1.0.4: `/*@braid set*/`, `where` and `trim` read SQL text with the rules of the dialect.
+  Previously, a PostgreSQL string that ends in a backslash, a dollar-quoted string, a SQL Server bracket identifier or an
+  Oracle q-quote could keep a trailing comma and produce a syntax error.
+- `@sqlbraid/core` 1.1.0: `DialectLexicalProfile` adds `supportsEscapeStrings`. The PostgreSQL and Bun.SQL PostgreSQL
+  profiles set it, so the template parser, the compiler, `RETURNING` detection and `@sqlbraid/tooling` 1.0.4 read
+  `E'...'` backslash escapes.
+  Previously, a directive marker or an interpolation after `\'` in such a string was read as SQL code.
 - Keep adapter binding identity when an application loads more than one copy of `@sqlbraid/core`.
   Previously, a statement from another copy could fail with `BRAID_BINDING_IDENTITY` before database execution.
   SQLite, PostgreSQL, MySQL, MariaDB and Bun.SQL retain the input identity and the validated binding snapshot.
@@ -69,6 +79,9 @@ and [versioned support records](support/targets/).
 
 ### Added
 
+- `@sqlbraid/postgres` 1.2.0: the `resetOnRelease` option of `createPgPoolDatabase` and `createPgPoolProvider`.
+  It runs `DISCARD ALL` before each lease returns to the pool. It is off by default. A failed reset discards the
+  connection.
 - `@sqlbraid/postgres` 1.2.0: parameter type hints for the postgres.js and PGlite adapters. A hint sets the type OID
   of one parameter in the Parse message. New factories: `postgresParameter.boolean`, `int2`, `int4`, `int8`, `float4`,
   `float8`, `numeric`, `text`, `varchar`, `uuid`, `bytea`, `date`, `time`, `timestamptz` and `interval`.

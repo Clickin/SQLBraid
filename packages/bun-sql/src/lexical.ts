@@ -16,6 +16,7 @@ export const LEXICAL_PROFILES: Record<BunSqlDialect, DialectLexicalProfile> = {
     supportsNestedBlockComments: true,
     supportsDollarQuotes: true,
     backslashEscapes: false,
+    supportsEscapeStrings: true,
   },
   mysql: MYSQL_LEXICAL_PROFILE,
   mariadb: MYSQL_LEXICAL_PROFILE,
@@ -84,6 +85,12 @@ export function hasSqlKeyword(text: string, target: string, profile: DialectLexi
       (character === "[" && profile.supportsBracketIdentifiers)
     ) {
       const quote = character === "[" ? "]" : character;
+      const backslashEscapes =
+        profile.backslashEscapes === true ||
+        (profile.supportsEscapeStrings === true &&
+          character === "'" &&
+          /[eE]/u.test(text[index - 1] ?? "") &&
+          !/[A-Za-z0-9_$\u0080-\uffff]/u.test(text[index - 2] ?? ""));
       index += 1;
       while (index < text.length) {
         if (text[index] === quote) {
@@ -94,7 +101,7 @@ export function hasSqlKeyword(text: string, target: string, profile: DialectLexi
           index += 1;
           break;
         }
-        if (text[index] === "\\" && profile.backslashEscapes && quote !== "]" && index + 1 < text.length) index += 2;
+        if (text[index] === "\\" && backslashEscapes && quote !== "]" && index + 1 < text.length) index += 2;
         else index += 1;
       }
       continue;

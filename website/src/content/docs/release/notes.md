@@ -27,6 +27,7 @@ Install these versions, or later versions, together with `sqlbraid` 2.0.0:
 | `@sqlbraid/compiler`        | 1.1.0   |
 | `@sqlbraid/cli`             | 1.1.0   |
 | `@sqlbraid/language-server` | 1.0.4   |
+| `@sqlbraid/tooling`         | 1.0.4   |
 | `@sqlbraid/migrate`         | 0.2.0   |
 | `@sqlbraid/webpack`         | 1.0.3   |
 | `@sqlbraid/postgres`        | 1.2.0   |
@@ -38,7 +39,7 @@ Install these versions, or later versions, together with `sqlbraid` 2.0.0:
 | `@sqlbraid/bun-sql`         | 1.0.3   |
 
 The VS Code extension version is 0.2.0.
-`@sqlbraid/codegen`, `@sqlbraid/metadata`, `@sqlbraid/opentelemetry`, `@sqlbraid/operations`, `@sqlbraid/tooling` and `@sqlbraid/vite` keep their current versions.
+`@sqlbraid/codegen`, `@sqlbraid/metadata`, `@sqlbraid/opentelemetry`, `@sqlbraid/operations` and `@sqlbraid/vite` keep their current versions.
 
 Upgrade each installed `@sqlbraid/*` dialect or adapter package in the same install as `sqlbraid`.
 Then each package uses the same copy of `@sqlbraid/core`.

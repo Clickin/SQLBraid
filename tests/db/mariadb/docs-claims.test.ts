@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import mariadb, { type Connection } from "mariadb";
 import { inject } from "vitest";
-import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
+import { createMariaDbDatabase, createMariaDbPoolDatabase } from "@sqlbraid/mariadb/mariadb";
 import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
 import type { Database } from "@sqlbraid/core";
 import { assertCode, bulkModeObserver, docsClaim, errorCode } from "../docs-claims.js";
@@ -117,3 +117,30 @@ docsClaim("runtime/streaming.md", "the MariaDB native stream yields all rows", (
     assert.equal(count, 2);
   }),
 );
+
+async function tenantAfterRelease(resetAfterUse: boolean): Promise<string | null> {
+  const uri = new URL(inject("mariadb").connectionUri);
+  const pool = mariadb.createPool({
+    host: uri.hostname,
+    port: Number(uri.port || 3306),
+    user: decodeURIComponent(uri.username),
+    password: decodeURIComponent(uri.password),
+    database: decodeURIComponent(uri.pathname.slice(1)),
+    connectionLimit: 1,
+    resetAfterUse,
+    ...MARIADB_LOSSLESS_TEXT.connectionOptions,
+  });
+  try {
+    const db = createMariaDbPoolDatabase(pool, { profile: MARIADB_LOSSLESS_TEXT });
+    await db.execute(sql.command`SET @docs_tenant = 'a'`);
+    const row = await db.one(sql.rows<{ tenant: string | null }>`SELECT @docs_tenant AS tenant`);
+    return row.tenant;
+  } finally {
+    await pool.end();
+  }
+}
+
+docsClaim("runtime/transactions.md", "the mariadb resetAfterUse pool option clears session state", async () => {
+  assert.equal(await tenantAfterRelease(false), "a");
+  assert.equal(await tenantAfterRelease(true), null);
+});

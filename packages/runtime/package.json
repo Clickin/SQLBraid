@@ -25,10 +25,10 @@
   "imports": {
     "#async-context": {
       "types": "./dist/async-context.d.ts",
+      "workerd": "./dist/async-context.workerd.js",
+      "deno": "./dist/async-context.node.js",
       "browser": "./dist/async-context.browser.js",
       "node": "./dist/async-context.node.js",
-      "workerd": "./dist/async-context.node.js",
-      "deno": "./dist/async-context.node.js",
       "default": "./dist/async-context.browser.js"
     }
   },

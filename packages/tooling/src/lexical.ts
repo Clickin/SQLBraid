@@ -256,6 +256,7 @@ function markLexicalProtection(
   let state: "code" | "line" | "block" | "single" | "dollar" = "code";
   let depth = 0;
   let dollar = "";
+  let escapeString = false;
   const setProtected = (start: number, end: number): void => {
     for (let position = start; position < end; position += 1) code[position] = false;
   };
@@ -288,7 +289,7 @@ function markLexicalProtection(
     }
     if (state === "single") {
       setProtected(index, index + 1);
-      if (current === "\\" && profile.backslashEscapes !== false) {
+      if (current === "\\" && (profile.backslashEscapes !== false || escapeString)) {
         setProtected(index + 1, index + 2);
         index += 2;
         continue;
@@ -346,6 +347,10 @@ function markLexicalProtection(
     }
     if (current === "'") {
       setProtected(index, index + 1);
+      escapeString =
+        profile.supportsEscapeStrings === true &&
+        /[eE]/u.test(text[index - 1] ?? "") &&
+        !/[\p{L}\p{N}_$]/u.test(text[index - 2] ?? "");
       state = "single";
       index += 1;
       continue;
@@ -504,6 +509,7 @@ function profileFor(moduleSpecifier: string, options: LanguageServiceOptions): D
       supportsBracketIdentifiers: configured.supportsBracketIdentifiers ?? false,
       supportsOracleQQuotes: configured.supportsOracleQQuotes ?? false,
       backslashEscapes: configured.backslashEscapes ?? false,
+      supportsEscapeStrings: configured.supportsEscapeStrings ?? false,
     };
   const dialect = queryDialect(moduleSpecifier, options);
   if (dialect === "mysql" || dialect === "mariadb")
@@ -556,6 +562,7 @@ function profileFor(moduleSpecifier: string, options: LanguageServiceOptions): D
     supportsBracketIdentifiers: false,
     supportsOracleQQuotes: false,
     backslashEscapes: false,
+    supportsEscapeStrings: true,
   };
 }
 export function metadataEvidence(options: LanguageServiceOptions): readonly MetadataEvidence[] {

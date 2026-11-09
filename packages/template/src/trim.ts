@@ -1,5 +1,19 @@
 import { SqlRenderError, type DialectLexicalProfile, type TrimAttributes } from "@sqlbraid/core";
-import { DEFAULT_LEXICAL_PROFILE } from "./lexical.js";
+import { DEFAULT_LEXICAL_PROFILE, isEscapeStringQuote, isWordCharacter, oracleQClose } from "./lexical.js";
+
+const DOLLAR_QUOTE = /\$[A-Za-z0-9_]*\$/y;
+
+function dollarQuoteAt(text: string, index: number): string | undefined {
+  DOLLAR_QUOTE.lastIndex = index;
+  return DOLLAR_QUOTE.exec(text)?.[0];
+}
+
+function oracleQCloseAt(text: string, index: number): string | undefined {
+  const current = text[index];
+  if ((current !== "q" && current !== "Q") || isWordCharacter(text[index - 1]) || text[index + 1] !== "'")
+    return undefined;
+  return oracleQClose(text[index + 2]);
+}
 
 export function splitTrimOverrides(value: string | undefined): readonly string[] {
   return (value ?? "")
@@ -92,11 +106,41 @@ export function trimTokens(
       tokens.push({ kind: "comment", text: text.slice(start, cursor), start, end: cursor, depth });
       continue;
     }
-    if (current === "'" || current === '"' || current === "`") {
-      const quote = current;
+    const qClose = profile.supportsOracleQQuotes ? oracleQCloseAt(text, cursor) : undefined;
+    if (qClose !== undefined) {
+      const close = text.indexOf(`${qClose}'`, cursor + 3);
+      cursor = close < 0 ? text.length : close + 2;
+      tokens.push({ kind: "string", text: text.slice(start, cursor), start, end: cursor, depth });
+      continue;
+    }
+    const dollar = profile.supportsDollarQuotes === false ? undefined : dollarQuoteAt(text, cursor);
+    if (dollar !== undefined) {
+      const close = text.indexOf(dollar, cursor + dollar.length);
+      cursor = close < 0 ? text.length : close + dollar.length;
+      tokens.push({ kind: "string", text: text.slice(start, cursor), start, end: cursor, depth });
+      continue;
+    }
+    if (current === "[" && profile.supportsBracketIdentifiers) {
       cursor += 1;
       while (cursor < text.length) {
-        if (text[cursor] === "\\") {
+        if (text[cursor] === "]" && text[cursor + 1] === "]") {
+          cursor += 2;
+          continue;
+        }
+        cursor += 1;
+        if (text[cursor - 1] === "]") break;
+      }
+      tokens.push({ kind: "string", text: text.slice(start, cursor), start, end: cursor, depth });
+      continue;
+    }
+    if (current === "'" || current === '"' || (current === "`" && profile.supportsBacktickIdentifiers)) {
+      const quote = current;
+      const backslashEscapes =
+        profile.backslashEscapes !== false ||
+        (quote === "'" && isEscapeStringQuote(text[cursor - 1], text[cursor - 2], profile));
+      cursor += 1;
+      while (cursor < text.length) {
+        if (backslashEscapes && text[cursor] === "\\") {
           cursor += 2;
           continue;
         }

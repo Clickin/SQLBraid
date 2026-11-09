@@ -55,6 +55,7 @@ export const postgresDialect: Dialect = {
     supportsNestedBlockComments: true,
     supportsDollarQuotes: true,
     backslashEscapes: false,
+    supportsEscapeStrings: true,
   },
 };
 
@@ -239,6 +240,21 @@ function dollarDelimiter(units: readonly Unit[], start: number): string | undefi
     .join("");
 }
 
+export function oracleQClose(open: string | undefined): string | undefined {
+  if (open === undefined || /\s/u.test(open) || open === "'" || open === '"' || open === "`") return undefined;
+  return ({ "[": "]", "{": "}", "(": ")", "<": ">" } as Readonly<Record<string, string>>)[open] ?? open;
+}
+
+export function isEscapeStringQuote(
+  previous: string | undefined,
+  beforePrevious: string | undefined,
+  profile: DialectLexicalProfile,
+): boolean {
+  return (
+    profile.supportsEscapeStrings === true && (previous === "e" || previous === "E") && !isWordCharacter(beforePrevious)
+  );
+}
+
 function oracleQDelimiter(
   units: readonly Unit[],
   start: number,
@@ -247,9 +263,8 @@ function oracleQDelimiter(
   if ((quote !== "q" && quote !== "Q") || isWordCharacter(charAt(units, start - 1)) || charAt(units, start + 1) !== "'")
     return undefined;
   const open = charAt(units, start + 2);
-  if (open === undefined || /\s/u.test(open) || open === "'" || open === '"' || open === "`") return undefined;
-  const close = ({ "[": "]", "{": "}", "(": ")", "<": ">" } as Readonly<Record<string, string>>)[open] ?? open;
-  return { open, close };
+  const close = oracleQClose(open);
+  return open === undefined || close === undefined ? undefined : { open, close };
 }
 
 function directiveStart(units: readonly Unit[], index: number): boolean {
@@ -303,7 +318,8 @@ export function scanNext(units: readonly Unit[], start: number, profile: Dialect
   let state: "code" | "single" | "double" | "backtick" | "bracket" | "line" | "block" | "dollar" | "oracleQ" = "code";
   let blockDepth = 0;
   let dollar = "";
-  let oracleQClose = "";
+  let oracleQEnd = "";
+  let escapeString = false;
   while (cursor < units.length) {
     const unit = units[cursor];
     if (unit.kind === "hole") {
@@ -335,7 +351,7 @@ export function scanNext(units: readonly Unit[], start: number, profile: Dialect
       continue;
     }
     if (state === "single" || state === "double" || state === "backtick") {
-      if (current === "\\" && profile.backslashEscapes !== false) {
+      if (current === "\\" && (profile.backslashEscapes !== false || (state === "single" && escapeString))) {
         if (units[cursor + 1]?.kind === "hole")
           throw new SqlRenderError(
             "BRAID_HOLE_CONTEXT",
@@ -375,7 +391,7 @@ export function scanNext(units: readonly Unit[], start: number, profile: Dialect
       continue;
     }
     if (state === "oracleQ") {
-      if (current === oracleQClose && next === "'") {
+      if (current === oracleQEnd && next === "'") {
         cursor += 2;
         state = "code";
       } else cursor += 1;
@@ -399,6 +415,7 @@ export function scanNext(units: readonly Unit[], start: number, profile: Dialect
     }
     if (current === "'") {
       state = "single";
+      escapeString = isEscapeStringQuote(charAt(units, cursor - 1), charAt(units, cursor - 2), profile);
       cursor += 1;
       continue;
     }
@@ -420,7 +437,7 @@ export function scanNext(units: readonly Unit[], start: number, profile: Dialect
     const qDelimiter = profile.supportsOracleQQuotes ? oracleQDelimiter(units, cursor) : undefined;
     if (qDelimiter) {
       state = "oracleQ";
-      oracleQClose = qDelimiter.close;
+      oracleQEnd = qDelimiter.close;
       cursor += 3;
       continue;
     }

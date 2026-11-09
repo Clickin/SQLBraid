@@ -37,6 +37,7 @@ import type {
   PgCursorFactory,
   PgCursorLike,
   PgExecutorOptions,
+  PgPoolOptions,
   PgPoolLike,
   PgResultLike,
   PgTypeOverrides,
@@ -220,6 +221,16 @@ function nativePreparedStatementRegistry(client: PgClientLike): PgPreparedStatem
         ? (submittedNamedStatements as PgPreparedStatementMap)
         : (Object.create(null) as PgPreparedStatementMap),
   };
+}
+
+/** Keep client bookkeeping coherent after the server drops every prepared statement of a session. */
+function forgetPreparedStatements(client: PgClientLike): void {
+  pgBulkCaches.delete(client);
+  const registry = nativePreparedStatementRegistry(client);
+  if (registry === undefined) return;
+  for (const statements of [registry.parsedStatements, registry.submittedNamedStatements]) {
+    for (const name of Object.keys(statements)) delete statements[name];
+  }
 }
 
 function preparedStatementText(statements: PgPreparedStatementMap, name: string): string | undefined {
@@ -617,11 +628,22 @@ export function createPgExecutorFor(
   };
 }
 
+/** Reset one pooled session. A failure is not the operation's failure: the caller discards the connection. */
+async function resetSession(client: PgClientLike): Promise<boolean> {
+  try {
+    await client.query("DISCARD ALL");
+    forgetPreparedStatements(client);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Create a lease provider from a node-postgres compatible pool; discarded leases call `client.release(true)`. */
 export function createPgPoolProviderFor(
   driver: PgDriverIdentity,
   pool: PgPoolLike,
-  options: PgExecutorOptions = {},
+  options: PgPoolOptions = {},
 ): ConnectionProvider {
   resolveStreamBatchSize(options.streamBatchSize);
   const profile = resolveParserProfile(options.parserProfile, options.profile);
@@ -651,6 +673,7 @@ export function createPgPoolProviderFor(
             if (released) return;
             released = true;
             if (releaseOptions.discard === true) await client.release(true);
+            else if (options.resetOnRelease === true && !(await resetSession(client))) await client.release(true);
             else await client.release();
           },
         };

@@ -223,7 +223,7 @@
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "bd7f756528281b73691609d6267cd5311a5947e4d2c1d965e44b790a6cd0412b"
+      "sourceDigest": "0bdcd74b9cea161a16f4ad88a289b1df16d5011e0b3e86c14be4c7e53db25f1e"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",
@@ -277,7 +277,7 @@
       "source": "website/src/content/docs/runtime/transactions.md",
       "translation": "website/src/content/docs/ko/runtime/transactions.md",
       "translationOf": "website/src/content/docs/runtime/transactions.md",
-      "sourceDigest": "0f88e346c1ee9b1a73700224e17e0d640e104753040fb2f8ea77ef171d425567"
+      "sourceDigest": "22b871a96068e62c990110eb0579916cf1d559a883a795075eb58d5195b289c1"
     }
   ]
 }
