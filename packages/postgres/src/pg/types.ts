@@ -75,6 +75,13 @@ export interface PgExecutorOptions {
 
 export type PgDatabaseOptions = DatabaseOptions & PgExecutorOptions;
 
+/** Pool lease policy. `resetOnRelease` runs `DISCARD ALL` before each lease returns; a failed reset discards the connection. */
+export interface PgPoolOptions extends PgExecutorOptions {
+  readonly resetOnRelease?: boolean;
+}
+
+export type PgPoolDatabaseOptions = DatabaseOptions & PgPoolOptions;
+
 export const pgOidTypes: Readonly<Record<number, string>> = Object.freeze({
   16: "bool",
   17: "bytea",

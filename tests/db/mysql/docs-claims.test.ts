@@ -114,3 +114,20 @@ docsClaim("concepts/bulk.md", "mysql2 bulk reports prepared-loop", async () => {
     { observers: [bulk.observer] },
   );
 });
+
+async function tenantAfterRelease(resetOnRelease: boolean): Promise<string | null> {
+  const pool = createPool({ ...options(), connectionLimit: 1, resetOnRelease });
+  try {
+    const db = createMysql2PoolDatabase(pool, { profile: MYSQL2_LOSSLESS_TEXT });
+    await db.execute(sql.command`SET @docs_tenant = 'a'`);
+    const row = await db.one(sql.rows<{ tenant: string | null }>`SELECT @docs_tenant AS tenant`);
+    return row.tenant;
+  } finally {
+    await pool.end();
+  }
+}
+
+docsClaim("runtime/transactions.md", "the mysql2 resetOnRelease pool option clears session state", async () => {
+  assert.equal(await tenantAfterRelease(false), "a");
+  assert.equal(await tenantAfterRelease(true), null);
+});

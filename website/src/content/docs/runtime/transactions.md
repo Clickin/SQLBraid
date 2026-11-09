@@ -81,12 +81,34 @@ callback.
 - If the session primitive is unavailable, the call rejects with
   `BRAID_SESSION_UNSUPPORTED`.
 
-SQLBraid does not reset the session state of a connection when it releases a
-pool lease. Session state includes a transaction that a `BEGIN` outside `db.tx`
-opened, `SET ROLE`, `SET search_path`, session variables and temporary tables.
-The next operation that gets the connection sees that state. Use `db.tx` for
+By default, SQLBraid does not reset the session state of a connection when it
+releases a pool lease. Session state includes a transaction that a `BEGIN`
+outside `db.tx` opened, `SET ROLE`, `SET search_path`, session variables and
+temporary tables. The next operation that gets the connection sees that state.
+The application owns the session state that it changes. Use `db.tx` for
 transactions. Undo other session state before the session callback or the
 operation ends, so that it cannot reach a different request or tenant.
+
+To reset each connection when it returns to the pool, turn on one of these
+options:
+
+| Driver  | Option                 | Where to set it                                                               |
+| ------- | ---------------------- | ----------------------------------------------------------------------------- |
+| `pg`    | `resetOnRelease: true` | `createPgPoolDatabase` or `createPgPoolProvider` from `@sqlbraid/postgres/pg` |
+| mysql2  | `resetOnRelease: true` | The `createPool` options of mysql2                                            |
+| mariadb | `resetAfterUse: true`  | The `createPool` options of mariadb                                           |
+
+The mysql2 and mariadb options belong to the driver. The mariadb reset needs a
+MariaDB server at 10.2.22 or later on the 10.2 line, or at 10.3.13 or later. On
+other servers, the driver only rolls back.
+
+The `pg` option runs `DISCARD ALL` before SQLBraid releases the lease. If the
+reset fails, SQLBraid discards the connection and the completed operation stays
+successful. For example, `DISCARD ALL` fails while a `BEGIN` outside `db.tx` is
+still open.
+
+Each reset adds one round trip to each lease. `DISCARD ALL` also drops the
+prepared statements of the session, so the next use prepares them again.
 
 Close the stream of a session before you call `session.tx(...)`. An overlapping
 transaction rejects with `BRAID_STREAM_SCOPE` before `BEGIN`. It does not wait

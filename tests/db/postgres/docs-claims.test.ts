@@ -449,3 +449,61 @@ docsClaim(PH, "postgres.js: a hinted stream applies the type", async () => {
   }
   assert.deepEqual(types, ["smallint"]);
 });
+
+const TRANSACTIONS = "runtime/transactions.md";
+const docsTenant = () => sql.rows<{ tenant: string | null }>`SELECT current_setting('docs.tenant', true) AS tenant`;
+const backendPid = () => sql.rows<{ pid: number }>`SELECT pg_backend_pid() AS pid`;
+
+const insertResetBulk = (id: number) => sql.command`INSERT INTO docs_reset_bulk (id) VALUES (${id})`;
+
+async function withOneConnectionPool(fn: (db: Database) => Promise<void>, resetOnRelease?: boolean): Promise<void> {
+  const pool = new Pool({ connectionString: uri(), max: 1 });
+  try {
+    await fn(createPgPoolDatabase(pool, { resetOnRelease }));
+  } finally {
+    await pool.end();
+  }
+}
+
+docsClaim(TRANSACTIONS, "a pg pool keeps session state by default", () =>
+  withOneConnectionPool(async (db) => {
+    await db.execute(sql.command`SET docs.tenant = 'a'`);
+    assert.equal((await db.one(docsTenant())).tenant, "a");
+  }),
+);
+
+docsClaim(TRANSACTIONS, "resetOnRelease clears session state and keeps the connection", () =>
+  withOneConnectionPool(async (db) => {
+    const before = await db.one(backendPid());
+    await db.session(async (session) => {
+      await session.execute(sql.command`SET docs.tenant = 'a'`);
+      await session.execute(sql.command`CREATE TEMP TABLE docs_reset_temp (id int)`);
+    });
+    assert.notEqual((await db.one(docsTenant())).tenant, "a");
+    const temp = await db.one(sql.rows<{ name: string | null }>`SELECT to_regclass('pg_temp.docs_reset_temp') AS name`);
+    assert.equal(temp.name, null);
+    assert.equal((await db.one(backendPid())).pid, before.pid);
+  }, true),
+);
+
+docsClaim(TRANSACTIONS, "resetOnRelease discards a connection that it cannot reset", () =>
+  withOneConnectionPool(async (db) => {
+    const before = await db.one(backendPid());
+    await db.execute(sql.command`BEGIN`);
+    const after = await db.one(backendPid());
+    assert.notEqual(after.pid, before.pid);
+    const state = await db.one(sql.rows<{ count: string }>`SELECT count(*) AS count FROM pg_stat_activity
+      WHERE pid = pg_backend_pid() AND state = 'idle in transaction'`);
+    assert.equal(state.count, "0");
+  }, true),
+);
+
+docsClaim(TRANSACTIONS, "resetOnRelease keeps named bulk statements coherent", () =>
+  withOneConnectionPool(async (db) => {
+    await db.execute(sql.command`DROP TABLE IF EXISTS docs_reset_bulk`);
+    await db.execute(sql.command`CREATE TABLE docs_reset_bulk (id int)`);
+    assert.equal((await db.bulk([1, 2], insertResetBulk)).inputCount, 2);
+    assert.equal((await db.bulk([3, 4], insertResetBulk)).inputCount, 2);
+    await db.execute(sql.command`DROP TABLE docs_reset_bulk`);
+  }, true),
+);

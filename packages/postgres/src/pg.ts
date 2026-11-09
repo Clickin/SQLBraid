@@ -3,7 +3,14 @@ import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { pgStatementBinding } from "./common/binding.js";
 import { createPgExecutorFor, createPgPoolProviderFor, pgDriverIdentity } from "./pg/executor.js";
 import { pgOidTypes } from "./pg/types.js";
-import type { PgClientLike, PgDatabaseOptions, PgExecutorOptions, PgPoolLike } from "./pg/types.js";
+import type {
+  PgClientLike,
+  PgDatabaseOptions,
+  PgExecutorOptions,
+  PgPoolDatabaseOptions,
+  PgPoolLike,
+  PgPoolOptions,
+} from "./pg/types.js";
 
 export { pgOidTypes, pgStatementBinding };
 export type {
@@ -15,7 +22,9 @@ export type {
   PgFieldLike,
   PgParserProfile,
   PgPoolClientLike,
+  PgPoolDatabaseOptions,
   PgPoolLike,
+  PgPoolOptions,
   PgResultLike,
   PgTypeOverrides,
 } from "./pg/types.js";
@@ -35,15 +44,15 @@ export function createPgDatabase(client: PgClientLike, options: PgDatabaseOption
 }
 
 /** Create a lease provider from a `pg` pool; discarded leases call `client.release(true)`. */
-export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOptions = {}): ConnectionProvider {
+export function createPgPoolProvider(pool: PgPoolLike, options: PgPoolOptions = {}): ConnectionProvider {
   return createPgPoolProviderFor(pgDriverIdentity, pool, options);
 }
 
 /** Wrap a `pg` pool as a pooled application database with one lease per root operation. */
-export function createPgPoolDatabase(pool: PgPoolLike, options: PgDatabaseOptions = {}) {
-  const { typePolicy, profile, cursor, streamBatchSize, parserProfile, ...databaseOptions } = options;
+export function createPgPoolDatabase(pool: PgPoolLike, options: PgPoolDatabaseOptions = {}) {
+  const { typePolicy, profile, cursor, streamBatchSize, parserProfile, resetOnRelease, ...databaseOptions } = options;
   return createPooledDatabase(
-    createPgPoolProvider(pool, { typePolicy, profile, cursor, streamBatchSize, parserProfile }),
+    createPgPoolProvider(pool, { typePolicy, profile, cursor, streamBatchSize, parserProfile, resetOnRelease }),
     databaseOptions,
   );
 }

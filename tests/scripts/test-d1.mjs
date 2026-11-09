@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { execFileSync, spawn } from "node:child_process";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { build as viteBuild } from "vite";
 import { Miniflare } from "miniflare";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const require = createRequire(import.meta.url);
 const workerPath = resolve(root, "fixtures/cloudflare-d1/worker.mjs");
-const outputDirectory = await mkdtemp(join(tmpdir(), "sqlbraid-d1-"));
 const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
 const artifactPath = process.env.SQLBRAID_CERT_ARTIFACT;
 const stressValue = process.env.SQLBRAID_CERT_STRESS;
@@ -61,24 +59,24 @@ function validateArtifact(path, sha) {
 }
 let worker;
 try {
-  await viteBuild({
+  const result = await viteBuild({
     resolve: { conditions: ["workerd", "browser", "import"] },
     build: {
       lib: { entry: workerPath, formats: ["es"], fileName: () => "worker.mjs" },
-      outDir: outputDirectory,
-      emptyOutDir: true,
+      write: false,
       rollupOptions: { external: ["node:async_hooks"] },
     },
     ssr: { noExternal: true },
     logLevel: "silent",
   });
+  const chunk = (Array.isArray(result) ? result[0] : result).output[0];
+  assert.equal(chunk.type, "chunk");
   worker = new Miniflare({
     workers: [
       {
         compatibilityDate: "2026-07-30",
         compatibilityFlags: ["nodejs_compat"],
-        modulesRoot: outputDirectory,
-        modules: [{ type: "ESModule", path: join(outputDirectory, "worker.mjs") }],
+        modules: [{ type: "ESModule", path: "worker.mjs", contents: chunk.code }],
         d1Databases: ["DB"],
       },
     ],
@@ -125,5 +123,4 @@ try {
   );
 } finally {
   if (worker !== undefined) await worker.dispose();
-  await rm(outputDirectory, { recursive: true, force: true });
 }

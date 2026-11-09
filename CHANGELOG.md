@@ -79,6 +79,9 @@ and [versioned support records](support/targets/).
 
 ### Added
 
+- `@sqlbraid/postgres` 1.2.0: the `resetOnRelease` option of `createPgPoolDatabase` and `createPgPoolProvider`.
+  It runs `DISCARD ALL` before each lease returns to the pool. It is off by default. A failed reset discards the
+  connection.
 - `@sqlbraid/postgres` 1.2.0: parameter type hints for the postgres.js and PGlite adapters. A hint sets the type OID
   of one parameter in the Parse message. New factories: `postgresParameter.boolean`, `int2`, `int4`, `int8`, `float4`,
   `float8`, `numeric`, `text`, `varchar`, `uuid`, `bytea`, `date`, `time`, `timestamptz` and `interval`.
