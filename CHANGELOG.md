@@ -6,7 +6,7 @@ command and the diff since the previous tag as the GitHub Release. Detailed beha
 the [public API audit](docs/public-api-audit.md), [current release notes](website/src/content/docs/release/notes.md),
 and [versioned support records](support/targets/).
 
-## Unreleased
+## 2.0.0
 
 ### Breaking changes
 
